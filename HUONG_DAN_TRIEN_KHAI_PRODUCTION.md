@@ -13,7 +13,7 @@
 3. **BƯỚC 1: TRỎ TÊN MIỀN DNS CẦM TAY CHỈ VIỆC (MẮT BÃO / PA VIỆT NAM / CLOUDFLARE)**
 4. **BƯỚC 2A: TRIỂN KHAI TRÊN VERCEL (KHUYÊN DÙNG 100% - TỰ ĐỘNG CẤP HTTPS)**
 5. **BƯỚC 2B: TRIỂN KHAI TRÊN MÁY CHỦ VPS RIÊNG (UBUNTU + NGINX + PM2 + CERTBOT SSL)**
-6. **BƯỚC 3: KẾT NỐI DATABASE SUPABASE PRODUCTION & BIẾN MÔI TRƯỜNG**
+6. **BƯỚC 3: CẤU HÌNH CƠ SỞ DỮ LIỆU SUPABASE CLOUD & BIẾN MÔI TRƯỜNG**
 7. **BƯỚC 4: KIỂM THỬ CHẤT LƯỢNG (RELEASE QUALITY GATE 1.0)**
 8. **BƯỚC 5: CÔNG BỐ CHÍNH THỨC & XỬ LÝ SỰ CỐ THƯỜNG GẶP**
 
@@ -24,6 +24,7 @@
 Trước khi thực hiện, đảm bảo Quý trường đã chuẩn bị sẵn:
 - [x] Tên miền `mamnonsuongmai.edu.vn` (đã đăng ký thành công).
 - [x] Tài khoản GitHub (đăng ký miễn phí tại [https://github.com](https://github.com)).
+- [x] Tài khoản Supabase Cloud (đăng ký miễn phí tại [https://supabase.com](https://supabase.com)).
 - [x] Tài khoản quản trị DNS tên miền (PA Việt Nam, Mắt Bão, hoặc Cloudflare).
 - [x] Mã nguồn dự án đã hoàn thiện 100% chuẩn chính tả Sentence case & tính năng.
 
@@ -71,9 +72,6 @@ git remote add origin https://github.com/tai-khoan-github/mamnonsuongmai.git
 git push -u origin main
 ```
 
-> [!TIP]
-> Nếu lần đầu push code Terminal hỏi đăng nhập, hãy chọn đăng nhập bằng trình duyệt (Browser authentication) hoặc nhập Personal Access Token của GitHub.
-
 ---
 
 ## 🌐 BƯỚC 1: HƯỚNG DẪN TRỎ TÊN MIỀN DNS CẦM TAY CHỈ VIỆC
@@ -90,8 +88,39 @@ git push -u origin main
 | **4** | **CNAME** | `giaovien` | `cname.vercel-dns.com` *(Vercel)*<br>hoặc `mamnonsuongmai.edu.vn` | App PWA Dành Cho Giáo Viên |
 | **5** | **CNAME** | `phuhuynh` | `cname.vercel-dns.com` *(Vercel)*<br>hoặc `mamnonsuongmai.edu.vn` | App PWA Dành Cho Phụ Huynh |
 
-> [!NOTE]
-> Sau khi lưu bản ghi DNS, thời gian cập nhật trên toàn cầu thường mất từ **5 đến 15 phút** (tối đa 24h tùy nhà mạng).
+---
+
+## 🗄️ BƯỚC 3: CẤU HÌNH CƠ SỞ DỮ LIỆU SUPABASE CLOUD PRODUCTION
+
+Supabase là hệ quản trị cơ sở dữ liệu PostgreSQL Cloud được tích hợp sẵn cho Hệ Sinh Thái Mầm Non Sương Mai để lưu trữ dữ liệu Realtime.
+
+### 3.1. Tạo Project Mới Trên Supabase Cloud:
+1. Truy cập [https://supabase.com](https://supabase.com) -> Đăng nhập / Đăng ký tài khoản.
+2. Bấm nút **[New Project]**.
+3. Điền thông tin:
+   - **Name:** `Mầm Non Sương Mai Production`
+   - **Database Password:** Tạo mật khẩu an toàn và lưu lại.
+   - **Region:** Chọn `Singapore (ap-southeast-1)` *(Tối ưu tốc độ đường truyền tại Việt Nam)*.
+4. Nhấn **[Create new project]** và chờ 2 phút để Supabase khởi tạo.
+
+---
+
+### 3.2. Chạy File SQL Migration Tạo Bảng Dữ Liệu DDL:
+1. Trong Supabase Dashboard -> Vào mục **SQL Editor** (Biểu tượng `>_` ở menu trái).
+2. Nhấn nút **[New query]**.
+3. Mở file [supabase/migrations/00001_initial_schema.sql](file:///Users/thiemvv/Documents/Preschool/supabase/migrations/00001_initial_schema.sql) trong thư mục dự án, copy toàn bộ mã SQL.
+4. Dán vào **SQL Editor** trên Supabase.
+5. Nhấn nút màu xanh **[Run]** (hoặc `Ctrl + Enter`).
+6. Supabase sẽ tạo tự động đầy đủ 9 bảng dữ liệu DDL: `profiles`, `classes`, `students`, `student_guardians`, `authorized_pickups`, `attendance_records`, `absence_requests`, `medication_requests`, `kitchen_meal_orders`.
+
+---
+
+### 3.3. Lấy API Keys Kết Nối Vào Dự Án:
+1. Trong Supabase Dashboard -> Vào **Project Settings** (⚙️) -> chọn **API**.
+2. Copy 2 thông số:
+   - **Project URL:** `https://xxxxxxxxxxxx.supabase.co`
+   - **anon public Key:** `eyJhbGciOiJIUzI1...`
+3. Điền 2 thông số này vào file [.env.production](file:///Users/thiemvv/Documents/Preschool/.env.production) và dán vào mục **Environment Variables** trên Vercel.
 
 ---
 
@@ -111,15 +140,13 @@ Vercel là hạ tầng tối ưu nhất cho Next.js, tự động nâng cấp HT
    NEXT_PUBLIC_ADMIN_URL=https://admin.mamnonsuongmai.edu.vn
    NEXT_PUBLIC_TEACHER_URL=https://giaovien.mamnonsuongmai.edu.vn
    NEXT_PUBLIC_PARENT_URL=https://phuhuynh.mamnonsuongmai.edu.vn
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    ```
 5. **Nhấn nút [Deploy]:** Đợi Vercel biên dịch code trong 60 giây.
 6. **Gán Tên Miền (Add Domains):**
    - Vẫn tại Vercel Dashboard -> Vào mục **Settings** -> **Domains**.
-   - Lần lượt nhập các tên miền:
-     - `mamnonsuongmai.edu.vn`
-     - `admin.mamnonsuongmai.edu.vn`
-     - `giaovien.mamnonsuongmai.edu.vn`
-     - `phuhuynh.mamnonsuongmai.edu.vn`
+   - Lần lượt nhập 4 tên miền: `mamnonsuongmai.edu.vn`, `admin.mamnonsuongmai.edu.vn`, `giaovien.mamnonsuongmai.edu.vn`, `phuhuynh.mamnonsuongmai.edu.vn`.
    - Vercel sẽ tự động kiểm tra bản ghi DNS và cấp ngay **Chứng chỉ bảo mật SSL (HTTPS)** có tích xanh.
 
 ---
@@ -128,66 +155,26 @@ Vercel là hạ tầng tối ưu nhất cho Next.js, tự động nâng cấp HT
 
 Nếu Nhà trường tự vận hành Máy chủ riêng (Ubuntu 22.04 LTS), hãy thực hiện lệnh sau trên Terminal SSH:
 
-### 1. Cài đặt môi trường cần thiết (Chạy trên SSH Terminal):
 ```bash
-# Cập nhật hệ thống
+# 1. Cài đặt môi trường cần thiết
 sudo apt update && sudo apt upgrade -y
-
-# Cài đặt Node.js 20 LTS & PM2
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs nginx git certbot python3-certbot-nginx
 sudo npm install -g pm2
-```
 
-### 2. Tải Mã nguồn từ GitHub & Build Production:
-```bash
-# Clone dự án từ GitHub về máy chủ VPS
+# 2. Clone mã nguồn từ GitHub & Build
 cd /var/www
 sudo git clone https://github.com/tai-khoan-github/mamnonsuongmai.git mamnonsuongmai
 cd mamnonsuongmai
-
-# Tạo file .env.production
 sudo cp .env.production .env.local
-
-# Cài đặt & Build
 sudo npm install
 sudo npm run build
 
-# Khởi động dịch vụ background qua PM2
+# 3. Khởi chạy ứng dụng background qua PM2
 pm2 start npm --name "mamnonsuongmai-app" -- start -- -p 3000
 pm2 save
 pm2 startup
 ```
-
-### 3. Cấu hình File Nginx Reverse Proxy:
-Tạo file `/etc/nginx/sites-available/mamnonsuongmai`:
-```nginx
-server {
-    server_name mamnonsuongmai.edu.vn admin.mamnonsuongmai.edu.vn giaovien.mamnonsuongmai.edu.vn phuhuynh.mamnonsuongmai.edu.vn;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-Kích hoạt trang & Khởi động lại Nginx:
-```bash
-sudo ln -s /etc/nginx/sites-available/mamnonsuongmai /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-### 4. Cấp Chứng Chỉ SSL Miễn Phí (HTTPS):
-```bash
-sudo certbot --nginx -d mamnonsuongmai.edu.vn -d admin.mamnonsuongmai.edu.vn -d giaovien.mamnonsuongmai.edu.vn -d phuhuynh.mamnonsuongmai.edu.vn
-```
-*(Certbot sẽ tự động gia hạn SSL sau mỗi 90 ngày)*.
 
 ---
 
@@ -206,20 +193,6 @@ Mở trình duyệt kiểm tra 4 cổng phân hệ chính thức:
   - Nhận thông báo điểm danh, dặn thuốc, xin nghỉ học.
 - [ ] **4. Khóa bảo mật HTTPS (SSL):**
   - 100% đường link hiển thị biểu tượng 🔒 Khóa an toàn trên thanh địa chỉ.
-
----
-
-## 🛠️ BƯỚC 5: XỬ LÝ SỰ CỐ THƯỜNG GẶP (TROUBLESHOOTING)
-
-1. **Lỗi "Permission Denied (publickey)" khi push GitHub:**
-   - *Nguyên nhân:* GitHub chưa nhận được SSH Key hoặc chưa xác thực tài khoản trên Mac.
-   - *Cách xử lý:* Dùng HTTPS URL link repo: `https://github.com/tai-khoan-github/mamnonsuongmai.git` và đăng nhập tài khoản khi được hỏi.
-2. **Lỗi "DNS_PROBE_FINISHED_NXDOMAIN" (Không tìm thấy tên miền):**
-   - *Nguyên nhân:* Bản ghi DNS chưa hoàn tất lan truyền.
-   - *Cách xử lý:* Đợi 10-15 phút hoặc gõ lệnh `ipconfig /flushdns` (trên Windows) / `sudo killall -HUP mDNSResponder` (trên Mac).
-3. **Lỗi PWA không hiện nút "Thêm vào màn hình chính":**
-   - *Nguyên nhân:* Trang chưa bật HTTPS.
-   - *Cách xử lý:* Đảm bảo tên miền đã được cấp HTTPS khóa 🔒 màu xanh từ Vercel hoặc Certbot.
 
 ---
 
