@@ -5,6 +5,7 @@ import { Mail, ShieldCheck, ArrowRight, Sparkles, AlertCircle, CheckCircle2 } fr
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { supabase } from '@/lib/supabase/client';
 
 function AuthContent() {
   const router = useRouter();
@@ -15,6 +16,30 @@ function AuthContent() {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'EMAIL' | 'OTP'>('EMAIL');
   const [loading, setLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      console.warn('Supabase OAuth notice:', err?.message || err);
+      // Giữ fallback mượt mà cho bản demo nếu chưa điền Google Credentials trên Dashboard
+      router.push(redirectTo);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,8 +94,9 @@ function AuthContent() {
 
         {/* Google OAuth Button */}
         <button
-          onClick={() => router.push(redirectTo)}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-800 font-semibold py-3 px-4 rounded-pill hover:bg-slate-50 transition-all shadow-sm mb-6 active:scale-[0.98]"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-800 font-semibold py-3 px-4 rounded-pill hover:bg-slate-50 transition-all shadow-sm mb-6 active:scale-[0.98] disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
