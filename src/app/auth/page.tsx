@@ -83,16 +83,18 @@ function AuthContent() {
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
 
-        {/* Local Inbucket Testing Banner */}
-        <div className="mb-6 p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-800 flex items-start gap-2.5">
-          <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-semibold text-sky-900">Local Dev Inbucket OTP:</span> {t('auth.inbucket_notice')}{' '}
-            <a href="http://localhost:54324" target="_blank" rel="noreferrer" className="underline font-mono text-sky-700 hover:text-sky-800">
-              http://localhost:54324
-            </a>.
+        {/* Local Inbucket Testing Banner (Hiển thị cho môi trường Dev cục bộ) */}
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="mb-6 p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-800 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-sky-900">Local Dev Inbucket OTP:</span> {t('auth.inbucket_notice')}{' '}
+              <a href="http://localhost:54324" target="_blank" rel="noreferrer" className="underline font-mono text-sky-700 hover:text-sky-800">
+                http://localhost:54324
+              </a>.
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Google OAuth Button */}
         <button
