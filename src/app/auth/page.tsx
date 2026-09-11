@@ -20,7 +20,7 @@ function AuthContent() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -31,11 +31,13 @@ function AuthContent() {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase OAuth error:', error);
+        alert('Lỗi đăng nhập Google: ' + error.message);
+      }
     } catch (err: any) {
-      console.warn('Supabase OAuth notice:', err?.message || err);
-      // Giữ fallback mượt mà cho bản demo nếu chưa điền Google Credentials trên Dashboard
-      router.push(redirectTo);
+      console.error('Supabase OAuth exception:', err?.message || err);
+      alert('Lỗi đăng nhập Google: ' + (err?.message || err));
     } finally {
       setLoading(false);
     }
