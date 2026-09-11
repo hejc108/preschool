@@ -13,10 +13,10 @@ import {
   Profile 
 } from '../types/schema';
 
-const supabaseUrl = 
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 
-  process.env.SUPABASE_URL || 
-  'https://yrieuamibqjyaslprdeo.supabase.co';
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseUrl = (!rawUrl || rawUrl.includes('your-supabase-project') || rawUrl.includes('localhost'))
+  ? 'https://yrieuamibqjyaslprdeo.supabase.co'
+  : rawUrl;
 const supabaseAnonKey = 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
   process.env.SUPABASE_ANON_KEY || 
