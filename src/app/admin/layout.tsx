@@ -3,7 +3,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Utensils, UserPlus, Users, Sparkles, Shield, Clock, Bell, LogOut, Smartphone } from 'lucide-react';
+import { 
+  LayoutDashboard, Utensils, Activity, UserPlus, Users, Sparkles, 
+  Clock, Bell, LogOut, Smartphone, ChefHat 
+} from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
@@ -11,11 +14,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const { t } = useLanguage();
 
-  const navItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
+  const mainNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
     { label: t('admin.sidebar.dashboard'), href: '/admin/dashboard', icon: LayoutDashboard },
-    { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: Utensils },
+    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: Utensils, badge: '4 Tuần' },
+    { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: Activity, badge: 'WHO' },
+    { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
+  ];
+
+  const aiNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
+    { label: t('admin.sidebar.ai_lessons'), href: '/admin/ai-lessons', icon: Sparkles, badge: 'AI 5.0' },
   ];
 
   return (
@@ -35,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Navigation */}
         <nav className="p-4 space-y-1 flex-1">
           <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('admin.sidebar.group_operations')}</div>
-          {navItems.map((item) => {
+          {mainNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
@@ -52,11 +61,48 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                   <span>{item.label}</span>
                 </div>
+                {item.badge && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                    isActive ? 'bg-sky-500 text-white' : 'bg-sky-100 text-sky-700'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
 
-          <div className="pt-6 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('admin.sidebar.group_mobile')}</div>
+          {/* AI Section */}
+          <div className="pt-4 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('admin.sidebar.group_ai')}</div>
+          {aiNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+                  isActive
+                    ? 'bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-sm font-semibold'
+                    : 'text-slate-700 hover:text-sky-900 hover:bg-sky-100/70'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-sky-600'}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                    isActive ? 'bg-indigo-500 text-white' : 'bg-indigo-100 text-indigo-700 animate-pulse'
+                  }`}>
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+
+          <div className="pt-4 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('admin.sidebar.group_mobile')}</div>
           <Link
             href="/teacher"
             className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm text-slate-700 hover:text-sky-900 hover:bg-sky-100/70 transition-all"
