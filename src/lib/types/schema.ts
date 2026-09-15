@@ -1,6 +1,6 @@
 // TypeScript schema definitions matching DATABASE_SCHEMA_SUPABASE_v2.0.sql (Section 2.4 DDL Aligned)
 
-export type UserRole = 'ADMIN' | 'TEACHER' | 'PARENT';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'TEACHER' | 'STAFF' | 'PARENT';
 
 export interface Profile {
   id: string;
@@ -156,3 +156,77 @@ export interface StudentApplication {
 
 // Alias for backwards compatibility
 export type AdmissionsApplication = StudentApplication;
+
+// --- PHẦN 2: THỰC ĐƠN XOAY VÒNG 4 TUẦN ---
+export type MealCategory = 'BREAKFAST' | 'LUNCH_MAIN' | 'LUNCH_SOUP' | 'DESSERT' | 'AFTERNOON_SNACK';
+export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY';
+
+export interface WeeklyMenu {
+  id: string;
+  week_number: number; // 1 | 2 | 3 | 4
+  day_of_week: DayOfWeek;
+  meal_type: MealCategory;
+  dish_name: string;
+  allergens?: string[]; // e.g. ['Sữa bò', 'Hải sản']
+  created_at?: string;
+}
+
+// --- PHẦN 3: SỔ THEO DÕI SỨC KHỎE THEO QUÝ ---
+export type HealthTerm = 'Q1' | 'Q2' | 'Q3' | 'Q4';
+export type GrowthStatus = 'UNDERWEIGHT' | 'NORMAL' | 'OVERWEIGHT_RISK' | 'OBESE';
+
+export interface HealthRecord {
+  id: string;
+  student_id: string;
+  student_name?: string;
+  term: HealthTerm;
+  academic_year: string;
+  measured_date: string;
+  weight_kg: number;
+  height_cm: number;
+  bmi: number;
+  growth_status: GrowthStatus;
+  notes?: string;
+  created_by?: string;
+  created_at?: string;
+}
+
+// --- PHẦN 5: AI PIPELINE BÀI GIẢNG ---
+export interface CurriculumFramework {
+  id: string;
+  grade_level: 'MẦM' | 'CHỒI' | 'LÁ';
+  subject: string;
+  title: string;
+  content_structure: Record<string, any>;
+  created_at?: string;
+}
+
+export interface AILessonSlide {
+  slide_number: number;
+  title: string;
+  content_points: string[];
+  image_prompt: string;
+  image_url?: string;
+}
+
+export interface AILessonPlan {
+  id: string;
+  topic: string;
+  subject: string;
+  grade_level: 'MẦM' | 'CHỒI' | 'LÁ';
+  target_objectives: string;
+  duration_minutes: number;
+  materials_needed: string[];
+  five_steps: {
+    step_number: number;
+    step_title: string;
+    description: string;
+    teacher_action: string;
+    child_activity: string;
+  }[];
+  mermaid_mindmap_code: string;
+  youtube_video_suggestions: { title: string; url: string }[];
+  slides: AILessonSlide[];
+  created_by?: string;
+  created_at?: string;
+}
