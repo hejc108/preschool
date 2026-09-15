@@ -33,11 +33,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="w-full md:w-64 bg-sky-50 border-b md:border-b-0 md:border-r border-sky-100 text-slate-800 flex flex-col shrink-0 shadow-sm">
         {/* Brand Header */}
         <div className="p-5 border-b border-sky-100 flex items-center gap-3 bg-sky-100/40">
-          <div className="w-10 h-10 bg-sky-500 border border-sky-400 rounded-convent flex items-center justify-center text-white shadow-sm">
+          <div className="w-10 h-10 bg-sky-500 border border-sky-400 rounded-convent flex items-center justify-center text-white shadow-sm shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
-          <div>
-            <h1 className="font-bold text-sky-900 tracking-wide text-base leading-tight">{t('common.school_name')}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="font-bold text-sky-900 tracking-tight text-base leading-tight whitespace-nowrap">{t('common.school_name')}</h1>
           </div>
         </div>
 

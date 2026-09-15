@@ -97,7 +97,7 @@ export default function AdminAILessonsPage() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-white text-base leading-tight">Pipeline AI Tạo Bài Giảng Đa Phương Tiện (Cost: 0 VNĐ)</h1>
+            <h1 className="font-bold text-white text-base leading-tight">Pipeline AI tạo bài giảng đa phương tiện (Cost: 0 VNĐ)</h1>
             <p className="text-xs text-sky-100 font-semibold">Gemini 1.5 Flash + Pollinations Flux.1 Cartoon + Slide PowerPoint (.pptx)</p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function AdminAILessonsPage() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h2 className="font-bold text-sky-900 text-sm flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-sky-600" />
-              <span>Tiêu Chí Tạo Bài Giảng AI Theo Khung Chương Trình</span>
+              <span>Tiêu chí tạo bài giảng AI theo khung chương trình</span>
             </h2>
             <span className="text-emerald-700 bg-emerald-50 px-3 py-1 rounded-pill border border-emerald-200 font-bold text-[11px]">
               ★ Chi phí: 0 VNĐ (Gemini Flash + Pollinations API)
@@ -120,7 +120,7 @@ export default function AdminAILessonsPage() {
 
           <form onSubmit={handleGenerate} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">Môn Học (*)</label>
+              <label className="block font-bold text-slate-700 uppercase mb-1">Môn học (*)</label>
               <select
                 value={subject}
                 onChange={(e) => setSubject(e.target.value as any)}
@@ -135,7 +135,7 @@ export default function AdminAILessonsPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">Khối Lớp (*)</label>
+              <label className="block font-bold text-slate-700 uppercase mb-1">Khối lớp (*)</label>
               <select
                 value={gradeLevel}
                 onChange={(e) => setGradeLevel(e.target.value as any)}

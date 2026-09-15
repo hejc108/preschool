@@ -68,8 +68,8 @@ export default function AdminHealthPage() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-white text-base leading-tight">Nhập Liệu Sức Khỏe Định Kỳ Hàng Loạt (Y Tế / Giáo Viên)</h1>
-            <p className="text-xs text-sky-100 font-semibold">Tự động tính BMI & Xếp loại thể trạng chuẩn WHO</p>
+            <h1 className="font-bold text-white text-base leading-tight">Nhập liệu sức khỏe định kỳ hàng loạt (Y tế / Giáo viên)</h1>
+            <p className="text-xs text-sky-100 font-semibold">Tự động tính BMI & xếp loại thể trạng chuẩn WHO</p>
           </div>
         </div>
 
@@ -79,7 +79,7 @@ export default function AdminHealthPage() {
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
           >
             <Save className="w-4 h-4" />
-            <span>Lưu Sổ Sức Khỏe Lớp</span>
+            <span>Lưu sổ sức khỏe lớp</span>
           </button>
           <LanguageSwitcher />
         </div>
@@ -104,7 +104,7 @@ export default function AdminHealthPage() {
         {/* Filter Controls (Select Class & Term) */}
         <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Chọn Lớp Học (*)</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Chọn lớp học (*)</label>
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
@@ -119,7 +119,7 @@ export default function AdminHealthPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Quý Kiểm Tra (*)</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Quý kiểm tra (*)</label>
             <select
               value={selectedTerm}
               onChange={(e) => setSelectedTerm(e.target.value as HealthTerm)}
@@ -133,7 +133,7 @@ export default function AdminHealthPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Năm Học (*)</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Năm học (*)</label>
             <input
               type="text"
               value={academicYear}
@@ -148,7 +148,7 @@ export default function AdminHealthPage() {
           <div className="p-4 bg-sky-50 border-b border-slate-200 flex items-center justify-between">
             <h2 className="font-bold text-sky-900 text-sm flex items-center gap-2">
               <Activity className="w-4 h-4 text-sky-600" />
-              <span>Danh Sách Nhập Số Đo Sức Khỏe - Lớp {INITIAL_CLASSES.find((c) => c.id === selectedClassId)?.name}</span>
+              <span>Danh sách nhập số đo sức khỏe - Lớp {INITIAL_CLASSES.find((c) => c.id === selectedClassId)?.name}</span>
             </h2>
             <span className="text-xs text-slate-500 font-mono">Dùng phím Tab để chuyển ô nhanh</span>
           </div>
@@ -158,13 +158,13 @@ export default function AdminHealthPage() {
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
                 <tr>
                   <th className="p-3 w-12 text-center">STT</th>
-                  <th className="p-3">Mã Học Sinh</th>
-                  <th className="p-3 min-w-[160px]">Họ và Tên Bé</th>
-                  <th className="p-3 min-w-[120px]">Cân Nặng (kg)</th>
-                  <th className="p-3 min-w-[120px]">Chiều Cao (cm)</th>
+                  <th className="p-3">Mã học sinh</th>
+                  <th className="p-3 min-w-[160px]">Họ và tên bé</th>
+                  <th className="p-3 min-w-[120px]">Cân nặng (kg)</th>
+                  <th className="p-3 min-w-[120px]">Chiều cao (cm)</th>
                   <th className="p-3 min-w-[100px]">BMI (Tự động)</th>
-                  <th className="p-3 min-w-[160px]">Xếp Loại Thể Trạng WHO</th>
-                  <th className="p-3 min-w-[200px]">Nhận Xét Y Tế Lâm Sàng</th>
+                  <th className="p-3 min-w-[160px]">Xếp loại thể trạng WHO</th>
+                  <th className="p-3 min-w-[200px]">Nhận xét y tế lâm sàng</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800">

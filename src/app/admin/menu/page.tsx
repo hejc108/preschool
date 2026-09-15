@@ -24,11 +24,11 @@ export default function AdminMenuPage() {
   ];
 
   const mealCategories: { key: MealCategory; label: string }[] = [
-    { key: 'BREAKFAST', label: 'Bữa Sáng' },
-    { key: 'LUNCH_MAIN', label: 'Bữa Trưa - Món Mặn' },
-    { key: 'LUNCH_SOUP', label: 'Bữa Trưa - Món Canh' },
-    { key: 'DESSERT', label: 'Tráng Miệng' },
-    { key: 'AFTERNOON_SNACK', label: 'Bữa Xế' },
+    { key: 'BREAKFAST', label: 'Bữa sáng' },
+    { key: 'LUNCH_MAIN', label: 'Bữa trưa - Món mặn' },
+    { key: 'LUNCH_SOUP', label: 'Bữa trưa - Món canh' },
+    { key: 'DESSERT', label: 'Tráng miệng' },
+    { key: 'AFTERNOON_SNACK', label: 'Bữa xế' },
   ];
 
   // Inline Edit Handler
@@ -57,8 +57,8 @@ export default function AdminMenuPage() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-white text-base leading-tight">Quản Lý Ma Trận Thực Đơn 4 Tuần (Admin / Bếp)</h1>
-            <p className="text-xs text-sky-100 font-semibold">Chỉnh sửa trực tiếp (Inline Edit) & Xoay vòng tự động</p>
+            <h1 className="font-bold text-white text-base leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
+            <p className="text-xs text-sky-100 font-semibold">Chỉnh sửa trực tiếp (Inline Edit) & xoay vòng tự động</p>
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export default function AdminMenuPage() {
             className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
           >
             <Save className="w-4 h-4" />
-            <span>Lưu Thay Đổi</span>
+            <span>Lưu thay đổi</span>
           </button>
           <LanguageSwitcher />
         </div>
@@ -87,7 +87,7 @@ export default function AdminMenuPage() {
         <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Utensils className="w-5 h-5 text-sky-600" />
-            <span className="font-bold text-sky-900 text-sm">Chọn Tuần Cấu Hình:</span>
+            <span className="font-bold text-sky-900 text-sm">Chọn tuần cấu hình:</span>
           </div>
 
           <div className="flex gap-2">
@@ -112,7 +112,7 @@ export default function AdminMenuPage() {
           <div className="p-4 bg-sky-50 border-b border-slate-200 flex items-center justify-between">
             <h2 className="font-bold text-sky-900 text-sm flex items-center gap-2">
               <Edit3 className="w-4 h-4 text-sky-600" />
-              <span>Ma Trận Thực Đơn Tuần {selectedWeek} (Chỉnh Sửa Trực Tiếp Món Ăn)</span>
+              <span>Ma trận thực đơn tuần {selectedWeek} (chỉnh sửa trực tiếp món ăn)</span>
             </h2>
             <span className="text-xs text-slate-500 font-mono">Thay đổi tự động lưu vào Database</span>
           </div>
@@ -121,7 +121,7 @@ export default function AdminMenuPage() {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
                 <tr>
-                  <th className="p-3 w-40">Bữa Ăn / Ngày</th>
+                  <th className="p-3 w-40">Bữa ăn / Ngày</th>
                   {daysList.map((d) => (
                     <th key={d.key} className="p-3 min-w-[180px]">
                       {d.label}
