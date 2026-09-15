@@ -59,6 +59,14 @@ function AuthContent() {
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // Save session cookie & localStorage user state for security middleware
+    document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
+    const authData = { email, authenticated: true, timestamp: Date.now() };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('suongmai_auth_user', JSON.stringify(authData));
+    }
+
     let targetUrl = redirectTo;
     const lower = email.toLowerCase();
     if (lower.includes('teacher')) {
@@ -75,6 +83,8 @@ function AuthContent() {
       router.push(targetUrl);
     }, 800);
   };
+
+  const isUnauthorized = searchParams?.get('unauthorized') === 'true';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden">
@@ -96,6 +106,17 @@ function AuthContent() {
           <h1 className="text-2xl font-bold text-sky-700 tracking-tight">{t('auth.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
+
+        {/* Security Alert: Unauthorized Access Attempt Blocked */}
+        {isUnauthorized && (
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 font-bold flex items-start gap-2.5 shadow-sm animate-pulse">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-extrabold block text-rose-950 text-sm mb-0.5">🔒 Yêu cầu xác thực đăng nhập</span>
+              Trình duyệt của bạn chưa có phiên đăng nhập hợp lệ. Vui lòng đăng nhập tài khoản trước khi truy cập trang hệ thống.
+            </div>
+          </div>
+        )}
 
         {/* Local Inbucket Testing Banner (Hiển thị cho môi trường Dev cục bộ) */}
         {process.env.NODE_ENV !== 'production' && (

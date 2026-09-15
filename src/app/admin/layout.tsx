@@ -27,6 +27,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.ai_lessons'), href: '/admin/ai-lessons', icon: Sparkles, badge: 'AI 5.0' },
   ];
 
+  const handleLogout = () => {
+    document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('suongmai_auth_user');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col md:flex-row font-sans">
       {/* Sidebar - Pastel Sky Blue (#F0F9FF) */}
@@ -129,7 +136,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <p className="text-xs font-bold text-sky-950">{t('admin.header.principal')}</p>
             </div>
           </div>
-          <Link href="/auth" title={t('admin.sidebar.logout')} className="text-slate-400 hover:text-sky-700 transition-colors p-1.5">
+          <Link 
+            href="/auth" 
+            onClick={handleLogout}
+            title={t('admin.sidebar.logout')} 
+            className="text-slate-400 hover:text-sky-700 transition-colors p-1.5"
+          >
             <LogOut className="w-4 h-4" />
           </Link>
         </div>
