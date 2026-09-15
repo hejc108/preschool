@@ -47,6 +47,9 @@ function AuthContent() {
     e.preventDefault();
     if (!email) return;
     setLoading(true);
+    const identifier = email.trim();
+    const formattedEmail = identifier.includes('@') ? identifier : `${identifier}@suongmai.edu.vn`;
+    setEmail(formattedEmail);
     setTimeout(() => {
       setLoading(false);
       setStep('OTP');
@@ -56,9 +59,20 @@ function AuthContent() {
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    let targetUrl = redirectTo;
+    const lower = email.toLowerCase();
+    if (lower.includes('teacher')) {
+      targetUrl = '/teacher';
+    } else if (lower.includes('parent')) {
+      targetUrl = '/parent';
+    } else if (lower.includes('kitchen') || lower.includes('staff')) {
+      targetUrl = '/admin/menu';
+    } else {
+      targetUrl = '/admin/dashboard';
+    }
     setTimeout(() => {
       setLoading(false);
-      router.push(redirectTo);
+      router.push(targetUrl);
     }, 800);
   };
 
@@ -130,7 +144,7 @@ function AuthContent() {
           <span className="relative bg-white px-3 text-xs text-slate-400 font-medium">{t('auth.or_otp')}</span>
         </div>
 
-        {/* Email Form */}
+        {/* Username / Email Form */}
         {step === 'EMAIL' ? (
           <form onSubmit={handleSendOtp} className="space-y-4">
             <div>
@@ -140,13 +154,46 @@ function AuthContent() {
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nguyen.van.a@suongmai.edu.vn"
+                  placeholder="admin (hoặc admin@suongmai.edu.vn)"
                   required
                   className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-3 pl-11 pr-4 text-slate-800 placeholder-slate-400 text-sm focus:outline-none transition-colors"
                 />
+              </div>
+
+              {/* Quick Account Selection Chips */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-slate-400 font-medium">Tài khoản mẫu:</span>
+                <button
+                  type="button"
+                  onClick={() => setEmail('admin')}
+                  className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-md font-mono font-bold transition-all"
+                >
+                  admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmail('so.maria')}
+                  className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-md font-mono font-bold transition-all"
+                >
+                  so.maria
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmail('teacher')}
+                  className="px-2 py-0.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-md font-mono font-bold transition-all"
+                >
+                  teacher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmail('parent')}
+                  className="px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-md font-mono font-bold transition-all"
+                >
+                  parent
+                </button>
               </div>
             </div>
 
