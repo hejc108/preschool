@@ -305,3 +305,40 @@ export interface AILessonPlan {
   created_by?: string;
   created_at?: string;
 }
+
+export interface PreschoolAISchemaResponse {
+  title: string;
+  grade_level: string;
+  duration: string;
+  teaching_type: 'TRADITIONAL' | 'PROJECT_BASED';
+  objectives: {
+    science: string;
+    technology: string;
+    engineering: string;
+    art: string;
+    math: string;
+    attitude: string;
+  };
+  preparations: {
+    teacher: string[];
+    students: string[];
+  };
+  procedure_steps: {
+    step_name: string;
+    duration: string;
+    content: string;
+  }[];
+  project_weekly_timeline?: {
+    day: string;
+    phase: string;
+    activities: string;
+  }[];
+  afternoon_activity: {
+    name: string;
+    instruction: string;
+  };
+  parent_collaboration_note: string;
+  mindmap_mermaid: string;
+  image_prompts: string[];
+  youtube_keyword: string;
+}

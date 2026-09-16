@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  LayoutDashboard, Utensils, Activity, UserPlus, Users, Sparkles, 
+  LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
   Clock, Bell, LogOut, Smartphone, ChefHat 
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -16,15 +16,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const mainNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
     { label: t('admin.sidebar.dashboard'), href: '/admin/dashboard', icon: LayoutDashboard },
-    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: Utensils, badge: '4 Tuần' },
-    { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: Activity, badge: 'WHO' },
+    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
+    { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: HeartPulse, badge: 'WHO' },
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
   ];
 
   const aiNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
-    { label: t('admin.sidebar.ai_lessons'), href: '/admin/ai-lessons', icon: Sparkles, badge: 'AI 5.0' },
+    { label: t('admin.sidebar.ai_lessons'), href: '/teacher/lesson-plans/new', icon: Sparkles, badge: 'AI 5.0' },
   ];
 
   const handleLogout = () => {

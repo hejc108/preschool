@@ -162,6 +162,18 @@ export const INITIAL_CURRICULUM_FRAMEWORKS: CurriculumFramework[] = [
   },
 ];
 
+export const SUB_THEME_MAP: Record<ThemeCode, string[]> = {
+  TRUONG_MN: ['Lớp học mầm non của bé', 'Đồ chơi & Thiết bị ngoài trời', 'Cô giáo & Các bạn thân yêu'],
+  BAN_THAN: ['Cơ thể tôi khéo léo', 'Tôi cần gì để lớn lên', 'Cảm xúc của bé'],
+  GIA_DINH: ['Ngôi nhà thân yêu', 'Đồ dùng trong gia đình', 'Nhu cầu của gia đình'],
+  NGHE_NGHIEP: ['Nghề sản xuất (Nông dân, Thợ xây)', 'Nghề dịch vụ (Bác sĩ, Giáo viên, Công an)', 'Ước mơ tương lai'],
+  DONG_VAT: ['Vật nuôi gia đình (Mèo, Chó, Gà)', 'Động vật sống dưới nước', 'Động vật hoang dã trong rừng'],
+  THUC_VAT: ['Rau củ vitamin', 'Các loài hoa rực rỡ', 'Cây xanh & Quả ngọt'],
+  GIAO_THONG: ['Phương tiện giao thông đường bộ', 'Phương tiện đường thủy & hàng không', 'Luật giao thông đường phố'],
+  HTTN: ['Nước & Các hiện tượng thời tiết', 'Mặt trời, Mặt trăng & Các mùa', 'Không khí & Năng lượng sạch'],
+  QUE_HUONG: ['Quê hương Sương Mai', 'Thủ đô Hà Nội & Bác Hồ', 'Bản sắc văn hóa Việt Nam'],
+};
+
 export function getFrameworkByGradeAndTheme(grade: GradeLevelCode, theme: ThemeCode): CurriculumFramework | undefined {
   return INITIAL_CURRICULUM_FRAMEWORKS.find(
     (cf) => cf.grade_level === grade && cf.theme_code === theme
