@@ -22,6 +22,7 @@ export interface ThemeColorPalette {
   backgroundColor: string; // Hex color e.g. '#f0f9ff'
   imageStyleKeywords: string; // Keywords for AI image generation
   defaultIcon: string;
+  fallbackImages: string[];
 }
 
 export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
@@ -32,7 +33,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#facc15',  // Vàng tươi
     backgroundColor: '#f0f9ff',
     imageStyleKeywords: 'classroom, toys, friendly teacher, playing kindergarten children',
-    defaultIcon: '🏫'
+    defaultIcon: '🏫',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   BAN_THAN: {
     themeCode: 'BAN_THAN',
@@ -41,7 +47,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#fb7185',  // Hồng phấn
     backgroundColor: '#fff7ed',
     imageStyleKeywords: 'body parts, 5 senses, smiling happy kids, heart love',
-    defaultIcon: '❤️'
+    defaultIcon: '❤️',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1485546246426-74dc88dec4d9?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1502086223501-7ea6ecd79368?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1471286174890-9c112ffca5b4?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   GIA_DINH: {
     themeCode: 'GIA_DINH',
@@ -50,7 +61,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#fde047',  // Vàng kem
     backgroundColor: '#fef2f2',
     imageStyleKeywords: 'cozy home house, loving parents with kids, family meal',
-    defaultIcon: '🏡'
+    defaultIcon: '🏡',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1542037104857-ffbb0b9155fb?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1591604466107-ec97de577aff?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   NGHE_NGHIEP: {
     themeCode: 'NGHE_NGHIEP',
@@ -59,7 +75,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#f97316',  // Cam năng động
     backgroundColor: '#eff6ff',
     imageStyleKeywords: 'doctor, soldier, engineer, teacher, protective helmet',
-    defaultIcon: '👮'
+    defaultIcon: '👮',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   DONG_VAT: {
     themeCode: 'DONG_VAT',
@@ -68,7 +89,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#65a30d',  // Xanh rêu
     backgroundColor: '#fefce8',
     imageStyleKeywords: 'pets, forest wild animals, singing birds, animal footprints',
-    defaultIcon: '🐶'
+    defaultIcon: '🐶',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1535268647677-300dbf3d78d1?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   THUC_VAT: {
     themeCode: 'THUC_VAT',
@@ -77,7 +103,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#4ade80',  // Xanh mầm non
     backgroundColor: '#f0fdf4',
     imageStyleKeywords: 'seed sprout, fresh fruits and vegetables, garden, tree canopy, water drop',
-    defaultIcon: '🌱'
+    defaultIcon: '🌱',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   GIAO_THONG: {
     themeCode: 'GIAO_THONG',
@@ -86,7 +117,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#eab308',  // Vàng đèn xe
     backgroundColor: '#f8fafc',
     imageStyleKeywords: 'cars, trains, airplanes, sailboat, traffic signs',
-    defaultIcon: '🚗'
+    defaultIcon: '🚗',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1508974239320-0a029497e820?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   HTTN: {
     themeCode: 'HTTN',
@@ -95,7 +131,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#38bdf8',  // Xanh da trời
     backgroundColor: '#ecfeff',
     imageStyleKeywords: 'rainbow, rain clouds, stream water, warm sunny sky',
-    defaultIcon: '🌈'
+    defaultIcon: '🌈',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1516571748831-5d81767bfa88?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   QUE_HUONG: {
     themeCode: 'QUE_HUONG',
@@ -104,7 +145,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#eab308',  // Vàng kim
     backgroundColor: '#fffbeb',
     imageStyleKeywords: 'lotus flower, Vietnam red flag yellow star, Uncle Ho mausoleum, Vietnam map',
-    defaultIcon: '🇻🇳'
+    defaultIcon: '🇻🇳',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1528127269322-539801943592?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1531959870249-9f9b729efcf4?w=800&auto=format&fit=crop&q=80'
+    ]
   },
   LOP_MOT: {
     themeCode: 'LOP_MOT',
@@ -113,7 +159,12 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     accentColor: '#a3e635',  // Xanh mạ
     backgroundColor: '#faf5ff',
     imageStyleKeywords: 'school backpack, books and notebooks, pencil, clock, blackboard',
-    defaultIcon: '🎒'
+    defaultIcon: '🎒',
+    fallbackImages: [
+      'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1456735190827-d1262f71b8a3?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80'
+    ]
   }
 };
 

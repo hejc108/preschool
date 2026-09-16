@@ -518,18 +518,14 @@ export async function toBase64(url: string): Promise<string> {
 }
 
 /**
- * High quality preschool cartoon fallback images if AI image server is unreachable
+ * Parametric theme-aware preschool fallback images if AI image server is unreachable
  */
-export const FALLBACK_PRESCHOOL_IMAGES = [
-  'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80'
-];
-
-export function getFallbackPreschoolImage(index: number = 0): string {
-  return FALLBACK_PRESCHOOL_IMAGES[index % FALLBACK_PRESCHOOL_IMAGES.length];
+export function getFallbackPreschoolImage(index: number = 0, themeCode?: string): string {
+  const themeMatrix = getThemeMatrix(themeCode);
+  const fallbacks = themeMatrix.fallbackImages && themeMatrix.fallbackImages.length > 0
+    ? themeMatrix.fallbackImages
+    : THEME_MATRIX.THUC_VAT.fallbackImages;
+  return fallbacks[index % fallbacks.length];
 }
 
 
@@ -750,15 +746,15 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     const slidesData = lesson.slides || [];
     const base64Images: string[] = [];
     for (let i = 0; i < slidesData.length; i++) {
-      const rawUrl = slidesData[i].image_url || getFallbackPreschoolImage(i);
+      const rawUrl = slidesData[i].image_url || getFallbackPreschoolImage(i, themeCode);
       const b64 = await toBase64(rawUrl);
-      base64Images.push(b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i));
+      base64Images.push(b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i, themeCode));
     }
 
     for (let i = 0; i < slidesData.length; i++) {
       const slideItem = slidesData[i];
       const slide = pptx.addSlide();
-      const img = base64Images[i] || getFallbackPreschoolImage(i);
+      const img = base64Images[i] || getFallbackPreschoolImage(i, themeCode);
       const isB64 = img.startsWith('data:image');
       const imgObj = { [isB64 ? 'data' : 'path']: img };
 
