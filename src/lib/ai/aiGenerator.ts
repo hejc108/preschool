@@ -412,6 +412,30 @@ Trân trọng cảm ơn sự đồng hành quý báu của Quý Phụ Huynh!
 }
 
 /**
+ * High quality preschool cartoon fallback images if AI image server is unreachable
+ */
+export const FALLBACK_PRESCHOOL_IMAGES = [
+  'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80'
+];
+
+export function getFallbackPreschoolImage(index: number = 0): string {
+  return FALLBACK_PRESCHOOL_IMAGES[index % FALLBACK_PRESCHOOL_IMAGES.length];
+}
+
+/**
+ * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
+ */
+export function getPollinationsImageUrl(prompt: string, width = 1024, height = 768, seedIndex = 1): string {
+  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cute preschool children illustration';
+  const encodedPrompt = encodeURIComponent(`cute preschool cartoon illustration, colorful, friendly, ${cleanPrompt}`);
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
+}
+
+/**
  * Triggers PowerPoint (.pptx) file generation using dynamic client-side PptxGenJS library
  */
 export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
@@ -424,7 +448,7 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
         script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Khôg thể nạp thư viện pptxgenjs'));
+        script.onerror = () => reject(new Error('Không thể nạp thư viện pptxgenjs'));
         document.head.appendChild(script);
       });
     }
@@ -440,17 +464,17 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     slide1.background = { color: 'F0F9FF' };
     slide1.addText(lesson.topic.toUpperCase(), {
       x: 0.8,
-      y: 1.5,
+      y: 1.2,
       w: 8.5,
       h: 1.2,
-      fontSize: 28,
+      fontSize: 26,
       bold: true,
       color: '0369A1',
       align: 'left'
     });
     slide1.addText(`Loại bài dạy: ${lesson.teaching_type === 'PROJECT_BASED' ? 'DỰ ÁN HỌC TẬP STEAM (PBL)' : 'BÀI GIẢNG TRUYỀN THỐNG 5 BƯỚC'}`, {
       x: 0.8,
-      y: 2.7,
+      y: 2.5,
       w: 8.5,
       h: 0.5,
       fontSize: 16,
@@ -459,7 +483,7 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     });
     slide1.addText(`Môn: ${lesson.subject} | Khối: ${lesson.grade_level} | Thời lượng: ${lesson.duration_minutes} phút`, {
       x: 0.8,
-      y: 3.3,
+      y: 3.1,
       w: 8.5,
       h: 0.5,
       fontSize: 14,
@@ -469,17 +493,52 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     // Slide 2: Objectives & Materials
     const slide2 = pptx.addSlide();
     slide2.addText('MỤC TIÊU & CHUẨN BỊ HỌC LIỆU', { x: 0.8, y: 0.6, fontSize: 22, bold: true, color: '0369A1' });
-    slide2.addText(`Mục tiêu bài dạy:\n${lesson.target_objectives}`, { x: 0.8, y: 1.5, w: 8.5, h: 1.5, fontSize: 14, color: '1E293B' });
-    slide2.addText(`Học liệu đồ dùng:\n${lesson.materials_needed.join(', ')}`, { x: 0.8, y: 3.2, w: 8.5, h: 1.5, fontSize: 14, color: '047857' });
+    slide2.addText(`Mục tiêu bài dạy:\n${lesson.target_objectives}`, { x: 0.8, y: 1.4, w: 8.5, h: 1.5, fontSize: 13, color: '1E293B' });
+    slide2.addText(`Học liệu đồ dùng:\n${lesson.materials_needed.join(', ')}`, { x: 0.8, y: 3.1, w: 8.5, h: 1.5, fontSize: 13, color: '047857' });
 
-    // Slide 3: Pedagogy Steps / Timeline
-    const slide3 = pptx.addSlide();
-    slide3.addText(lesson.teaching_type === 'PROJECT_BASED' ? 'LỘ TRÌNH DỰ ÁN 5E STEAM' : 'CẤU TRÚC 5 BƯỚC SƯ PHẠM', { x: 0.8, y: 0.6, fontSize: 22, bold: true, color: '0369A1' });
-    let yPos = 1.4;
-    lesson.five_steps.slice(0, 4).forEach((step) => {
-      slide3.addText(`${step.step_title}: ${step.teacher_action}`, { x: 0.8, y: yPos, w: 8.5, h: 0.8, fontSize: 12, color: '334155' });
-      yPos += 0.9;
-    });
+    // Loop through lesson.slides to create full visual slides with images
+    if (lesson.slides && lesson.slides.length > 0) {
+      for (const slideData of lesson.slides) {
+        const slide = pptx.addSlide();
+        
+        // Slide Title Header
+        slide.addText(slideData.title.toUpperCase(), {
+          x: 0.5,
+          y: 0.4,
+          w: 9.0,
+          h: 0.6,
+          fontSize: 20,
+          bold: true,
+          color: '0369A1'
+        });
+
+        // Left Content Points
+        const textContent = slideData.content_points.map((pt) => `• ${pt}`).join('\n\n');
+        slide.addText(textContent, {
+          x: 0.5,
+          y: 1.2,
+          w: 4.8,
+          h: 3.8,
+          fontSize: 13,
+          color: '1E293B',
+          valign: 'top'
+        });
+
+        // Right Slide Image
+        const imgUrl = slideData.image_url || getFallbackPreschoolImage(slideData.slide_number);
+        try {
+          slide.addImage({
+            path: imgUrl,
+            x: 5.5,
+            y: 1.2,
+            w: 4.0,
+            h: 3.2
+          });
+        } catch (imgErr) {
+          console.warn('PPTX Image add fallback:', imgErr);
+        }
+      }
+    }
 
     // Save File
     const filename = `GiaoAn_${lesson.topic.replace(/\s+/g, '_')}_${Date.now()}.pptx`;

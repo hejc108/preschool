@@ -7,7 +7,7 @@ import {
   Send, AlertCircle, Copy, Check, Rocket, Tv, Printer
 } from 'lucide-react';
 import Link from 'next/link';
-import { generateAILessonPlan, generateAILearningProject, exportToPowerPoint } from '@/lib/ai/aiGenerator';
+import { generateAILessonPlan, generateAILearningProject, exportToPowerPoint, getFallbackPreschoolImage } from '@/lib/ai/aiGenerator';
 import { AILessonPlan, GradeLevelCode, ThemeCode, TeachingType } from '@/lib/types/schema';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
@@ -120,6 +120,9 @@ export default function TeacherAILessonPlanNewPage() {
               .box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
               .step { margin-bottom: 15px; padding: 10px; background: #fff; border-left: 4px solid #0284c7; }
               .announcement { background: #f0fdf4; border: 1px solid #86efac; padding: 15px; border-radius: 8px; }
+              .slides-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+              .slide-card { border: 1px solid #cbd5e1; padding: 12px; border-radius: 8px; background: #fff; page-break-inside: avoid; }
+              .slide-img { width: 100%; height: 180px; object-fit: cover; border-radius: 6px; margin-top: 8px; }
             </style>
           </head>
           <body>
@@ -138,6 +141,25 @@ export default function TeacherAILessonPlanNewPage() {
                 <p><strong>Hoạt động của trẻ:</strong> ${s.child_activity}</p>
               </div>
             `).join('')}
+
+            ${generatedLesson.slides && generatedLesson.slides.length > 0 ? `
+              <h2>HÌNH ẢNH MINH HỌA & SLIDE TRÌNH CHIẾU SMARTTV</h2>
+              <div class="slides-grid">
+                ${generatedLesson.slides.map(s => `
+                  <div class="slide-card">
+                    <h3 style="margin: 0; color: #0369a1; font-size: 14px;">SLIDE ${s.slide_number}: ${s.title}</h3>
+                    <img 
+                      src="${s.image_url || getFallbackPreschoolImage(s.slide_number)}" 
+                      class="slide-img"
+                      onerror="this.onerror=null; this.src='${getFallbackPreschoolImage(s.slide_number)}';"
+                    />
+                    <ul style="font-size: 12px; margin-top: 8px; padding-left: 18px; color: #334155;">
+                      ${s.content_points.map(pt => `<li>${pt}</li>`).join('')}
+                    </ul>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
 
             ${generatedLesson.parent_announcement ? `
               <h2>THƯ NGỎ GỬI PHỤ HUYNH ĐỒNG HÀNH</h2>
@@ -563,14 +585,17 @@ export default function TeacherAILessonPlanNewPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 items-center">
-                          {/* Left Image */}
-                          {slide.image_url && (
-                            <img
-                              src={slide.image_url}
-                              alt={slide.title}
-                              className="w-full h-56 object-cover rounded-xl border border-slate-200 shadow-sm"
-                            />
-                          )}
+                          {/* Left Image with automatic fallback */}
+                          <img
+                            src={slide.image_url || getFallbackPreschoolImage(slide.slide_number)}
+                            alt={slide.title}
+                            className="w-full h-56 object-cover rounded-xl border border-slate-200 shadow-sm"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = getFallbackPreschoolImage(slide.slide_number);
+                            }}
+                          />
 
                           {/* Right Content */}
                           <div className="space-y-3">
