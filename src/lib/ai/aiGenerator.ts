@@ -482,21 +482,6 @@ Trân trọng cảm ơn sự đồng hành quý báu của Quý Phụ Huynh!
 }
 
 /**
- * High quality preschool cartoon fallback images if AI image server is unreachable
- */
-export const FALLBACK_PRESCHOOL_IMAGES = [
-  'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80'
-];
-
-export function getFallbackPreschoolImage(index: number = 0): string {
-  return FALLBACK_PRESCHOOL_IMAGES[index % FALLBACK_PRESCHOOL_IMAGES.length];
-}
-
-/**
  * Triggers PowerPoint (.pptx) file generation using dynamic client-side PptxGenJS library
  */
 export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
