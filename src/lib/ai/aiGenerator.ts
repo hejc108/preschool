@@ -1,5 +1,80 @@
-import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType } from '../types/schema';
+import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType, PreschoolAISchemaResponse } from '../types/schema';
 import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP } from '../utils/curriculumHelper';
+
+/**
+ * System Instruction Prompt for Gemini / AI Engine
+ */
+export const PRESCHOOL_SYSTEM_INSTRUCTION = `[SYSTEM INSTRUCTION]
+Bạn là Chuyên gia Phương pháp Giáo dục Mầm non tại Trường Mầm Non Sương Mai.
+Nhiệm vụ của bạn là lập kế hoạch bài dạy chi tiết, hấp dẫn, chuẩn mực sư phạm và an toàn tuyệt đối cho trẻ.
+
+[QUY TẮC ĐIỀU HƯỚNG THEO ĐỘ TUỔI]
+1. KHỐI NHÀ TRẺ (24-36 tháng): Thời lượng 12-15 phút. Tiến trình 3 bước (Gắn kết -> Nhận biết tập nói/hoạt động với đồ vật -> Trò chơi phản xạ). Ngôn ngữ cực kỳ đơn giản, từ ngữ lặp lại, hình ảnh trực quan lớn.
+2. KHỐI MẦM (3-4 tuổi): Thời lượng 15-20 phút. Tiến trình 3 bước truyền thống. Nhận biết trong phạm vi 5, so sánh kích thước, hình khối cơ bản. Không dạy viết chữ cái.
+3. KHỐI CHỒI (4-5 tuổi): Thời lượng 20-25 phút. Tiến trình 5E rút gọn. Phạm vi 10, phân tích nguyên nhân - kết quả, kể chuyện đóng vai kịch ngắn.
+4. KHỐI LÁ (5-6 tuổi): Thời lượng 25-30 phút. Bắt buộc áp dụng 5E chuẩn (Engage, Explore, Explain, Elaborate, Evaluate) kết hợp mục tiêu STEAM bóc tách rõ S-T-E-A-M. Bắt buộc có từ mới giải thích và 1 trò chơi hoạt động chiều.
+
+[QUY TẮC DẠY HỌC THEO DỰ ÁN (PBL)]
+Nếu teaching_type == 'PROJECT_BASED':
+- Phân bổ hoạt động thành chuỗi 5 ngày trong tuần (Thứ 2 -> Thứ 6) xoay quanh việc hoàn thiện 01 sản phẩm thực tế của trẻ.
+- Tích hợp tự nhiên các môn: Khoa học (S), Công nghệ (T), Kỹ thuật (E), Nghệ thuật (A), Toán học (M).
+- Soạn 01 đoạn thông báo ngắn gửi phụ huynh (Parent Project Card) để cùng chuẩn bị học liệu tại nhà.`;
+
+/**
+ * Helper to map raw JSON PreschoolAISchemaResponse to AILessonPlan UI model
+ */
+export function mapSchemaResponseToLessonPlan(
+  schema: PreschoolAISchemaResponse,
+  subject: string = 'KPKH',
+  theme_code: ThemeCode = 'THUC_VAT'
+): AILessonPlan {
+  const normGrade: GradeLevelCode = 
+    schema.grade_level.includes('NHÀ TRẺ') || schema.grade_level.includes('NHA_TRE') ? 'NHA_TRE' :
+    schema.grade_level.includes('MẦM') || schema.grade_level.includes('MAM') ? 'MAM' :
+    schema.grade_level.includes('CHỒI') || schema.grade_level.includes('CHOI') ? 'CHOI' : 'LA';
+
+  const fiveSteps = schema.procedure_steps.map((step, idx) => ({
+    step_number: idx + 1,
+    step_title: step.step_name,
+    description: `Thời lượng: ${step.duration}`,
+    teacher_action: step.content.split('Trẻ:')[0]?.replace('Cô:', '').trim() || step.content,
+    child_activity: step.content.includes('Trẻ:') ? step.content.split('Trẻ:')[1]?.trim() || 'Trẻ tích cực tham gia.' : 'Trẻ quan sát và thực hành theo hướng dẫn.'
+  }));
+
+  const slides: AILessonSlide[] = (schema.image_prompts || []).map((prompt, idx) => ({
+    slide_number: idx + 1,
+    title: `SLIDE ${idx + 1}: ${schema.title}`,
+    content_points: [
+      `Khối: ${schema.grade_level} • Thời lượng: ${schema.duration}`,
+      `Mục tiêu: ${schema.objectives.science || schema.objectives.attitude}`,
+      `Chuẩn bị: ${schema.preparations.students.join(', ')}`
+    ],
+    image_prompt: prompt,
+    image_url: getPollinationsImageUrl(prompt)
+  }));
+
+  return {
+    id: `ai-lesson-${Date.now()}`,
+    topic: schema.title,
+    subject,
+    grade_level: normGrade,
+    teaching_type: schema.teaching_type,
+    target_objectives: `S: ${schema.objectives.science} | T: ${schema.objectives.technology} | E: ${schema.objectives.engineering} | A: ${schema.objectives.art} | M: ${schema.objectives.math}`,
+    duration_minutes: parseInt(schema.duration) || 25,
+    materials_needed: [...schema.preparations.teacher, ...schema.preparations.students],
+    five_steps: fiveSteps,
+    mermaid_mindmap_code: schema.mindmap_mermaid || `graph TD\n  Root["🌱 ${schema.title}"] --> S1["1. Hoạt động"]`,
+    youtube_video_suggestions: [
+      { title: `Tìm kiếm "${schema.youtube_keyword || schema.title}" trên YouTube`, url: `https://www.youtube.com/results?search_query=${encodeURIComponent(schema.youtube_keyword || schema.title)}` }
+    ],
+    slides,
+    preparations: schema.preparations,
+    afternoon_activity: schema.afternoon_activity,
+    parent_announcement: schema.parent_collaboration_note,
+    schema_response: schema,
+    created_at: new Date().toISOString()
+  };
+}
 
 /**
  * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)

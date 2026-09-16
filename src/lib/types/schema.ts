@@ -302,6 +302,9 @@ export interface AILessonPlan {
   learning_project?: LearningProject;
   parent_announcement?: string;
   framework_id?: string;
+  preparations?: { teacher: string[]; students: string[] };
+  afternoon_activity?: { name: string; instruction: string };
+  schema_response?: PreschoolAISchemaResponse;
   created_by?: string;
   created_at?: string;
 }
