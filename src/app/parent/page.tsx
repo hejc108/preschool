@@ -370,6 +370,24 @@ export default function ParentPwaPage() {
             </div>
           </div>
 
+          {/* 1.5. KHỐI THƯ NGỎ DỰ ÁN HỌC TẬP STEAM (PBL ANNOUNCEMENT FOR PARENTS) */}
+          <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-white to-teal-50 border border-emerald-300 rounded-convent shadow-sm space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 text-xs">
+                <Sparkles className="w-4 h-4 text-emerald-600 animate-spin" />
+                🚀 Thư ngỏ dự án học tập STEAM tuần này
+              </span>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-pill border border-emerald-300">
+                Đồng hành cùng bé
+              </span>
+            </div>
+
+            <p className="text-slate-700 text-[11px] leading-relaxed">
+              <strong className="text-emerald-900 block font-bold mb-0.5">Dự án: Chế tạo Xe Ô tô Đồ chơi Tải nặng</strong>
+              Kính nhờ Phụ huynh cùng bé mang 2-3 vỏ hộp sữa rỗng & nắp chai nhựa sạch đến lớp để cùng các bạn thực hành chế tạo nhé!
+            </p>
+          </div>
+
           {/* 2. KHỐI THỰC ĐƠN HÔM NAY (NẰM NGAY BÊN DƯỚI TIMELINE) */}
           <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">

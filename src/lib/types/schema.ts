@@ -191,13 +191,83 @@ export interface HealthRecord {
   created_at?: string;
 }
 
-// --- PHẦN 5: AI PIPELINE BÀI GIẢNG ---
+// --- PHẦN 5: AI PIPELINE BÀI GIẢNG & DỰ ÁN HỌC TẬP PBL ---
+export type TeachingType = 'TRADITIONAL' | 'PROJECT_BASED';
+export type GradeLevelCode = 'NHA_TRE' | 'MAM' | 'CHOI' | 'LA';
+export type ThemeCode = 
+  | 'TRUONG_MN' 
+  | 'BAN_THAN' 
+  | 'GIA_DINH' 
+  | 'NGHE_NGHIEP' 
+  | 'DONG_VAT' 
+  | 'THUC_VAT' 
+  | 'GIAO_THONG' 
+  | 'HTTN' 
+  | 'QUE_HUONG';
+
+export type SubjectCode = 
+  | 'NBTN' 
+  | 'HDVDV' 
+  | 'KPKH' 
+  | 'LQVT' 
+  | 'LQCC' 
+  | 'LQVH' 
+  | 'TAO_HINH' 
+  | 'LQAN' 
+  | 'PTVĐ';
+
+export type PedagogicalModel = '3_STEPS_TRADITIONAL' | '5E_STEAM';
+
 export interface CurriculumFramework {
   id: string;
-  grade_level: 'MẦM' | 'CHỒI' | 'LÁ';
-  subject: string;
-  title: string;
-  content_structure: Record<string, any>;
+  grade_level: GradeLevelCode;
+  theme_code: ThemeCode;
+  theme_name: string;
+  sub_theme: string;
+  subject: SubjectCode | string;
+  target_duration: string; // e.g. '12-15 phút', '15-20 phút', '20-25 phút', '25-30 phút'
+  pedagogical_model: PedagogicalModel;
+  standard_topic: string;
+  pedagogical_guidelines: {
+    steam_objectives?: {
+      science?: string;
+      technology?: string;
+      engineering?: string;
+      art?: string;
+      math?: string;
+    };
+    basic_materials: string[];
+    key_vocabulary: string[];
+    songs_or_poems?: string[];
+    interactive_games?: string[];
+  };
+  created_at?: string;
+}
+
+export interface LearningProject {
+  id: string;
+  grade_level: GradeLevelCode;
+  theme_code: ThemeCode;
+  project_name: string;
+  duration_weeks: number;
+  final_product: string;
+  steam_mapping: {
+    science: string;
+    technology: string;
+    engineering: string;
+    art: string;
+    math: string;
+  };
+  timeline_days: {
+    day_number: number;
+    title: string;
+    phase_5e: 'Engage' | 'Explore' | 'Explain' | 'Elaborate' | 'Evaluate';
+    teacher_action: string;
+    child_activity: string;
+  }[];
+  materials_needed: string[];
+  parent_announcement: string;
+  created_by?: string;
   created_at?: string;
 }
 
@@ -213,7 +283,8 @@ export interface AILessonPlan {
   id: string;
   topic: string;
   subject: string;
-  grade_level: 'MẦM' | 'CHỒI' | 'LÁ';
+  grade_level: GradeLevelCode | 'MẦM' | 'CHỒI' | 'LÁ' | 'NHÀ TRẺ';
+  teaching_type: TeachingType;
   target_objectives: string;
   duration_minutes: number;
   materials_needed: string[];
@@ -227,6 +298,10 @@ export interface AILessonPlan {
   mermaid_mindmap_code: string;
   youtube_video_suggestions: { title: string; url: string }[];
   slides: AILessonSlide[];
+  project_id?: string;
+  learning_project?: LearningProject;
+  parent_announcement?: string;
+  framework_id?: string;
   created_by?: string;
   created_at?: string;
 }

@@ -1,4 +1,5 @@
-import { AILessonPlan, AILessonSlide } from '../types/schema';
+import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType } from '../types/schema';
+import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP } from '../utils/curriculumHelper';
 
 /**
  * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
@@ -9,23 +10,36 @@ export function getPollinationsImageUrl(prompt: string, width = 1024, height = 7
 }
 
 /**
- * Generates 5-Step Preschool Lesson Plan + Mermaid Mindmap + Pollinations Images + PowerPoint Slides
+ * Generates Traditional 5-Step Preschool Lesson Plan + Dynamic Framework Injection + Mermaid Mindmap + Pollinations Images
  */
 export async function generateAILessonPlan(params: {
   topic: string;
   subject: string;
-  grade_level: 'MẦM' | 'CHỒI' | 'LÁ';
+  grade_level: GradeLevelCode | 'MẦM' | 'CHỒI' | 'LÁ' | 'NHÀ TRẺ';
+  theme_code?: ThemeCode;
   target_objectives?: string;
   materials_needed?: string;
   expansion_ideas?: string;
 }): Promise<AILessonPlan> {
-  const { topic, subject, grade_level, target_objectives, materials_needed } = params;
+  const { topic, subject, grade_level, theme_code = 'THUC_VAT', target_objectives, materials_needed } = params;
 
-  // Simulate AI Grounding Pipeline Response (Gemini 1.5 Flash API + Curriculum Framework Context)
+  // Map grade code
+  const normGrade: GradeLevelCode = 
+    grade_level === 'NHÀ TRẺ' || grade_level === 'NHA_TRE' ? 'NHA_TRE' :
+    grade_level === 'MẦM' || grade_level === 'MAM' ? 'MAM' :
+    grade_level === 'CHỒI' || grade_level === 'CHOI' ? 'CHOI' : 'LA';
+
+  // Dynamic Injection: Query 1 record from curriculum_frameworks Seed Data
+  const framework = getFrameworkByGradeAndTheme(normGrade, theme_code);
+
+  // Simulate AI Processing Latency (1.2s fast response)
   await new Promise((res) => setTimeout(res, 1200));
 
-  const safeTopic = topic.trim() || 'Khám phá sự phát triển của cây xanh';
-  const duration = grade_level === 'MẦM' ? 20 : grade_level === 'CHỒI' ? 25 : 30;
+  const safeTopic = topic.trim() || framework.standard_topic || 'Khám phá sự phát triển của cây xanh';
+  const duration = 
+    normGrade === 'NHA_TRE' ? 15 :
+    normGrade === 'MAM' ? 20 :
+    normGrade === 'CHOI' ? 25 : 30;
 
   // Mermaid.js Mindmap Diagram Code
   const mermaidCode = `graph TD
@@ -34,32 +48,32 @@ export async function generateAILessonPlan(params: {
   Root --> Step3["3. Luyện tập (Trò chơi tương tác)"]
   Root --> Step4["4. Củng cố (Sơ đồ tư duy)"]
   
-  Step1 --> S1_Detail["Thơ & Hát cùng cô"]
-  Step2 --> S2_Detail["Gieo hạt với bông gòn & tưới nước"]
-  Step3 --> S3_Detail["Ghép tranh quy trình nảy mầm"]
+  Step1 --> S1_Detail["Thơ & Hát cùng cô: ${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Bài hát mầm non'}"]
+  Step2 --> S2_Detail["Trải nghiệm trực quan: ${framework.pedagogical_guidelines.basic_materials.slice(0, 2).join(', ')}"]
+  Step3 --> S3_Detail["Trò chơi: ${framework.pedagogical_guidelines.interactive_games?.[0] || 'Thi đội nào nhanh' }"]
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
-  // 5-Step Pedagogy Structure
+  // 5-Step Traditional Pedagogy Structure
   const fiveSteps = [
     {
       step_number: 1,
       step_title: '1. Gắn kết & Khởi động (Ổn định tổ chức)',
       description: 'Gây hứng thú cho trẻ qua bài hát vui nhộn và câu hỏi gợi mở.',
-      teacher_action: `Cô cùng cả lớp hát và vận động theo bài hát thiếu nhi liên quan đến "${safeTopic}".`,
+      teacher_action: `Cô cùng cả lớp hát bài "${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Mầm non vui vẻ'}" và gợi mở về "${safeTopic}".`,
       child_activity: 'Trẻ hào hứng nhún nhảy theo nhạc, lắng nghe và hăng hái trả lời câu hỏi của cô.'
     },
     {
       step_number: 2,
       step_title: '2. Khám phá & Trải nghiệm thực tế (Hoạt động trọng tâm)',
       description: 'Cho trẻ quan sát trực quan, sờ nắn và thực hành trải nghiệm trực tiếp.',
-      teacher_action: `Cô giới thiệu đồ dùng trực quan: ${materials_needed || 'Bông gòn, hạt đỗ, nước sạch, khay nhựa'}. Hướng dẫn trẻ từng bước thao tác thực hành.`,
-      child_activity: `Trẻ chia nhóm 4-5 bé, tự tay thực hành gieo hạt với bông gòn và tưới nước chăm sóc.`
+      teacher_action: `Cô giới thiệu học liệu: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}. Hướng dẫn trẻ quan sát và vần thao tác.`,
+      child_activity: `Trẻ chia nhóm 4-5 bé, tự tay sờ nắn, quan sát và trải nghiệm đồ dùng cùng các bạn.`
     },
     {
       step_number: 3,
       step_title: '3. Giải thích & Thảo luận nhóm (Luyện tập trò chơi)',
       description: 'Giúp trẻ ghi nhớ kiến thức qua trò chơi đồng đội tương tác.',
-      teacher_action: 'Cô tổ chức trò chơi "Đội nào nhanh nhất" sắp xếp quy trình phát triển theo thứ tự đúng.',
+      teacher_action: `Cô tổ chức trò chơi "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Đội nào nhanh nhất'}" khắc sâu bài học. Từ vựng cốt lõi: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}.`,
       child_activity: 'Các nhóm phân công nhau cầm thẻ tranh nhanh chân lên dán vào bảng nhóm.'
     },
     {
@@ -84,9 +98,9 @@ export async function generateAILessonPlan(params: {
       slide_number: 1,
       title: `BÀI GIẢNG: ${safeTopic.toUpperCase()}`,
       content_points: [
-        `Môn học: ${subject} • Khối lớp: ${grade_level}`,
-        `Thời lượng: ${duration} phút`,
-        `Giáo viên thực hiện: Sơ Maria Tươi / Cô Thu Hà`
+        `Môn học: ${subject} • Khối lớp: ${GRADE_LEVEL_MAP[normGrade].label}`,
+        `Chủ đề: ${THEME_NAME_MAP[theme_code]}`,
+        `Thời lượng chuẩn: ${duration} phút`
       ],
       image_prompt: `Cute preschool children learning about ${safeTopic}, colorful classroom`,
       image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`)
@@ -95,32 +109,33 @@ export async function generateAILessonPlan(params: {
       slide_number: 2,
       title: 'MỤC TIÊU BÀI HỌC & ĐỒ DÙNG',
       content_points: [
-        `Mục tiêu: ${target_objectives || 'Trẻ nhận biết và trình bày được các giai đoạn phát triển của hạt đỗ'}`,
-        `Chuẩn bị: ${materials_needed || 'Bông gòn, hạt giống, cốc nhựa, nước sạch, khay thực hành'}`
+        `Mục tiêu: ${target_objectives || framework.pedagogical_guidelines.steam_objectives?.science || 'Trẻ nhận biết và trình bày được nội dung bài học'}`,
+        `Học liệu: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}`,
+        `Từ vựng: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}`
       ],
-      image_prompt: `Preschool science experiment materials, seeds and cotton balls, cartoon style`,
-      image_url: getPollinationsImageUrl(`Preschool science experiment materials, seeds and cotton balls`)
+      image_prompt: `Preschool science experiment materials, cartoon style`,
+      image_url: getPollinationsImageUrl(`Preschool science experiment materials`)
     },
     {
       slide_number: 3,
-      title: 'THỰC HÀNH GIEO HẠT VỚI BÔNG GÒN',
+      title: 'THỰC HÀNH & TRẢI NGHIỆM TRỰC QUAN',
       content_points: [
-        'Bước 1: Lót 1 lớp bông gòn vào đáy cốc nhựa.',
-        'Bước 2: Rắc 3-4 hạt đỗ đã ngâm ấm lên bông.',
-        'Bước 3: Tắm mát cho hạt bằng 2 thìa nước sạch.'
+        'Bước 1: Quan sát mẫu trực quan của cô.',
+        'Bước 2: Trẻ thao tác trải nghiệm theo nhóm.',
+        'Bước 3: Trả lời câu hỏi gợi mở và thảo luận.'
       ],
-      image_prompt: `Little happy Asian kindergarten child watering seeds in cotton ball, bright watercolor`,
-      image_url: getPollinationsImageUrl(`Little happy Asian kindergarten child watering seeds in cotton ball`)
+      image_prompt: `Little happy Asian kindergarten child exploring ${safeTopic}, bright watercolor`,
+      image_url: getPollinationsImageUrl(`Little happy Asian kindergarten child exploring ${safeTopic}`)
     },
     {
       slide_number: 4,
       title: 'SƠ ĐỒ TƯ DUY TỔNG KẾT BÀI HỌC',
       content_points: [
-        'Hạt mầm nhỏ $\\rightarrow$ Nảy mầm $\\rightarrow$ Mọc lá non $\\rightarrow$ Cây lớn xinh',
-        'Bé nhớ tưới nước và để cây tắm nắng hàng ngày nhé!'
+        `Tóm tắt chủ đề: ${safeTopic}`,
+        'Bé nhớ bài học và tự giác thu dọn đồ dùng ngăn nắp nhé!'
       ],
-      image_prompt: `Green sprout growing stages timeline infographic for kindergarten children`,
-      image_url: getPollinationsImageUrl(`Green sprout growing stages timeline infographic for kindergarten children`)
+      image_prompt: `sprout growing stages timeline infographic for kindergarten children`,
+      image_url: getPollinationsImageUrl(`sprout growing stages timeline infographic for kindergarten children`)
     }
   ];
 
@@ -128,17 +143,195 @@ export async function generateAILessonPlan(params: {
     id: `ai-lesson-${Date.now()}`,
     topic: safeTopic,
     subject,
-    grade_level,
-    target_objectives: target_objectives || 'Trẻ tự tin trình bày kiến thức và thực hành khéo léo.',
+    grade_level: normGrade,
+    teaching_type: 'TRADITIONAL',
+    target_objectives: target_objectives || framework.pedagogical_guidelines.steam_objectives?.science || 'Trẻ tự tin trình bày kiến thức và thực hành khéo léo.',
     duration_minutes: duration,
-    materials_needed: (materials_needed || 'Bông gòn, hạt giống, cốc nhựa, nước sạch').split(',').map((s) => s.trim()),
+    materials_needed: (materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')).split(',').map((s) => s.trim()),
     five_steps: fiveSteps,
     mermaid_mindmap_code: mermaidCode,
     youtube_video_suggestions: [
-      { title: 'Bài hát "Hạt mầm nhỏ" (Kênh Mầm Chồi Lá)', url: 'https://www.youtube.com/results?search_query=bai+hat+hat+mam+nho' },
-      { title: 'Hoạt hình "Sự kỳ diệu của hạt đỗ" (VTV7)', url: 'https://www.youtube.com/results?search_query=su+ky+dieu+cua+hat+do+vtv7' }
+      { title: `Bài hát "${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Mầm Chồi Lá'}"`, url: 'https://www.youtube.com/results?search_query=mam+choi+la' },
+      { title: `Khám phá "${safeTopic}" (VTV7 Nhi Khoa)`, url: 'https://www.youtube.com/results?search_query=vtv7+nhi+khoa' }
     ],
     slides,
+    framework_id: framework.id,
+    created_at: new Date().toISOString()
+  };
+}
+
+/**
+ * Generates Project-Based Learning (PBL) 5E STEAM Project + Timeline + Parent Announcement
+ */
+export async function generateAILearningProject(params: {
+  projectName: string;
+  gradeLevel: GradeLevelCode;
+  themeCode: ThemeCode;
+  durationWeeks?: number;
+  finalProduct?: string;
+  materialsNeeded?: string;
+}): Promise<AILessonPlan> {
+  const { projectName, gradeLevel, themeCode, durationWeeks = 1, finalProduct, materialsNeeded } = params;
+
+  await new Promise((res) => setTimeout(res, 1500));
+
+  const safeProjectName = projectName.trim() || 'Dự án Chế tạo Xe Ô tô Đồ chơi Tải nặng';
+  const safeProduct = finalProduct || 'Mô hình xe ô tô 4 bánh chạy đà từ vỏ hộp sữa và nắp chai nhựa';
+
+  // STEAM 5-Pillar Mapping
+  const steamMapping = {
+    science: 'Khám phá sự chuyển động của bánh xe tròn giúp giảm ma sát và chịu được lực tải trọng.',
+    technology: 'Sử dụng khuôn cắt nhựa an toàn, kéo bo tròn đầu, súng bắn keo nến (cô hỗ trợ) và ống hút nhựa.',
+    engineering: 'Thiết kế khung xe thăng bằng, lắp ráp 2 trục bánh xe song song không bị cọ xát vào thân xe.',
+    art: 'Trang trí ô tô bằng mảng màu sắc rực rỡ, dán nhãn decal phản quang và tạo hình tài xế nhỏ.',
+    math: 'Đo độ dài khung xe (15 cm), đếm số bánh xe (4 bánh) và đo khoảng cách xe chạy đà trên mặt phẳng (20-50 cm).'
+  };
+
+  // 5-Day 5E STEAM Project Timeline
+  const timelineDays = [
+    {
+      day_number: 1,
+      title: 'Ngày 1: ENGAGE (Gắn kết & Đặt vấn đề)',
+      phase_5e: 'Engage' as const,
+      teacher_action: 'Cô chiếu video về các loại ô tô tải và đặt câu hỏi: "Làm sao để làm một chiếc xe tự chạy chở đồ chơi?"',
+      child_activity: 'Trẻ hào hứng thảo luận, sờ nắn bánh xe nhựa và nêu ý tưởng ban đầu.'
+    },
+    {
+      day_number: 2,
+      title: 'Ngày 2: EXPLORE (Khám phá & Thí nghiệm bánh xe)',
+      phase_5e: 'Explore' as const,
+      teacher_action: 'Cô chuẩn bị nắp chai tròn và khối vuông, hướng dẫn trẻ lăn thử 2 vật liệu trên dốc nghiêng.',
+      child_activity: 'Trẻ nhận ra hình tròn lăn nhanh hơn và quyết định chọn nắp chai làm bánh xe.'
+    },
+    {
+      day_number: 3,
+      title: 'Ngày 3: EXPLAIN & DESIGN (Vẽ bản thiết kế)',
+      phase_5e: 'Explain' as const,
+      teacher_action: 'Cô phát giấy và bút màu, hướng dẫn trẻ vẽ bản thiết kế ô tô mơ ước của nhóm mình.',
+      child_activity: 'Các nhóm phân công bé vẽ khung xe, bé đếm bánh xe và chọn màu trang trí.'
+    },
+    {
+      day_number: 4,
+      title: 'Ngày 4: ELABORATE (Chế tạo & Lắp ráp sản phẩm)',
+      phase_5e: 'Elaborate' as const,
+      teacher_action: 'Cô cung cấp vỏ hộp sữa, que gỗ, ống hút. Hỗ trợ trẻ đục lỗ xuyên trục và cố định nắp chai.',
+      child_activity: 'Trẻ tập trung xỏ que gỗ qua ống hút, gắn bánh chai nhựa và dán decal trang trí.'
+    },
+    {
+      day_number: 5,
+      title: 'Ngày 5: EVALUATE (Thử nghiệm & Triển lãm dự án)',
+      phase_5e: 'Evaluate' as const,
+      teacher_action: 'Cô tổ chức đường đua ô tô mini và mời Ban Giám Hiệu/Giáo viên đến thưởng thức.',
+      child_activity: 'Trẻ tự tin thuyết trình về sản phẩm của nhóm, cho xe chạy đà và nhận Huy hiệu Kỹ sư nhí.'
+    }
+  ];
+
+  // Official Parent Announcement Text for Parent PWA App
+  const parentAnnouncement = `📢 THÔNG BÁO DỰ ÁN HỌC TẬP STEAM: "${safeProjectName.toUpperCase()}"
+Kính gửi Quý Phụ Huynh lớp ${GRADE_LEVEL_MAP[gradeLevel].label},
+Tuần này, các bé sẽ cùng cô tham gia Dự án STEAM độc đáo "${safeProjectName}".
+🎯 Mục tiêu dự án: Kích thích tư duy sáng tạo, rèn luyện kỹ năng khéo léo và khám phá nguyên lý khoa học qua việc tự tay chế tạo: ${safeProduct}.
+
+🤝 KÍNH MỜI PHỤ HUYNH ĐỒNG HÀNH CÙNG BÉ:
+1. Nhờ Phụ huynh cùng bé thu gom 2-3 vỏ hộp sữa giấy rỗng & 4 nắp chai nhựa sạch mang đến lớp vào Thứ Hai.
+2. Trò chuyện cùng con ở nhà về các loại xe ô tô bé nhìn thấy trên đường.
+
+Trân trọng cảm ơn sự đồng hành quý báu của Quý Phụ Huynh!
+— Trường Mầm Non Sương Mai`;
+
+  const mermaidCode = `graph TD
+  Project["🚀 DỰ ÁN STEAM: ${safeProjectName}"] --> D1["1. ENGAGE (Gắn kết)"]
+  Project --> D2["2. EXPLORE (Khám phá bánh xe)"]
+  Project --> D3["3. EXPLAIN (Vẽ bản thiết kế)"]
+  Project --> D4["4. ELABORATE (Chế tạo xe)"]
+  Project --> D5["5. EVALUATE (Đường đua xe)"]
+  
+  D4 --> Product["🏆 Sản phẩm: ${safeProduct.slice(0, 30)}..."]
+  D5 --> Announce["📲 Gửi Thư ngỏ cho Phụ huynh qua App"]`;
+
+  const learningProject: LearningProject = {
+    id: `project-${Date.now()}`,
+    grade_level: gradeLevel,
+    theme_code: themeCode,
+    project_name: safeProjectName,
+    duration_weeks: durationWeeks,
+    final_product: safeProduct,
+    steam_mapping: steamMapping,
+    timeline_days: timelineDays,
+    materials_needed: (materialsNeeded || 'Vỏ hộp sữa, nắp chai nhựa, que gỗ, ống hút, băng dính, màu vẽ').split(',').map((s) => s.trim()),
+    parent_announcement: parentAnnouncement,
+    created_at: new Date().toISOString()
+  };
+
+  const slides: AILessonSlide[] = [
+    {
+      slide_number: 1,
+      title: `DỰ ÁN PBL STEAM: ${safeProjectName.toUpperCase()}`,
+      content_points: [
+        `Khối lớp: ${GRADE_LEVEL_MAP[gradeLevel].label} • Thời lượng: ${durationWeeks} Tuần`,
+        `Chủ đề: ${THEME_NAME_MAP[themeCode]}`,
+        `Sản phẩm đầu ra: ${safeProduct}`
+      ],
+      image_prompt: `Preschool STEM project classroom, happy children building toy cars, cartoon watercolor`,
+      image_url: getPollinationsImageUrl(`Preschool STEM project classroom, happy children building toy cars`)
+    },
+    {
+      slide_number: 2,
+      title: '5 TRỤ CỘT S-T-E-A-M CỦA DỰ ÁN',
+      content_points: [
+        `S (Science): ${steamMapping.science}`,
+        `T (Technology): ${steamMapping.technology}`,
+        `E (Engineering): ${steamMapping.engineering}`,
+        `A (Art): ${steamMapping.art}`,
+        `M (Math): ${steamMapping.math}`
+      ],
+      image_prompt: `STEM colorful icon set for kindergarten education, cartoon style`,
+      image_url: getPollinationsImageUrl(`STEM colorful icon set for kindergarten education`)
+    },
+    {
+      slide_number: 3,
+      title: 'LỘ TRÌNH 5 NGÀY THỰC HIỆN DỰ ÁN (MÔ HÌNH 5E)',
+      content_points: timelineDays.map((d) => `${d.title}: ${d.child_activity}`),
+      image_prompt: `Children engineering timeline infographic, cute kindergarten style`,
+      image_url: getPollinationsImageUrl(`Children engineering timeline infographic, cute kindergarten style`)
+    },
+    {
+      slide_number: 4,
+      title: 'TRIỂN LÃM SẢN PHẨM & THƯ NGỎ PHỤ HUYNH',
+      content_points: [
+        `Sản phẩm hoàn thiện: ${safeProduct}`,
+        'Đã phát Thư ngỏ thông báo Phụ huynh đồng hành nguyên vật liệu qua Parent PWA App!'
+      ],
+      image_prompt: `Preschool science fair exhibition table with kids handmade toys`,
+      image_url: getPollinationsImageUrl(`Preschool science fair exhibition table with kids handmade toys`)
+    }
+  ];
+
+  return {
+    id: `ai-pbl-${Date.now()}`,
+    topic: safeProjectName,
+    subject: 'DỰ ÁN STEAM / PBL',
+    grade_level: gradeLevel,
+    teaching_type: 'PROJECT_BASED',
+    target_objectives: steamMapping.science,
+    duration_minutes: 30,
+    materials_needed: learningProject.materials_needed,
+    five_steps: timelineDays.map((td) => ({
+      step_number: td.day_number,
+      step_title: td.title,
+      description: `PBL Phase: ${td.phase_5e}`,
+      teacher_action: td.teacher_action,
+      child_activity: td.child_activity
+    })),
+    mermaid_mindmap_code: mermaidCode,
+    youtube_video_suggestions: [
+      { title: 'Hướng dẫn chế tạo ô tô đồ chơi từ phế liệu (Khéo tay mầm non)', url: 'https://www.youtube.com/results?search_query=che+tao+o+to+tu+nap+chai+mam+non' },
+      { title: 'Dự án STEAM mầm non hay nhất (VTV7)', url: 'https://www.youtube.com/results?search_query=du+an+steam+mam+non+vtv7' }
+    ],
+    slides,
+    project_id: learningProject.id,
+    learning_project: learningProject,
+    parent_announcement: parentAnnouncement,
     created_at: new Date().toISOString()
   };
 }
@@ -150,13 +343,13 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
   try {
     if (typeof window === 'undefined') return;
 
-    // Load PptxGenJS script dynamically if not loaded yet
+    // Dynamically load pptxgenjs client script
     if (!(window as any).PptxGenJS) {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+        script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
         script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Could not load PptxGenJS script'));
+        script.onerror = () => reject(new Error('Khôg thể nạp thư viện pptxgenjs'));
         document.head.appendChild(script);
       });
     }
@@ -165,94 +358,59 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     const pptx = new PptxGenJS();
 
     pptx.layout = 'LAYOUT_16x9';
-    pptx.title = lesson.topic;
+    pptx.author = 'Mầm Non Sương Mai AI Pedagogy Engine';
 
-    // Slide 1: Title Slide
+    // Slide 1: Cover Slide
     const slide1 = pptx.addSlide();
-    slide1.background = { color: 'F0F9FF' }; // Light Sky Blue
+    slide1.background = { color: 'F0F9FF' };
     slide1.addText(lesson.topic.toUpperCase(), {
       x: 0.8,
       y: 1.5,
-      w: 8.4,
+      w: 8.5,
       h: 1.2,
       fontSize: 28,
       bold: true,
       color: '0369A1',
-      align: 'center',
+      align: 'left'
     });
-    slide1.addText(`Môn: ${lesson.subject} | Khối: ${lesson.grade_level} (${lesson.duration_minutes} phút)`, {
+    slide1.addText(`Loại bài dạy: ${lesson.teaching_type === 'PROJECT_BASED' ? 'DỰ ÁN HỌC TẬP STEAM (PBL)' : 'BÀI GIẢNG TRUYỀN THỐNG 5 BƯỚC'}`, {
       x: 0.8,
-      y: 2.8,
-      w: 8.4,
-      h: 0.6,
-      fontSize: 18,
-      color: '0C4A6E',
-      align: 'center',
+      y: 2.7,
+      w: 8.5,
+      h: 0.5,
+      fontSize: 16,
+      bold: true,
+      color: '0D9488'
     });
-    slide1.addText('Hệ Sinh Thái Mầm Non Sương Mai', {
+    slide1.addText(`Môn: ${lesson.subject} | Khối: ${lesson.grade_level} | Thời lượng: ${lesson.duration_minutes} phút`, {
       x: 0.8,
-      y: 4.2,
-      w: 8.4,
-      h: 0.4,
+      y: 3.3,
+      w: 8.5,
+      h: 0.5,
       fontSize: 14,
-      italic: true,
-      color: '64748B',
-      align: 'center',
+      color: '475569'
     });
 
-    // Content Slides
-    lesson.slides.forEach((slideData) => {
-      const s = pptx.addSlide();
-      s.background = { color: 'FFFFFF' };
+    // Slide 2: Objectives & Materials
+    const slide2 = pptx.addSlide();
+    slide2.addText('MỤC TIÊU & CHUẨN BỊ HỌC LIỆU', { x: 0.8, y: 0.6, fontSize: 22, bold: true, color: '0369A1' });
+    slide2.addText(`Mục tiêu bài dạy:\n${lesson.target_objectives}`, { x: 0.8, y: 1.5, w: 8.5, h: 1.5, fontSize: 14, color: '1E293B' });
+    slide2.addText(`Học liệu đồ dùng:\n${lesson.materials_needed.join(', ')}`, { x: 0.8, y: 3.2, w: 8.5, h: 1.5, fontSize: 14, color: '047857' });
 
-      // Header Banner
-      s.addText(slideData.title, {
-        x: 0.5,
-        y: 0.4,
-        w: 9.0,
-        h: 0.8,
-        fontSize: 22,
-        bold: true,
-        color: '0284C7',
-      });
-
-      // Bullet points
-      const bulletsText = slideData.content_points.map((p) => `• ${p}`).join('\n\n');
-      s.addText(bulletsText, {
-        x: 0.5,
-        y: 1.5,
-        w: 5.2,
-        h: 3.5,
-        fontSize: 16,
-        color: '334155',
-        lineSpacing: 24,
-      });
-
-      // Cartoon Illustration Image from Pollinations
-      if (slideData.image_url) {
-        s.addImage({
-          path: slideData.image_url,
-          x: 5.9,
-          y: 1.4,
-          w: 3.6,
-          h: 3.4,
-        });
-      }
+    // Slide 3: Pedagogy Steps / Timeline
+    const slide3 = pptx.addSlide();
+    slide3.addText(lesson.teaching_type === 'PROJECT_BASED' ? 'LỘ TRÌNH DỰ ÁN 5E STEAM' : 'CẤU TRÚC 5 BƯỚC SƯ PHẠM', { x: 0.8, y: 0.6, fontSize: 22, bold: true, color: '0369A1' });
+    let yPos = 1.4;
+    lesson.five_steps.slice(0, 4).forEach((step) => {
+      slide3.addText(`${step.step_title}: ${step.teacher_action}`, { x: 0.8, y: yPos, w: 8.5, h: 0.8, fontSize: 12, color: '334155' });
+      yPos += 0.9;
     });
 
     // Save File
-    await pptx.writeFile({ fileName: `Giao_An_${lesson.topic.replace(/\s+/g, '_')}.pptx` });
+    const filename = `GiaoAn_${lesson.topic.replace(/\s+/g, '_')}_${Date.now()}.pptx`;
+    await pptx.writeFile({ fileName: filename });
   } catch (err) {
-    console.warn('Fallback PPTX exporter:', err);
-    // Fallback: Trigger text file download if browser environment blocks dynamic binary export
-    const content = `BÀI GIẢNG: ${lesson.topic}\nMôn: ${lesson.subject} | Khối: ${lesson.grade_level}\n\n` +
-      lesson.slides.map(s => `SLIDE ${s.slide_number}: ${s.title}\n${s.content_points.join('\n')}\n[Ảnh: ${s.image_url}]\n`).join('\n---\n');
-    
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Bai_Giang_${lesson.topic.replace(/\s+/g, '_')}.txt`;
-    a.click();
+    console.error('Lỗi xuất PowerPoint:', err);
+    alert('Không thể xuất file PowerPoint: ' + (err as any)?.message);
   }
 }
