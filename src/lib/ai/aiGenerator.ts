@@ -1,5 +1,8 @@
 import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType, PreschoolAISchemaResponse } from '../types/schema';
-import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions } from '../utils/curriculumHelper';
+import { 
+  getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
+  SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX 
+} from '../utils/curriculumHelper';
 
 /**
  * System Instruction Prompt for Gemini / AI Engine
@@ -33,11 +36,19 @@ Nếu teaching_type == 'PROJECT_BASED':
 - Soạn 01 đoạn thông báo ngắn gửi phụ huynh (Parent Project Card) để cùng chuẩn bị học liệu tại nhà.`;
 
 /**
- * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
+ * Generates Pollinations.ai 3D Cartoon Illustration Image URL (Free 0 VNĐ)
+ * Enforces strict Rule 4: No text, no letters, 16:9 ratio, parametric colors
  */
-export function getPollinationsImageUrl(prompt: string, width = 1024, height = 768, seedIndex = 1): string {
-  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cute preschool children illustration';
-  const encodedPrompt = encodeURIComponent(`cute preschool cartoon illustration, colorful, friendly, ${cleanPrompt}`);
+export function getPollinationsImageUrl(
+  prompt: string, 
+  width = 1024, 
+  height = 768, 
+  seedIndex = 1,
+  themeStyleKeywords = 'colorful cheerful'
+): string {
+  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cheerful kindergarten kids learning';
+  const fullPrompt = `cute preschool 3D cartoon style, soft clay or papercraft look, vibrant ${themeStyleKeywords}, cheerful kindergarten kids, no text, no letters, high contrast, clean background, 16:9 ratio, ${cleanPrompt}`;
+  const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }
 
@@ -114,11 +125,13 @@ export function generateRulesCompliantSlideDeck(params: {
   targetObjectives?: string;
 }): AILessonSlide[] {
   const { topic, subject, grade_level, theme_code, materialsNeededStr, studentMaterials, teacherMaterials, framework, targetObjectives } = params;
-  const safeTopic = topic.trim() || 'Khám Phá Sự Phát Triển Của Cây Xanh';
+  const safeTopic = topic.trim() || 'Khám Phá Bài Học Trực Quan';
   const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
-  const themeName = THEME_NAME_MAP[theme_code] || 'Thế Giới Thực Vật';
+  const themeMatrix = getThemeMatrix(theme_code);
+  const themeName = THEME_NAME_MAP[theme_code] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
   const normSub = subject.toUpperCase();
+  const keywords = themeMatrix.imageStyleKeywords;
 
   const lowerTopic = safeTopic.toLowerCase();
   const isPlantTopic = lowerTopic.includes('cây') || lowerTopic.includes('thực vật') || lowerTopic.includes('hạt mầm') || lowerTopic.includes('hoa') || lowerTopic.includes('quả');
@@ -129,36 +142,43 @@ export function generateRulesCompliantSlideDeck(params: {
     layout_type: 'COVER',
     header_tag: '🎓 TRƯỜNG MẦM NON SƯƠNG MAI',
     title: safeTopic,
-    subtitle: `Giáo án ${subjectName} trực quan dành cho các bé yêu thiên nhiên`,
-    pill_badges: [`🎓 Khối ${gradeInfo.label}`, `⏱ Thời lượng: ${gradeInfo.duration}`, `🌱 Chủ đề: ${themeName}`],
+    subtitle: `Giáo án ${subjectName} trực quan dành cho trẻ mầm non`,
+    pill_badges: [`🎓 Khối ${gradeInfo.label}`, `⏱ Thời lượng: ${gradeInfo.duration}`, `${themeMatrix.defaultIcon} Chủ đề: ${themeName}`],
     content_points: [`Khối: ${gradeInfo.label}`, `Thời lượng: ${gradeInfo.duration}`, `Chủ đề: ${themeName}`],
-    image_prompt: `Cute preschool children learning about ${safeTopic}, bright classroom, watercolor illustration`,
-    image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`, 1024, 768, 1)
+    image_prompt: `Preschool children learning about ${safeTopic}, bright classroom`,
+    image_url: getPollinationsImageUrl(`Preschool children learning about ${safeTopic}`, 1024, 768, 1, keywords)
   };
 
-  // Slide 2: DARK_HERO
+  // Slide 2: DARK_HERO (5E - Engage)
   const s2: AILessonSlide = {
     slide_number: 2,
     layout_type: 'DARK_HERO',
-    pill_badges: ['🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ'],
+    pill_badges: ['🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ (ENGAGE)'],
     title: isPlantTopic ? 'Điều Kỳ Diệu Của Hạt Mầm' : `Điều Kỳ Diệu Về ${safeTopic}`,
     subtitle: framework.pedagogical_guidelines.songs_or_poems?.[0] 
-      ? `Cùng hát vang bài ca "${framework.pedagogical_guidelines.songs_or_poems[0]}" và lắng nghe câu chuyện về những hạt mầm thức giấc đón chào ánh mặt trời.`
+      ? `Cùng hát vang bài ca "${framework.pedagogical_guidelines.songs_or_poems[0]}" và lắng nghe câu chuyện sinh động rực rỡ chào đón bài học mới.`
       : `Cùng hát vang bài ca vui nhộn và lắng nghe câu chuyện sinh động chào đón bài học mới!`,
     content_points: ['Gắn kết và đặt vấn đề gây hứng thú cho trẻ'],
-    image_prompt: `Magic glowing nature seed sprouting, dark green background vector style`,
-    image_url: getPollinationsImageUrl(`Magic glowing seed sprouting dark green background`, 1024, 768, 2)
+    image_prompt: `Magic glowing educational concept vector style`,
+    image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords)
   };
 
-  // Slide 3: GRID_4_CARDS
+  // Slide 3: GRID_4_CARDS (5E - Explore)
   let gridCards = [
-    { icon: '☀️', title: 'Ánh Nắng', desc: 'Mặt trời ấm áp sưởi ấm mầm xanh và giúp lá cây quang hợp để tạo chất dinh dưỡng mỗi ngày.' },
-    { icon: '💧', title: 'Nước Mát', desc: 'Nước tưới làm mềm hạt giống, giúp rễ cây hút dinh dưỡng từ đất để nuôi thân và lá luôn tươi tốt.' },
-    { icon: '⛰️', title: 'Đất Mùn', desc: 'Đất tơi xốp giữ chặt rễ cây đứng vững và chứa nguồn khoáng chất quý giá nuôi cây mau lớn.' },
-    { icon: '💨', title: 'Không Khí', desc: 'Cây xanh hít thở không khí trong lành để trao đổi chất, phát triển cành lá vươn cao.' }
+    { icon: themeMatrix.defaultIcon, title: 'Yếu Tố 1', desc: `Tìm hiểu điểm nổi bật nhất của đề tài ${safeTopic}.` },
+    { icon: '⭐', title: 'Yếu Tố 2', desc: 'Quan sát chi tiết hình dáng, màu sắc và âm thanh trực quan.' },
+    { icon: '🔍', title: 'Yếu Tố 3', desc: 'Trải nghiệm sờ nắn, đàm thoại đếm số lượng và so sánh.' },
+    { icon: '💡', title: 'Yếu Tố 4', desc: 'Phân loại đối tượng và rút ra kết luận sáng tạo của trẻ.' }
   ];
 
-  if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
+  if (isPlantTopic) {
+    gridCards = [
+      { icon: '☀️', title: 'Ánh Nắng', desc: 'Mặt trời ấm áp sưởi ấm mầm xanh và giúp lá cây quang hợp để tạo chất dinh dưỡng mỗi ngày.' },
+      { icon: '💧', title: 'Nước Mát', desc: 'Nước tưới làm mềm hạt giống, giúp rễ cây hút dinh dưỡng từ đất để nuôi thân và lá luôn tươi tốt.' },
+      { icon: '⛰️', title: 'Đất Mùn', desc: 'Đất tơi xốp giữ chặt rễ cây đứng vững và chứa nguồn khoáng chất quý giá nuôi cây mau lớn.' },
+      { icon: '💨', title: 'Không Khí', desc: 'Cây xanh hít thở không khí trong lành để trao đổi chất, phát triển cành lá vươn cao.' }
+    ];
+  } else if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
     gridCards = [
       { icon: '🔢', title: 'Số Lượng', desc: 'Trẻ đếm chính xác nhóm đồ dùng theo số lượng quy định và nhận biết nhóm tương ứng.' },
       { icon: '🔺', title: 'Hình Khối', desc: 'Nhận biết phân biệt hình tròn, hình vuông, hình tam giác, hình chữ nhật quanh bé.' },
@@ -188,10 +208,10 @@ export function generateRulesCompliantSlideDeck(params: {
     cards_data: gridCards,
     content_points: gridCards.map(c => `${c.title}: ${c.desc}`),
     image_prompt: `Educational 4 icons set layout for kindergarten learning`,
-    image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning`, 1024, 768, 3)
+    image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning`, 1024, 768, 3, keywords)
   };
 
-  // Slide 4: TIMELINE_4_STEPS
+  // Slide 4: TIMELINE_4_STEPS (5E - Explain)
   const timelineSteps = isPlantTopic ? [
     { step_num: 1, title: '1. Hạt Giống', desc: 'Bé gieo hạt nhỏ xuống đất tơi xốp, hạt uống no nước rồi dần phình to.' },
     { step_num: 2, title: '2. Nảy Mầm', desc: 'Chiếc mầm nhỏ nhú lên khỏi mặt đất, cắm chiếc rễ đầu tiên xuống lòng đất.' },
@@ -210,8 +230,8 @@ export function generateRulesCompliantSlideDeck(params: {
     title: isPlantTopic ? '🔄 Vòng Đời Kỳ Diệu Của Cây' : `🔄 Tiến Trình Vòng Đời & Các Bước Học`,
     steps_data: timelineSteps,
     content_points: timelineSteps.map(s => `${s.title}: ${s.desc}`),
-    image_prompt: `Plant growth lifecycle horizontal timeline infographic cartoon`,
-    image_url: getPollinationsImageUrl(`Plant growth lifecycle horizontal timeline infographic cartoon`, 1024, 768, 4)
+    image_prompt: `Growth timeline infographic cartoon`,
+    image_url: getPollinationsImageUrl(`Growth timeline infographic cartoon`, 1024, 768, 4, keywords)
   };
 
   // Slide 5: IMAGE_CARDS_3
@@ -745,11 +765,14 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     pptx.layout = 'LAYOUT_16x9'; // 16:9 SmartTV layout
     pptx.author = 'Trường Mầm Non Sương Mai AI Pedagogy Engine';
 
+    const themeCode = lesson.schema_response?.theme_code || (lesson as any).theme_code || 'THUC_VAT';
+    const themeMatrix = getThemeMatrix(themeCode);
+
     const FONT_TITLE = 'Arial Rounded MT Bold';
     const FONT_BODY = 'Arial';
-    const COLOR_DARK_GREEN = '13542E';
-    const COLOR_LIGHT_BG = 'F4FBF7';
-    const COLOR_GOLD = 'FCD34D';
+    const COLOR_PRIMARY = themeMatrix.primaryColor.replace('#', '');
+    const COLOR_LIGHT_BG = themeMatrix.backgroundColor.replace('#', '');
+    const COLOR_ACCENT = themeMatrix.accentColor.replace('#', '');
 
     const slidesData = lesson.slides || [];
     const base64Images: string[] = [];
@@ -771,34 +794,34 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
       if (layoutType === 'COVER') {
         slide.background = { color: COLOR_LIGHT_BG };
         slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: 0.4, w: 12.33, h: 6.7, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 2 } });
-        slide.addText(slideItem.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI', { x: 4.2, y: 0.8, w: 4.9, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'DCFCE7' }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
-        slide.addText(slideItem.title, { x: 1.0, y: 1.6, w: 11.33, h: 1.4, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI', { x: 4.2, y: 0.8, w: 4.9, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_PRIMARY, fill: { color: 'DCFCE7' }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+        slide.addText(slideItem.title, { x: 1.0, y: 1.6, w: 11.33, h: 1.4, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
         slide.addText(slideItem.subtitle || '', { x: 1.5, y: 3.2, w: 10.33, h: 0.8, fontSize: 20, fontFace: FONT_BODY, color: '475569', align: 'center' });
         if (slideItem.pill_badges) {
           const badges = slideItem.pill_badges;
           badges.forEach((b, idx) => {
-            slide.addText(b, { x: 1.5 + idx * 3.6, y: 4.8, w: 3.3, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'FFFFFF' }, line: { color: 'A7F3D0', width: 1.5 }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+            slide.addText(b, { x: 1.5 + idx * 3.6, y: 4.8, w: 3.3, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_PRIMARY, fill: { color: 'FFFFFF' }, line: { color: 'A7F3D0', width: 1.5 }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
           });
         }
       } else if (layoutType === 'DARK_HERO') {
-        slide.background = { color: COLOR_DARK_GREEN };
-        slide.addText(slideItem.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ', { x: 4.2, y: 1.2, w: 4.9, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: 'FFFFFF', fill: { color: '166534' }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
-        slide.addText(slideItem.title, { x: 1.0, y: 2.2, w: 11.33, h: 1.5, fontSize: 42, fontFace: FONT_TITLE, color: COLOR_GOLD, bold: true, align: 'center' });
+        slide.background = { color: COLOR_PRIMARY };
+        slide.addText(slideItem.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ', { x: 4.2, y: 1.2, w: 4.9, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: 'FFFFFF', fill: { color: COLOR_PRIMARY }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+        slide.addText(slideItem.title, { x: 1.0, y: 2.2, w: 11.33, h: 1.5, fontSize: 42, fontFace: FONT_TITLE, color: COLOR_ACCENT, bold: true, align: 'center' });
         slide.addText(slideItem.subtitle || '', { x: 1.5, y: 4.2, w: 10.33, h: 1.5, fontSize: 22, fontFace: FONT_BODY, color: 'FEF3C7', align: 'center', lineSpacing: 32 });
       } else if (layoutType === 'GRID_4_CARDS') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const cards = slideItem.cards_data || [];
         cards.forEach((c, idx) => {
           const xPos = 0.8 + idx * 3.0;
           slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.8, w: 2.7, h: 4.8, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
           slide.addText(c.icon || '🌱', { x: xPos + 0.85, y: 2.2, w: 1.0, h: 1.0, fontSize: 28, align: 'center', fill: { color: 'F0FDF4' }, shape: pptx.ShapeType.roundRect });
-          slide.addText(c.title, { x: xPos + 0.2, y: 3.4, w: 2.3, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(c.title, { x: xPos + 0.2, y: 3.4, w: 2.3, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
           slide.addText(c.desc, { x: xPos + 0.2, y: 4.1, w: 2.3, h: 2.2, fontSize: 13, fontFace: FONT_BODY, color: '334155', align: 'center' });
         });
       } else if (layoutType === 'TIMELINE_4_STEPS') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         slide.addShape(pptx.ShapeType.line, { x: 1.5, y: 4.0, w: 10.3, h: 0, line: { color: '86EFAC', width: 4 } });
         const steps = slideItem.steps_data || [];
         steps.forEach((s, idx) => {
@@ -806,12 +829,12 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
           const isTop = idx % 2 === 1;
           const yPos = isTop ? 1.6 : 4.4;
           slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: yPos, w: 2.7, h: 2.2, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
-          slide.addText(s.title, { x: xPos + 0.1, y: yPos + 0.2, w: 2.5, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(s.title, { x: xPos + 0.1, y: yPos + 0.2, w: 2.5, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
           slide.addText(s.desc, { x: xPos + 0.1, y: yPos + 0.7, w: 2.5, h: 1.3, fontSize: 12, fontFace: FONT_BODY, color: '334155', align: 'center' });
         });
       } else if (layoutType === 'IMAGE_CARDS_3') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const cards = slideItem.cards_data || [];
         for (let idx = 0; idx < cards.length; idx++) {
           const c = cards[idx];
@@ -820,76 +843,76 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
           const cardImg = c.image_url ? await toBase64(c.image_url) : img;
           const cardImgObj = { [cardImg.startsWith('data:image') ? 'data' : 'path']: cardImg.startsWith('data:image') ? cardImg : img };
           slide.addImage({ ...cardImgObj, x: xPos + 0.15, y: 1.75, w: 3.4, h: 2.4 });
-          slide.addText(c.title, { x: xPos + 0.2, y: 4.3, w: 3.3, h: 0.5, fontSize: 18, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(c.title, { x: xPos + 0.2, y: 4.3, w: 3.3, h: 0.5, fontSize: 18, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
           slide.addText(c.desc, { x: xPos + 0.2, y: 4.8, w: 3.3, h: 1.6, fontSize: 13, fontFace: FONT_BODY, color: '334155', align: 'center' });
         }
       } else if (layoutType === 'TWO_COLUMN_CARDS') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const cards = slideItem.cards_data || [];
         cards.forEach((c, idx) => {
           const xPos = 0.8 + idx * 6.0;
           slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.6, w: 5.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
-          slide.addText(`${c.icon || '🌲'} ${c.title}`, { x: xPos + 0.3, y: 1.9, w: 5.1, h: 0.6, fontSize: 22, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+          slide.addText(`${c.icon || '🌲'} ${c.title}`, { x: xPos + 0.3, y: 1.9, w: 5.1, h: 0.6, fontSize: 22, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
           slide.addText(c.desc, { x: xPos + 0.3, y: 2.6, w: 5.1, h: 3.7, fontSize: 15, fontFace: FONT_BODY, color: '334155', lineSpacing: 24 });
         });
       } else if (layoutType === 'LIST_ACCENT_IMAGE') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const points = slideItem.content_points || [];
         points.forEach((pt, idx) => {
           const yPos = 1.6 + idx * 1.25;
           slide.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: yPos, w: 6.2, h: 1.1, rectRadius: 0.05, fill: { color: 'FFFFFF' }, line: { color: 'F1F5F9', width: 1 } });
-          slide.addShape(pptx.ShapeType.rect, { x: 0.8, y: yPos, w: 0.15, h: 1.1, fill: { color: '16A34A' } });
+          slide.addShape(pptx.ShapeType.rect, { x: 0.8, y: yPos, w: 0.15, h: 1.1, fill: { color: COLOR_PRIMARY } });
           slide.addText(pt, { x: 1.1, y: yPos + 0.1, w: 5.7, h: 0.9, fontSize: 13, fontFace: FONT_BODY, color: '334155' });
         });
         slide.addImage({ ...imgObj, x: 7.3, y: 1.6, w: 5.0, h: 5.0, rounding: true });
       } else if (layoutType === 'NUMBERED_STEPS') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const steps = slideItem.steps_data || [];
         steps.forEach((s, idx) => {
           const yPos = 1.6 + idx * 1.35;
           slide.addShape(pptx.ShapeType.roundRect, { x: 1.5, y: yPos, w: 10.3, h: 1.2, rectRadius: 0.08, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
-          slide.addText(`${s.step_num || idx + 1}`, { x: 1.8, y: yPos + 0.25, w: 0.7, h: 0.7, fontSize: 24, fontFace: FONT_TITLE, color: '16A34A', align: 'center', bold: true });
+          slide.addText(`${s.step_num || idx + 1}`, { x: 1.8, y: yPos + 0.25, w: 0.7, h: 0.7, fontSize: 24, fontFace: FONT_TITLE, color: COLOR_PRIMARY, align: 'center', bold: true });
           slide.addText(`${s.title}: ${s.desc}`, { x: 2.7, y: yPos + 0.15, w: 8.8, h: 0.9, fontSize: 15, fontFace: FONT_BODY, color: '334155' });
         });
         if (slideItem.subtitle) {
-          slide.addText(slideItem.subtitle, { x: 1.5, y: 5.8, w: 10.3, h: 0.8, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'FFFFFF' }, line: { color: '86EFAC', width: 1.5 }, align: 'center', shape: pptx.ShapeType.roundRect });
+          slide.addText(slideItem.subtitle, { x: 1.5, y: 5.8, w: 10.3, h: 0.8, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_PRIMARY, fill: { color: 'FFFFFF' }, line: { color: '86EFAC', width: 1.5 }, align: 'center', shape: pptx.ShapeType.roundRect });
         }
       } else if (layoutType === 'SPLIT_STORY_IMAGE') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 1.2, w: 5.5, h: 0.8, fontSize: 34, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 1.2, w: 5.5, h: 0.8, fontSize: 34, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         slide.addText(slideItem.subtitle || '', { x: 0.8, y: 2.2, w: 5.5, h: 4.2, fontSize: 18, fontFace: FONT_BODY, color: '334155', lineSpacing: 28 });
         slide.addImage({ ...imgObj, x: 6.6, y: 0.5, w: 6.2, h: 6.5 });
       } else if (layoutType === 'STAT_CALLOUT') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const stat = slideItem.stat_highlight;
         slide.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: 1.6, w: 11.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 2 } });
         if (stat) {
           slide.addShape(pptx.ShapeType.roundRect, { x: 1.2, y: 2.0, w: 4.0, h: 4.2, rectRadius: 0.1, fill: { color: 'BBF7D0' } });
-          slide.addText(stat.number, { x: 1.2, y: 2.8, w: 4.0, h: 1.2, fontSize: 54, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
-          slide.addText(stat.label, { x: 1.2, y: 4.2, w: 4.0, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
-          slide.addText(stat.hero_title, { x: 5.6, y: 2.2, w: 6.5, h: 0.8, fontSize: 26, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+          slide.addText(stat.number, { x: 1.2, y: 2.8, w: 4.0, h: 1.2, fontSize: 54, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
+          slide.addText(stat.label, { x: 1.2, y: 4.2, w: 4.0, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
+          slide.addText(stat.hero_title, { x: 5.6, y: 2.2, w: 6.5, h: 0.8, fontSize: 26, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
           slide.addText(stat.hero_desc, { x: 5.6, y: 3.1, w: 6.5, h: 3.0, fontSize: 18, fontFace: FONT_BODY, color: '334155', lineSpacing: 28 });
         }
       } else if (layoutType === 'HERO_OVERLAY') {
         slide.addImage({ ...imgObj, x: 0, y: 0, w: 13.33, h: 7.5 });
         slide.addShape(pptx.ShapeType.roundRect, { x: 1.5, y: 1.5, w: 10.33, h: 4.5, rectRadius: 0.15, fill: { color: 'FFFFFF' } });
-        slide.addText(slideItem.title, { x: 1.8, y: 2.0, w: 9.7, h: 1.0, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.title, { x: 1.8, y: 2.0, w: 9.7, h: 1.0, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
         slide.addText(slideItem.subtitle || '', { x: 2.0, y: 3.2, w: 9.3, h: 2.2, fontSize: 20, fontFace: FONT_BODY, color: '334155', align: 'center', lineSpacing: 30 });
       } else if (layoutType === 'OUTRO_PRAISE') {
         slide.background = { color: 'FEF9C3' };
         slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: 0.4, w: 12.33, h: 6.7, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'FEF08A', width: 2 } });
-        slide.addText(slideItem.title, { x: 1.0, y: 1.8, w: 11.33, h: 1.2, fontSize: 44, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.title, { x: 1.0, y: 1.8, w: 11.33, h: 1.2, fontSize: 44, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
         slide.addText(slideItem.subtitle || '', { x: 1.5, y: 3.2, w: 10.33, h: 1.0, fontSize: 22, fontFace: FONT_BODY, color: '475569', align: 'center' });
         if (slideItem.pill_badges?.[0]) {
           slide.addText(slideItem.pill_badges[0], { x: 2.2, y: 4.8, w: 8.9, h: 0.9, fontSize: 22, fontFace: FONT_TITLE, color: 'CA8A04', fill: { color: 'FEF9C3' }, line: { color: 'FDE047', width: 2 }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
         }
       } else if (layoutType === 'IMAGE_SOURCES') {
         slide.background = { color: COLOR_LIGHT_BG };
-        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const sources = slideItem.image_sources || [];
         sources.forEach((srcItem, idx) => {
           const yPos = 1.6 + idx * 1.3;

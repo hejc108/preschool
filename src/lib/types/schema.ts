@@ -203,7 +203,8 @@ export type ThemeCode =
   | 'THUC_VAT' 
   | 'GIAO_THONG' 
   | 'HTTN' 
-  | 'QUE_HUONG';
+  | 'QUE_HUONG'
+  | 'LOP_MOT';
 
 export type SubjectCode = 
   | 'NBTN' 
@@ -335,6 +336,7 @@ export interface AILessonPlan {
 
 export interface PreschoolAISchemaResponse {
   title: string;
+  theme_code?: ThemeCode;
   grade_level: string;
   duration: string;
   teaching_type: 'TRADITIONAL' | 'PROJECT_BASED';

@@ -12,7 +12,8 @@ import { AILessonPlan, GradeLevelCode, ThemeCode, TeachingType } from '@/lib/typ
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
-  SUB_THEME_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions
+  SUB_THEME_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions,
+  getThemeMatrix
 } from '@/lib/utils/curriculumHelper';
 
 export default function TeacherAILessonPlanNewPage() {
@@ -651,59 +652,61 @@ export default function TeacherAILessonPlanNewPage() {
                   <div className="space-y-8">
                     {generatedLesson.slides.map((slide) => {
                       const layout = slide.layout_type || 'COVER';
+                      const activeTheme = generatedLesson.schema_response?.theme_code || (generatedLesson as any).theme_code || themeCode || 'THUC_VAT';
+                      const tm = getThemeMatrix(activeTheme as any);
 
                       return (
-                        <div key={slide.slide_number} className="border-2 border-slate-300 rounded-3xl overflow-hidden shadow-xl bg-slate-50 font-sans">
-                          {/* Slide Indicator Bar */}
-                          <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between font-bold text-xs">
-                            <span className="flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-emerald-400" />
-                              SLIDE {slide.slide_number} • {layout} LAYOUT
-                            </span>
-                            <span className="font-mono text-[11px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">
-                              Rules.pdf Compliant
-                            </span>
-                          </div>
+                          <div key={slide.slide_number} className="border-2 border-slate-300 rounded-3xl overflow-hidden shadow-xl bg-slate-50 font-sans">
+                            {/* Slide Indicator Bar */}
+                            <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between font-bold text-xs">
+                              <span className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-emerald-400" />
+                                SLIDE {slide.slide_number} • {layout} LAYOUT • [{tm.defaultIcon} {tm.themeName}]
+                              </span>
+                              <span className="font-mono text-[11px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">
+                                Rules.pdf Compliant
+                              </span>
+                            </div>
 
-                          {/* SLIDE CONTENT AREA (Tỷ lệ 16:9 Presentation View) */}
-                          <div className="p-6 sm:p-8 min-h-[420px] flex flex-col justify-center">
+                            {/* SLIDE CONTENT AREA (Tỷ lệ 16:9 Presentation View) */}
+                            <div className="p-6 sm:p-8 min-h-[420px] flex flex-col justify-center">
 
-                            {/* 1. COVER LAYOUT */}
-                            {layout === 'COVER' && (
-                              <div className="bg-[#F4FBF7] border-2 border-emerald-200 rounded-2xl p-8 text-center space-y-6 flex flex-col items-center justify-center">
-                                <span className="inline-block bg-emerald-100 text-emerald-800 font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm">
-                                  {slide.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI'}
-                                </span>
-                                <h2 className="text-2xl sm:text-4xl font-black text-[#13542E] tracking-tight leading-tight max-w-3xl">
-                                  {slide.title}
-                                </h2>
-                                <p className="text-slate-600 font-medium text-sm sm:text-base max-w-xl">
-                                  {slide.subtitle}
-                                </p>
-                                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                                  {(slide.pill_badges || []).map((badge, bIdx) => (
-                                    <span key={bIdx} className="bg-white border border-emerald-300 text-emerald-800 font-bold px-4 py-2 rounded-full text-xs sm:text-sm shadow-sm">
-                                      {badge}
-                                    </span>
-                                  ))}
+                              {/* 1. COVER LAYOUT */}
+                              {layout === 'COVER' && (
+                                <div style={{ backgroundColor: tm.backgroundColor }} className="border-2 border-slate-200 rounded-2xl p-8 text-center space-y-6 flex flex-col items-center justify-center">
+                                  <span style={{ color: tm.primaryColor }} className="inline-block bg-white font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm border border-slate-200 shadow-sm">
+                                    {slide.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI'}
+                                  </span>
+                                  <h2 style={{ color: tm.primaryColor }} className="text-2xl sm:text-4xl font-black tracking-tight leading-tight max-w-3xl">
+                                    {slide.title}
+                                  </h2>
+                                  <p className="text-slate-600 font-medium text-sm sm:text-base max-w-xl">
+                                    {slide.subtitle}
+                                  </p>
+                                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                                    {(slide.pill_badges || []).map((badge, bIdx) => (
+                                      <span key={bIdx} style={{ color: tm.primaryColor }} className="bg-white border border-slate-300 font-bold px-4 py-2 rounded-full text-xs sm:text-sm shadow-sm">
+                                        {badge}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
 
-                            {/* 2. DARK HERO LAYOUT */}
-                            {layout === 'DARK_HERO' && (
-                              <div className="bg-[#13542E] rounded-2xl p-10 text-center space-y-6 flex flex-col items-center justify-center text-white">
-                                <span className="inline-block bg-emerald-800 text-emerald-100 font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm border border-emerald-600">
-                                  {slide.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ'}
-                                </span>
-                                <h2 className="text-3xl sm:text-5xl font-black text-[#FCD34D] tracking-wide leading-tight max-w-3xl">
-                                  {slide.title}
-                                </h2>
-                                <p className="text-amber-100 font-medium text-base sm:text-lg max-w-2xl leading-relaxed">
-                                  {slide.subtitle}
-                                </p>
-                              </div>
-                            )}
+                              {/* 2. DARK HERO LAYOUT */}
+                              {layout === 'DARK_HERO' && (
+                                <div style={{ backgroundColor: tm.primaryColor }} className="rounded-2xl p-10 text-center space-y-6 flex flex-col items-center justify-center text-white">
+                                  <span className="inline-block bg-white/20 text-white font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm border border-white/30">
+                                    {slide.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ'}
+                                  </span>
+                                  <h2 style={{ color: tm.accentColor }} className="text-3xl sm:text-5xl font-black tracking-wide leading-tight max-w-3xl">
+                                    {slide.title}
+                                  </h2>
+                                  <p className="text-slate-100 font-medium text-base sm:text-lg max-w-2xl leading-relaxed">
+                                    {slide.subtitle}
+                                  </p>
+                                </div>
+                              )}
 
                             {/* 3. GRID 4 CARDS LAYOUT */}
                             {layout === 'GRID_4_CARDS' && (

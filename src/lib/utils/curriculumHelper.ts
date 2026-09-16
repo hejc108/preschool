@@ -11,7 +11,116 @@ export const THEME_NAME_MAP: Record<ThemeCode, string> = {
   GIAO_THONG: 'Phương Tiện & Luật Giao Thông',
   HTTN: 'Hiện Tượng Tự Nhiên & Thời Tiết',
   QUE_HUONG: 'Quê Hương & Đất Nước Việt Nam',
+  LOP_MOT: 'Bé Vui Đến Lớp Một (Khối Lá)',
 };
+
+export interface ThemeColorPalette {
+  themeCode: ThemeCode | string;
+  themeName: string;
+  primaryColor: string; // Hex color e.g. '#0284c7'
+  accentColor: string;  // Hex color e.g. '#facc15'
+  backgroundColor: string; // Hex color e.g. '#f0f9ff'
+  imageStyleKeywords: string; // Keywords for AI image generation
+  defaultIcon: string;
+}
+
+export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
+  TRUONG_MN: {
+    themeCode: 'TRUONG_MN',
+    themeName: 'Trường Mầm Non',
+    primaryColor: '#0284c7', // Xanh biển
+    accentColor: '#facc15',  // Vàng tươi
+    backgroundColor: '#f0f9ff',
+    imageStyleKeywords: 'classroom, toys, friendly teacher, playing kindergarten children',
+    defaultIcon: '🏫'
+  },
+  BAN_THAN: {
+    themeCode: 'BAN_THAN',
+    themeName: 'Bản Thân & Cảm Xúc',
+    primaryColor: '#ea580c', // Cam đào
+    accentColor: '#fb7185',  // Hồng phấn
+    backgroundColor: '#fff7ed',
+    imageStyleKeywords: 'body parts, 5 senses, smiling happy kids, heart love',
+    defaultIcon: '❤️'
+  },
+  GIA_DINH: {
+    themeCode: 'GIA_DINH',
+    themeName: 'Gia Đình Yêu Thương',
+    primaryColor: '#dc2626', // Đỏ ấm
+    accentColor: '#fde047',  // Vàng kem
+    backgroundColor: '#fef2f2',
+    imageStyleKeywords: 'cozy home house, loving parents with kids, family meal',
+    defaultIcon: '🏡'
+  },
+  NGHE_NGHIEP: {
+    themeCode: 'NGHE_NGHIEP',
+    themeName: 'Nghề Nghiệp Quanh Bé',
+    primaryColor: '#2563eb', // Xanh công lý
+    accentColor: '#f97316',  // Cam năng động
+    backgroundColor: '#eff6ff',
+    imageStyleKeywords: 'doctor, soldier, engineer, teacher, protective helmet',
+    defaultIcon: '👮'
+  },
+  DONG_VAT: {
+    themeCode: 'DONG_VAT',
+    themeName: 'Thế Giới Động Vật',
+    primaryColor: '#92400e', // Nâu đất
+    accentColor: '#65a30d',  // Xanh rêu
+    backgroundColor: '#fefce8',
+    imageStyleKeywords: 'pets, forest wild animals, singing birds, animal footprints',
+    defaultIcon: '🐶'
+  },
+  THUC_VAT: {
+    themeCode: 'THUC_VAT',
+    themeName: 'Thế Giới Thực Vật',
+    primaryColor: '#166534', // Xanh lá đậm
+    accentColor: '#4ade80',  // Xanh mầm non
+    backgroundColor: '#f0fdf4',
+    imageStyleKeywords: 'seed sprout, fresh fruits and vegetables, garden, tree canopy, water drop',
+    defaultIcon: '🌱'
+  },
+  GIAO_THONG: {
+    themeCode: 'GIAO_THONG',
+    themeName: 'Phương Tiện Giao Thông',
+    primaryColor: '#e11d48', // Đỏ tín hiệu
+    accentColor: '#eab308',  // Vàng đèn xe
+    backgroundColor: '#f8fafc',
+    imageStyleKeywords: 'cars, trains, airplanes, sailboat, traffic signs',
+    defaultIcon: '🚗'
+  },
+  HTTN: {
+    themeCode: 'HTTN',
+    themeName: 'Nước & Hiện Tượng Tự Nhiên',
+    primaryColor: '#0891b2', // Xanh ngọc
+    accentColor: '#38bdf8',  // Xanh da trời
+    backgroundColor: '#ecfeff',
+    imageStyleKeywords: 'rainbow, rain clouds, stream water, warm sunny sky',
+    defaultIcon: '🌈'
+  },
+  QUE_HUONG: {
+    themeCode: 'QUE_HUONG',
+    themeName: 'Quê Hương - Bác Hồ',
+    primaryColor: '#b91c1c', // Đỏ son cờ
+    accentColor: '#eab308',  // Vàng kim
+    backgroundColor: '#fffbeb',
+    imageStyleKeywords: 'lotus flower, Vietnam red flag yellow star, Uncle Ho mausoleum, Vietnam map',
+    defaultIcon: '🇻🇳'
+  },
+  LOP_MOT: {
+    themeCode: 'LOP_MOT',
+    themeName: 'Bé Lên Lớp Một',
+    primaryColor: '#7c3aed', // Tím học thức
+    accentColor: '#a3e635',  // Xanh mạ
+    backgroundColor: '#faf5ff',
+    imageStyleKeywords: 'school backpack, books and notebooks, pencil, clock, blackboard',
+    defaultIcon: '🎒'
+  }
+};
+
+export function getThemeMatrix(themeCode?: string): ThemeColorPalette {
+  if (!themeCode) return THEME_MATRIX.THUC_VAT;
+  return THEME_MATRIX[themeCode] || THEME_MATRIX.THUC_VAT;
+}
 
 export const GRADE_LEVEL_MAP: Record<GradeLevelCode, { label: string; duration: string }> = {
   NHA_TRE: { label: 'Nhà Trẻ (12-36 tháng)', duration: '12-15 phút' },
@@ -172,6 +281,7 @@ export const SUB_THEME_MAP: Record<ThemeCode, string[]> = {
   GIAO_THONG: ['Phương tiện giao thông đường bộ', 'Phương tiện đường thủy & hàng không', 'Luật giao thông đường phố'],
   HTTN: ['Nước & Các hiện tượng thời tiết', 'Mặt trời, Mặt trăng & Các mùa', 'Không khí & Năng lượng sạch'],
   QUE_HUONG: ['Quê hương Sương Mai', 'Thủ đô Hà Nội & Bác Hồ', 'Bản sắc văn hóa Việt Nam'],
+  LOP_MOT: ['Đồ dùng học tập của học sinh lớp 1', 'Trường tiểu học thân yêu', 'Tâm thế tự tin vào lớp 1'],
 };
 
 export function getFrameworkByGradeAndTheme(grade: GradeLevelCode, theme: ThemeCode): CurriculumFramework {
