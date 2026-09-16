@@ -296,14 +296,7 @@ export function getFallbackPreschoolImage(index: number = 0): string {
   return FALLBACK_PRESCHOOL_IMAGES[index % FALLBACK_PRESCHOOL_IMAGES.length];
 }
 
-/**
- * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
- */
-export function getPollinationsImageUrl(prompt: string, width = 1024, height = 768, seedIndex = 1): string {
-  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cute preschool children illustration';
-  const encodedPrompt = encodeURIComponent(`cute preschool cartoon illustration, colorful, friendly, ${cleanPrompt}`);
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
-}
+
 
 /**
  * Generates Project-Based Learning (PBL) 5E STEAM Project + Timeline + Parent Announcement
