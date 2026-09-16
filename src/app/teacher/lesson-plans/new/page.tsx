@@ -638,63 +638,320 @@ export default function TeacherAILessonPlanNewPage() {
                 </div>
               )}
 
-              {/* TAB 2: SLIDE TRÌNH CHIẾU TV (PRESCHOOL SMARTTV DESIGN SYSTEM) */}
+              {/* TAB 2: SLIDE TRÌNH CHIẾU TV (RULES.PDF PRESCHOOL SMARTTV DESIGN SYSTEM) */}
               {canvasTab === 'SLIDES' && (
                 <div className="bg-white border border-slate-200 rounded-convent p-5 shadow-sm space-y-6 text-xs">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-                      <Tv className="w-5 h-5 text-indigo-600" />
-                      <span>Xem trước Slide trình chiếu TV SmartTV mầm non (Tỉ lệ 16:9, Màu Pastel dịu mắt, Ảnh lớn 60-70%, Chữ to rõ)</span>
+                      <Tv className="w-5 h-5 text-emerald-600" />
+                      <span>Xem trước Slide trình chiếu TV SmartTV mầm non (Chuẩn Rules.pdf: 16:9 HD, Pastel Dịu Mắt, Card Bo Tròn, Layout Linh Hoạt)</span>
                     </h3>
                   </div>
 
-                  <div className="space-y-6">
-                    {generatedLesson.slides.map((slide, idx) => {
-                      const bgColors = ['bg-[#FEF9C3]', 'bg-[#E0F2FE]', 'bg-[#DCFCE7]', 'bg-[#FEF9C3]'];
-                      const titleColors = ['text-emerald-800', 'text-sky-800', 'text-emerald-800', 'text-orange-700'];
-                      const cardBg = bgColors[idx % bgColors.length];
-                      const titleColor = titleColors[idx % titleColors.length];
+                  <div className="space-y-8">
+                    {generatedLesson.slides.map((slide) => {
+                      const layout = slide.layout_type || 'COVER';
 
                       return (
-                        <div key={slide.slide_number} className={`border-2 border-slate-300 rounded-2xl overflow-hidden shadow-lg ${cardBg}`}>
-                          {/* Top Banner Header */}
-                          <div className="p-3 bg-slate-900 text-white flex items-center justify-between font-bold text-xs">
+                        <div key={slide.slide_number} className="border-2 border-slate-300 rounded-3xl overflow-hidden shadow-xl bg-slate-50 font-sans">
+                          {/* Slide Indicator Bar */}
+                          <div className="px-4 py-2 bg-slate-900 text-white flex items-center justify-between font-bold text-xs">
                             <span className="flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-amber-400" />
-                              SLIDE {slide.slide_number}: GIAO DIỆN TRỰC QUAN SMARTTV MẦM NON
+                              <Sparkles className="w-4 h-4 text-emerald-400" />
+                              SLIDE {slide.slide_number} • {layout} LAYOUT
                             </span>
-                            <span className="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-amber-300">Tỷ lệ 16:9 HD</span>
+                            <span className="font-mono text-[11px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800">
+                              Rules.pdf Compliant
+                            </span>
                           </div>
 
-                          <div className="p-6 text-center space-y-4">
-                            <h4 className={`font-black ${titleColor} text-xl sm:text-2xl uppercase tracking-wide leading-tight`}>
-                              {slide.title}
-                            </h4>
+                          {/* SLIDE CONTENT AREA (Tỷ lệ 16:9 Presentation View) */}
+                          <div className="p-6 sm:p-8 min-h-[420px] flex flex-col justify-center">
 
-                            {/* Center Big Hero Image (60-70% visual focus) */}
-                            <div className="max-w-2xl mx-auto rounded-2xl overflow-hidden border-4 border-white shadow-md bg-white">
-                              <img
-                                src={slide.image_url || getFallbackPreschoolImage(slide.slide_number)}
-                                alt={slide.title}
-                                className="w-full h-64 sm:h-80 object-cover"
-                                onError={(e) => {
-                                  const target = e.currentTarget;
-                                  target.onerror = null;
-                                  target.src = getFallbackPreschoolImage(slide.slide_number);
-                                }}
-                              />
-                            </div>
+                            {/* 1. COVER LAYOUT */}
+                            {layout === 'COVER' && (
+                              <div className="bg-[#F4FBF7] border-2 border-emerald-200 rounded-2xl p-8 text-center space-y-6 flex flex-col items-center justify-center">
+                                <span className="inline-block bg-emerald-100 text-emerald-800 font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm">
+                                  {slide.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI'}
+                                </span>
+                                <h2 className="text-2xl sm:text-4xl font-black text-[#13542E] tracking-tight leading-tight max-w-3xl">
+                                  {slide.title}
+                                </h2>
+                                <p className="text-slate-600 font-medium text-sm sm:text-base max-w-xl">
+                                  {slide.subtitle}
+                                </p>
+                                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                                  {(slide.pill_badges || []).map((badge, bIdx) => (
+                                    <span key={bIdx} className="bg-white border border-emerald-300 text-emerald-800 font-bold px-4 py-2 rounded-full text-xs sm:text-sm shadow-sm">
+                                      {badge}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                            {/* Large Readable Text Legend */}
-                            <div className="pt-2 max-w-xl mx-auto">
-                              <ul className="inline-flex flex-wrap items-center justify-center gap-3 text-slate-900 font-bold text-sm sm:text-base">
-                                {slide.content_points.map((pt, i) => (
-                                  <li key={i} className="bg-white/90 backdrop-blur px-3.5 py-1.5 rounded-full shadow-sm border border-slate-200">
-                                    {pt}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
+                            {/* 2. DARK HERO LAYOUT */}
+                            {layout === 'DARK_HERO' && (
+                              <div className="bg-[#13542E] rounded-2xl p-10 text-center space-y-6 flex flex-col items-center justify-center text-white">
+                                <span className="inline-block bg-emerald-800 text-emerald-100 font-bold px-4 py-1.5 rounded-full text-xs sm:text-sm border border-emerald-600">
+                                  {slide.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ'}
+                                </span>
+                                <h2 className="text-3xl sm:text-5xl font-black text-[#FCD34D] tracking-wide leading-tight max-w-3xl">
+                                  {slide.title}
+                                </h2>
+                                <p className="text-amber-100 font-medium text-base sm:text-lg max-w-2xl leading-relaxed">
+                                  {slide.subtitle}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 3. GRID 4 CARDS LAYOUT */}
+                            {layout === 'GRID_4_CARDS' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E] flex items-center gap-2">
+                                  {slide.title}
+                                </h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                  {(slide.cards_data || []).map((card, cIdx) => (
+                                    <div key={cIdx} className="bg-white border border-emerald-200 rounded-2xl p-5 text-center space-y-3 shadow-sm flex flex-col items-center justify-between">
+                                      <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-2xl">
+                                        {card.icon || '🌱'}
+                                      </div>
+                                      <h4 className="font-bold text-[#13542E] text-base sm:text-lg">{card.title}</h4>
+                                      <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">{card.desc}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 4. TIMELINE 4 STEPS LAYOUT */}
+                            {layout === 'TIMELINE_4_STEPS' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E] flex items-center gap-2">
+                                  {slide.title}
+                                </h3>
+                                <div className="relative pt-4">
+                                  {/* Connector Line */}
+                                  <div className="hidden sm:block absolute top-1/2 left-0 w-full h-1.5 bg-emerald-300 -translate-y-1/2 z-0" />
+                                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 relative z-10">
+                                    {(slide.steps_data || []).map((step, sIdx) => (
+                                      <div key={sIdx} className="bg-white border border-emerald-200 rounded-2xl p-4 text-center space-y-2 shadow-md">
+                                        <div className="w-8 h-8 bg-emerald-600 text-white font-bold rounded-full flex items-center justify-center mx-auto text-xs">
+                                          {step.step_num || sIdx + 1}
+                                        </div>
+                                        <h4 className="font-bold text-[#13542E] text-sm sm:text-base">{step.title}</h4>
+                                        <p className="text-slate-600 text-xs leading-relaxed">{step.desc}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 5. IMAGE CARDS 3 LAYOUT */}
+                            {layout === 'IMAGE_CARDS_3' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E] flex items-center gap-2">
+                                  {slide.title}
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                  {(slide.cards_data || []).map((card, cIdx) => (
+                                    <div key={cIdx} className="bg-white border border-emerald-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
+                                      <img 
+                                        src={card.image_url || getFallbackPreschoolImage(cIdx)} 
+                                        alt={card.title} 
+                                        className="w-full h-40 object-cover"
+                                        onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(cIdx); }}
+                                      />
+                                      <div className="p-4 text-center space-y-2 flex-1 flex flex-col justify-between">
+                                        <h4 className="font-bold text-[#13542E] text-base">{card.title}</h4>
+                                        <p className="text-slate-600 text-xs leading-relaxed">{card.desc}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 6. TWO COLUMN CARDS LAYOUT */}
+                            {layout === 'TWO_COLUMN_CARDS' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E] flex items-center gap-2">
+                                  {slide.title}
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {(slide.cards_data || []).map((card, cIdx) => (
+                                    <div key={cIdx} className="bg-white border border-emerald-200 rounded-2xl p-6 space-y-3 shadow-sm">
+                                      <h4 className="font-bold text-[#13542E] text-lg flex items-center gap-2 border-b border-emerald-100 pb-2">
+                                        <span>{card.icon || '🌲'}</span>
+                                        <span>{card.title}</span>
+                                      </h4>
+                                      <p className="text-slate-700 text-xs sm:text-sm leading-relaxed whitespace-pre-line">
+                                        {card.desc}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 7. LIST ACCENT IMAGE LAYOUT */}
+                            {layout === 'LIST_ACCENT_IMAGE' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E] flex items-center gap-2">
+                                  {slide.title}
+                                </h3>
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                                  <div className="lg:col-span-7 space-y-3">
+                                    {(slide.content_points || []).map((pt, pIdx) => (
+                                      <div key={pIdx} className="bg-white border-l-4 border-l-emerald-600 border border-slate-200 rounded-r-xl p-3.5 text-slate-800 font-medium text-xs sm:text-sm shadow-sm">
+                                        {pt}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="lg:col-span-5 flex justify-center">
+                                    <img 
+                                      src={slide.image_url || getFallbackPreschoolImage(7)} 
+                                      alt={slide.title}
+                                      className="rounded-2xl border-4 border-white shadow-lg w-full max-w-xs h-64 object-cover"
+                                      onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(7); }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 8. NUMBERED STEPS LAYOUT */}
+                            {layout === 'NUMBERED_STEPS' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-5">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E]">
+                                  {slide.title}
+                                </h3>
+                                <div className="space-y-3">
+                                  {(slide.steps_data || []).map((step, sIdx) => (
+                                    <div key={sIdx} className="bg-white border border-emerald-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                                      <span className="w-10 h-10 bg-emerald-600 text-white font-black text-lg rounded-xl flex items-center justify-center shrink-0">
+                                        {step.step_num || sIdx + 1}
+                                      </span>
+                                      <div>
+                                        <h4 className="font-bold text-[#13542E] text-sm sm:text-base">{step.title}</h4>
+                                        <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">{step.desc}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {slide.subtitle && (
+                                  <div className="bg-white border border-emerald-300 rounded-2xl p-3.5 text-center font-bold text-emerald-800 text-xs sm:text-sm shadow-sm">
+                                    {slide.subtitle}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 9. SPLIT STORY IMAGE LAYOUT */}
+                            {layout === 'SPLIT_STORY_IMAGE' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                                <div className="lg:col-span-6 space-y-4">
+                                  <h3 className="text-2xl sm:text-3xl font-black text-[#13542E]">
+                                    {slide.title}
+                                  </h3>
+                                  <p className="text-slate-700 text-sm sm:text-base leading-relaxed whitespace-pre-line">
+                                    {slide.subtitle}
+                                  </p>
+                                </div>
+                                <div className="lg:col-span-6 flex justify-center">
+                                  <img 
+                                    src={slide.image_url || getFallbackPreschoolImage(9)} 
+                                    alt={slide.title}
+                                    className="rounded-2xl border-4 border-white shadow-xl w-full h-72 object-cover"
+                                    onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(9); }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 10. STAT CALLOUT LAYOUT */}
+                            {layout === 'STAT_CALLOUT' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-6">
+                                <h3 className="text-xl sm:text-2xl font-black text-[#13542E]">
+                                  {slide.title}
+                                </h3>
+                                <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-12 gap-6 items-center shadow-md">
+                                  <div className="sm:col-span-4 bg-emerald-100 rounded-2xl p-6 text-center space-y-2">
+                                    <span className="block text-4xl sm:text-6xl font-black text-[#13542E]">
+                                      {slide.stat_highlight?.number || '100%'}
+                                    </span>
+                                    <span className="font-bold text-emerald-800 text-sm">
+                                      {slide.stat_highlight?.label || 'Bé Yêu Cây Xanh'}
+                                    </span>
+                                  </div>
+                                  <div className="sm:col-span-8 space-y-3">
+                                    <h4 className="text-xl font-bold text-[#13542E]">
+                                      {slide.stat_highlight?.hero_title || 'Bé Là Hiệp Sĩ Bảo Vệ Mầm Xanh'}
+                                    </h4>
+                                    <p className="text-slate-700 text-xs sm:text-sm leading-relaxed">
+                                      {slide.stat_highlight?.hero_desc}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 11. HERO OVERLAY LAYOUT */}
+                            {layout === 'HERO_OVERLAY' && (
+                              <div className="relative rounded-2xl overflow-hidden min-h-[320px] flex items-center justify-center p-6 bg-slate-800">
+                                <img 
+                                  src={slide.image_url || getFallbackPreschoolImage(11)} 
+                                  alt={slide.title} 
+                                  className="absolute inset-0 w-full h-full object-cover opacity-60"
+                                  onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(11); }}
+                                />
+                                <div className="relative z-10 bg-white/95 backdrop-blur border border-white rounded-2xl p-8 text-center max-w-2xl space-y-4 shadow-2xl">
+                                  <h3 className="text-2xl sm:text-3xl font-black text-[#13542E]">
+                                    {slide.title}
+                                  </h3>
+                                  <p className="text-slate-800 font-medium text-sm sm:text-base leading-relaxed">
+                                    {slide.subtitle}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 12. OUTRO PRAISE LAYOUT */}
+                            {layout === 'OUTRO_PRAISE' && (
+                              <div className="bg-[#FEF9C3] border-2 border-amber-300 rounded-2xl p-8 text-center space-y-6 flex flex-col items-center justify-center">
+                                <h2 className="text-3xl sm:text-5xl font-black text-[#13542E]">
+                                  {slide.title}
+                                </h2>
+                                <p className="text-slate-700 font-medium text-base sm:text-lg max-w-xl">
+                                  {slide.subtitle}
+                                </p>
+                                {slide.pill_badges?.[0] && (
+                                  <div className="bg-white border-2 border-amber-400 text-amber-900 font-black px-6 py-3 rounded-full text-sm sm:text-lg shadow-md">
+                                    {slide.pill_badges[0]}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* 13. IMAGE SOURCES LAYOUT */}
+                            {layout === 'IMAGE_SOURCES' && (
+                              <div className="bg-[#F4FBF7] border border-emerald-100 rounded-2xl p-6 space-y-4">
+                                <h3 className="text-xl font-bold text-[#13542E]">
+                                  {slide.title}
+                                </h3>
+                                <div className="space-y-3">
+                                  {(slide.image_sources || []).map((src, sIdx) => (
+                                    <div key={sIdx} className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                                      <span className="truncate text-slate-700 font-mono text-[11px] max-w-md">{src.url}</span>
+                                      <span className="text-indigo-600 font-bold shrink-0">{src.source}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                           </div>
                         </div>
                       );

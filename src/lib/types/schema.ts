@@ -271,12 +271,35 @@ export interface LearningProject {
   created_at?: string;
 }
 
+export type SlideLayoutType = 
+  | 'COVER' 
+  | 'DARK_HERO' 
+  | 'GRID_4_CARDS' 
+  | 'TIMELINE_4_STEPS' 
+  | 'IMAGE_CARDS_3' 
+  | 'TWO_COLUMN_CARDS' 
+  | 'LIST_ACCENT_IMAGE' 
+  | 'NUMBERED_STEPS' 
+  | 'SPLIT_STORY_IMAGE' 
+  | 'STAT_CALLOUT' 
+  | 'HERO_OVERLAY' 
+  | 'OUTRO_PRAISE' 
+  | 'IMAGE_SOURCES';
+
 export interface AILessonSlide {
   slide_number: number;
   title: string;
   content_points: string[];
   image_prompt: string;
   image_url?: string;
+  layout_type?: SlideLayoutType;
+  subtitle?: string;
+  header_tag?: string;
+  pill_badges?: string[];
+  cards_data?: { icon?: string; title: string; desc: string; image_url?: string }[];
+  steps_data?: { step_num?: number; title: string; desc: string }[];
+  stat_highlight?: { number: string; label: string; hero_title: string; hero_desc: string };
+  image_sources?: { url: string; source: string }[];
 }
 
 export interface AILessonPlan {

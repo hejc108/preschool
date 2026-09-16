@@ -100,6 +100,257 @@ export function mapSchemaResponseToLessonPlan(
 
 
 /**
+ * Generates full 13-slide Rules.pdf compliant presentation deck
+ */
+export function generateRulesCompliantSlideDeck(params: {
+  topic: string;
+  subject: string;
+  grade_level: GradeLevelCode;
+  theme_code: ThemeCode;
+  materialsNeededStr: string;
+  studentMaterials: string[];
+  teacherMaterials: string[];
+  framework: any;
+  targetObjectives?: string;
+}): AILessonSlide[] {
+  const { topic, subject, grade_level, theme_code, materialsNeededStr, studentMaterials, teacherMaterials, framework, targetObjectives } = params;
+  const safeTopic = topic.trim() || 'Khám Phá Sự Phát Triển Của Cây Xanh';
+  const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
+  const themeName = THEME_NAME_MAP[theme_code] || 'Thế Giới Thực Vật';
+  const subjectName = SUBJECT_NAME_MAP[subject] || subject;
+  const normSub = subject.toUpperCase();
+
+  const lowerTopic = safeTopic.toLowerCase();
+  const isPlantTopic = lowerTopic.includes('cây') || lowerTopic.includes('thực vật') || lowerTopic.includes('hạt mầm') || lowerTopic.includes('hoa') || lowerTopic.includes('quả');
+
+  // Slide 1: COVER
+  const s1: AILessonSlide = {
+    slide_number: 1,
+    layout_type: 'COVER',
+    header_tag: '🎓 TRƯỜNG MẦM NON SƯƠNG MAI',
+    title: safeTopic,
+    subtitle: `Giáo án ${subjectName} trực quan dành cho các bé yêu thiên nhiên`,
+    pill_badges: [`🎓 Khối ${gradeInfo.label}`, `⏱ Thời lượng: ${gradeInfo.duration}`, `🌱 Chủ đề: ${themeName}`],
+    content_points: [`Khối: ${gradeInfo.label}`, `Thời lượng: ${gradeInfo.duration}`, `Chủ đề: ${themeName}`],
+    image_prompt: `Cute preschool children learning about ${safeTopic}, bright classroom, watercolor illustration`,
+    image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`, 1024, 768, 1)
+  };
+
+  // Slide 2: DARK_HERO
+  const s2: AILessonSlide = {
+    slide_number: 2,
+    layout_type: 'DARK_HERO',
+    pill_badges: ['🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ'],
+    title: isPlantTopic ? 'Điều Kỳ Diệu Của Hạt Mầm' : `Điều Kỳ Diệu Về ${safeTopic}`,
+    subtitle: framework.pedagogical_guidelines.songs_or_poems?.[0] 
+      ? `Cùng hát vang bài ca "${framework.pedagogical_guidelines.songs_or_poems[0]}" và lắng nghe câu chuyện về những hạt mầm thức giấc đón chào ánh mặt trời.`
+      : `Cùng hát vang bài ca vui nhộn và lắng nghe câu chuyện sinh động chào đón bài học mới!`,
+    content_points: ['Gắn kết và đặt vấn đề gây hứng thú cho trẻ'],
+    image_prompt: `Magic glowing nature seed sprouting, dark green background vector style`,
+    image_url: getPollinationsImageUrl(`Magic glowing seed sprouting dark green background`, 1024, 768, 2)
+  };
+
+  // Slide 3: GRID_4_CARDS
+  let gridCards = [
+    { icon: '☀️', title: 'Ánh Nắng', desc: 'Mặt trời ấm áp sưởi ấm mầm xanh và giúp lá cây quang hợp để tạo chất dinh dưỡng mỗi ngày.' },
+    { icon: '💧', title: 'Nước Mát', desc: 'Nước tưới làm mềm hạt giống, giúp rễ cây hút dinh dưỡng từ đất để nuôi thân và lá luôn tươi tốt.' },
+    { icon: '⛰️', title: 'Đất Mùn', desc: 'Đất tơi xốp giữ chặt rễ cây đứng vững và chứa nguồn khoáng chất quý giá nuôi cây mau lớn.' },
+    { icon: '💨', title: 'Không Khí', desc: 'Cây xanh hít thở không khí trong lành để trao đổi chất, phát triển cành lá vươn cao.' }
+  ];
+
+  if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
+    gridCards = [
+      { icon: '🔢', title: 'Số Lượng', desc: 'Trẻ đếm chính xác nhóm đồ dùng theo số lượng quy định và nhận biết nhóm tương ứng.' },
+      { icon: '🔺', title: 'Hình Khối', desc: 'Nhận biết phân biệt hình tròn, hình vuông, hình tam giác, hình chữ nhật quanh bé.' },
+      { icon: '⚖️', title: 'So Sánh', desc: 'So sánh kích thước to - nhỏ, cao - thấp, dài - ngắn của các đối tượng trực quan.' },
+      { icon: '📦', title: 'Phân Loại', desc: 'Gộp và phân loại đối tượng theo 1-2 dấu hiệu đặc trưng rõ ràng.' }
+    ];
+  } else if (normSub.includes('LQCC') || normSub.includes('CHỮ CÁI')) {
+    gridCards = [
+      { icon: '⭕', title: 'Nét Cong', desc: 'Nhận biết nét cong tròn khép kín, nét cong hở trái, cong hở phải.' },
+      { icon: '📏', title: 'Nét Thẳng', desc: 'Phân biệt nét móc ngược, nét xiên trái, xiên phải và nét ngang.' },
+      { icon: '🔤', title: 'Ghép Chữ', desc: 'Thực hành ghép các nét rời để tạo thành chữ cái hoàn chỉnh.' },
+      { icon: '🔊', title: 'Phát Âm', desc: 'Luyện phát âm chuẩn khẩu hình chữ cái, không nói ngọng, nói lắp.' }
+    ];
+  } else if (normSub.includes('TAO_HINH') || normSub.includes('TẠO HÌNH')) {
+    gridCards = [
+      { icon: '🎨', title: 'Màu Sắc', desc: 'Phối kết hợp các mảng màu rực rỡ, hài hòa để tạo nên sản phẩm tươi sáng.' },
+      { icon: '✏️', title: 'Đường Nét', desc: 'Sử dụng nét vẽ uốn lượn, nét xiên, nét xoắn ốc khéo léo của đôi bàn tay.' },
+      { icon: '🖼️', title: 'Bố Cục', desc: 'Sắp xếp bố cục hình ảnh cân đối ở chính giữa trang giấy A4.' },
+      { icon: '✨', title: 'Sáng Tạo', desc: 'Vận dụng vật liệu mở tự nhiên trang trí thêm cho bức tranh sinh động.' }
+    ];
+  }
+
+  const s3: AILessonSlide = {
+    slide_number: 3,
+    layout_type: 'GRID_4_CARDS',
+    title: isPlantTopic ? '⚙ Cây Xanh Cần Gì Để Lớn Lên?' : `⚙ Yếu Tố Cốt Lõi Của ${safeTopic}`,
+    cards_data: gridCards,
+    content_points: gridCards.map(c => `${c.title}: ${c.desc}`),
+    image_prompt: `Educational 4 icons set layout for kindergarten learning`,
+    image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning`, 1024, 768, 3)
+  };
+
+  // Slide 4: TIMELINE_4_STEPS
+  const timelineSteps = isPlantTopic ? [
+    { step_num: 1, title: '1. Hạt Giống', desc: 'Bé gieo hạt nhỏ xuống đất tơi xốp, hạt uống no nước rồi dần phình to.' },
+    { step_num: 2, title: '2. Nảy Mầm', desc: 'Chiếc mầm nhỏ nhú lên khỏi mặt đất, cắm chiếc rễ đầu tiên xuống lòng đất.' },
+    { step_num: 3, title: '3. Cây Con', desc: 'Cây bung hai lá mầm xanh non, thân cây vươn cao đón ánh nắng rực rỡ.' },
+    { step_num: 4, title: '4. Cây Trưởng Thành', desc: 'Cây sum suê cành lá, trổ ngàn hoa thơm và kết thành những quả ngọt ngào.' }
+  ] : [
+    { step_num: 1, title: '1. Quan Sát', desc: 'Trẻ cùng cô quan sát mẫu trực quan và đàm thoại tìm hiểu đặc điểm.' },
+    { step_num: 2, title: '2. Trải Nghiệm', desc: 'Trẻ tự tay thao tác với học liệu chuẩn bị theo nhóm 4-5 bạn.' },
+    { step_num: 3, title: '3. Luyện Tập', desc: 'Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức bài học.' },
+    { step_num: 4, title: '4. Sản Phẩm', desc: 'Hoàn thiện sản phẩm trải nghiệm và tự tin giới thiệu với các bạn.' }
+  ];
+
+  const s4: AILessonSlide = {
+    slide_number: 4,
+    layout_type: 'TIMELINE_4_STEPS',
+    title: isPlantTopic ? '🔄 Vòng Đời Kỳ Diệu Của Cây' : `🔄 Tiến Trình Vòng Đời & Các Bước Học`,
+    steps_data: timelineSteps,
+    content_points: timelineSteps.map(s => `${s.title}: ${s.desc}`),
+    image_prompt: `Plant growth lifecycle horizontal timeline infographic cartoon`,
+    image_url: getPollinationsImageUrl(`Plant growth lifecycle horizontal timeline infographic cartoon`, 1024, 768, 4)
+  };
+
+  // Slide 5: IMAGE_CARDS_3
+  const imageCards = [
+    { title: 'Hạt Nảy Mầm', desc: 'Hạt đỗ tách vỏ, mầm nhỏ hé nụ trắng vươn về phía có ánh sáng.', image_url: getPollinationsImageUrl('sprout germination stage cartoon', 600, 400, 5) },
+    { title: 'Cây Non Lớn Lên', desc: 'Cây mọc thêm nhiều lá xanh thẫm, thân cứng cáp đung đưa theo gió.', image_url: getPollinationsImageUrl('happy green sprout growing cute cartoon', 600, 400, 6) },
+    { title: 'Đơm Hoa Kết Trái', desc: 'Cây trĩu quả thơm ngon, lại tạo ra hạt giống cho mùa sau.', image_url: getPollinationsImageUrl('fruit tree with red apples watercolor cartoon', 600, 400, 7) }
+  ];
+
+  const s5: AILessonSlide = {
+    slide_number: 5,
+    layout_type: 'IMAGE_CARDS_3',
+    title: `🖼 Các Giai Đoạn Của Cây Xanh`,
+    cards_data: imageCards,
+    content_points: imageCards.map(c => `${c.title}: ${c.desc}`),
+    image_prompt: `3 stage illustrations of ${safeTopic}`,
+    image_url: imageCards[1].image_url
+  };
+
+  // Slide 6: TWO_COLUMN_CARDS
+  const twoColCards = [
+    { icon: '↓↓', title: 'Rễ Cây & Thân Cây', desc: 'Rễ cây: Nằm sâu dưới lòng đất, giống như những bàn tay nhỏ bám thật chắc để giữ cây không bị đổ khi gió bão và hút nước mát nuôi cây.\n\nThân cây: Là chiếc cột vững chãi vận chuyển nhựa và dinh dưỡng từ rễ tỏa đi khắp các cành lá trên cao.' },
+    { icon: '🍃', title: 'Cành, Lá, Hoa & Quả', desc: 'Cành & Lá: Xòe rộng như chiếc ô xanh hứng nắng mặt trời, hít thở và thanh lọc không khí trong lành.\n\nHoa & Quả: Hoa tỏa hương khoe sắc mời các bạn ong bướm đến thụ phấn, sau đó biến thành những quả ngọt mọng cho bé thưởng thức.' }
+  ];
+
+  const s6: AILessonSlide = {
+    slide_number: 6,
+    layout_type: 'TWO_COLUMN_CARDS',
+    title: `🌲 Cấu Tạo Cơ Bản Của Cây Xanh`,
+    cards_data: twoColCards,
+    content_points: twoColCards.map(c => `${c.title}: ${c.desc}`),
+    image_prompt: `Detailed plant anatomy structural breakdown diagram for kids`,
+    image_url: getPollinationsImageUrl('Detailed plant anatomy structural breakdown diagram for kids', 1024, 768, 8)
+  };
+
+  // Slide 7: LIST_ACCENT_IMAGE
+  const listPoints = [
+    'Tạo khí oxy trong lành: Cây xanh là "nhà máy lọc không khí" khổng lồ giúp bé và muôn loài hít thở khỏe mạnh.',
+    'Tỏa bóng râm mát rượi: Dưới tán lá xanh, sân trường Sương Mai luôn râm mát cho các bé vui chơi thỏa thích.',
+    'Cho quả ngọt, hoa thơm: Những trái táo, chuối, cam thơm ngon mang nhiều vitamin bổ dưỡng cho cơ thể.',
+    'Ngôi nhà của muông thú: Chim làm tổ trên cành, sóc nô đùa và côn trùng ríu rít ca hát.'
+  ];
+
+  const s7: AILessonSlide = {
+    slide_number: 7,
+    layout_type: 'LIST_ACCENT_IMAGE',
+    title: `🍃 Lợi Ích Tuyệt Vời Của Cây`,
+    content_points: listPoints,
+    image_prompt: `Cute plant sprout growing in fertile soil doodle cartoon illustration`,
+    image_url: getPollinationsImageUrl('Cute plant sprout growing in fertile soil doodle cartoon illustration', 800, 800, 9)
+  };
+
+  // Slide 8: NUMBERED_STEPS
+  const numSteps = [
+    { step_num: 1, title: 'Bước 1 - Chuẩn bị tổ ấm cho hạt', desc: 'Bé lấy chiếc cốc sạch và nhẹ nhàng lót một lớp bông gòn mềm mại vào đáy cốc làm đệm êm.' },
+    { step_num: 2, title: 'Bước 2 - Tưới giọt nước yêu thương', desc: 'Thấm một chút nước sạch vừa đủ ẩm vào bông gòn, không để nước ngập làm hạt bị úng nhé.' },
+    { step_num: 3, title: 'Bước 3 - Đặt hạt đỗ ngủ ngon', desc: 'Đặt hạt đậu xanh khỏe khoắn vào giữa lớp bông, chúc hạt ngủ ngon và mau thức dậy nảy mầm.' }
+  ];
+
+  const s8: AILessonSlide = {
+    slide_number: 8,
+    layout_type: 'NUMBERED_STEPS',
+    title: `🧪 3 Bước Bé Thực Hành Gieo Hạt`,
+    steps_data: numSteps,
+    subtitle: '💚 Chăm sóc mỗi ngày: Đặt cốc ở nơi có ánh sáng chan hòa và theo dõi hạt lớn lên từng ngày cùng cô giáo!',
+    content_points: numSteps.map(s => `${s.title}: ${s.desc}`),
+    image_prompt: `Preschool children planting seeds step by step cartoon`,
+    image_url: getPollinationsImageUrl('Preschool children planting seeds step by step cartoon', 1024, 768, 10)
+  };
+
+  // Slide 9: SPLIT_STORY_IMAGE
+  const s9: AILessonSlide = {
+    slide_number: 9,
+    layout_type: 'SPLIT_STORY_IMAGE',
+    title: '🌱 Vườn Rau Của Bé',
+    subtitle: 'Tại sân vườn Trường Mầm Non Sương Mai, mỗi ngày đến trường là một ngày hội khám phá thiên nhiên tươi đẹp.\n\nBé cùng các bạn tự tay tưới nước, bắt sâu và ngắm nhìn những mầm cây lớn lên xanh mướt dưới ánh nắng ấm áp.',
+    content_points: ['Trẻ tự tay tưới nước và chăm sóc vườn rau sân trường Sương Mai'],
+    image_prompt: `Happy Asian kindergarten children gardening in vegetable garden under sunflower sunny watercolor cartoon`,
+    image_url: getPollinationsImageUrl('Happy Asian kindergarten children gardening in vegetable garden under sunflower sunny watercolor cartoon', 1024, 768, 11)
+  };
+
+  // Slide 10: STAT_CALLOUT
+  const s10: AILessonSlide = {
+    slide_number: 10,
+    layout_type: 'STAT_CALLOUT',
+    title: `⭐ Thông Điệp Xanh Của Lớp ${gradeInfo.label.split(' ')[0]}`,
+    stat_highlight: {
+      number: '100%',
+      label: 'Bé Yêu Cây Xanh',
+      hero_title: 'Bé Là Hiệp Sĩ Bảo Vệ Mầm Xanh',
+      hero_desc: `Tất cả các bạn nhỏ Khối ${gradeInfo.label} của Trường Mầm Non Sương Mai đều hiểu rằng: Yêu thiên nhiên là bảo vệ cuộc sống của chính mình. Mỗi hạt giống nhỏ bé hôm nay được chăm sóc bằng tình yêu thương sẽ trở thành những bóng cây râm mát cho tương lai.`
+    },
+    content_points: ['100% Bé yêu thiên nhiên và bảo vệ mầm xanh'],
+    image_prompt: `Green leaf emblem shield vector badge for environment protection`,
+    image_url: getPollinationsImageUrl('Green leaf emblem shield vector badge for environment protection', 1024, 768, 12)
+  };
+
+  // Slide 11: HERO_OVERLAY
+  const s11: AILessonSlide = {
+    slide_number: 11,
+    layout_type: 'HERO_OVERLAY',
+    title: `Cùng Chung Tay Bảo Vệ Cây Xanh`,
+    subtitle: 'Bé nhớ: Không bẻ cành bứt lá, không giẫm lên cỏ xanh. Hằng ngày nhớ tưới nước đều đặn và rủ bạn bè cùng chăm sóc vườn cây thêm xanh mát ngập tràn tiếng chim ca!',
+    content_points: ['Hành động thiết thực bảo vệ môi trường xung quanh'],
+    image_prompt: `Beautiful forest nature landscape with stream background cartoon`,
+    image_url: getPollinationsImageUrl('Beautiful forest nature landscape with stream background cartoon', 1024, 768, 13)
+  };
+
+  // Slide 12: OUTRO_PRAISE
+  const s12: AILessonSlide = {
+    slide_number: 12,
+    layout_type: 'OUTRO_PRAISE',
+    title: 'Bé Đố Cô - Cô Đố Bé!',
+    subtitle: `Cả lớp mình hôm nay học rất ngoan và xuất sắc vượt qua các câu hỏi khám phá khoa học về cây xanh.`,
+    pill_badges: [`🏅 HOAN HÔ CÁC BÉ LỚP ${gradeInfo.label.split(' ')[0].toUpperCase()} TRƯỜNG SƯƠNG MAI!`],
+    content_points: ['Khen ngợi nỗ lực và trao danh hiệu bé ngoan'],
+    image_prompt: `Kindergarten children cheering celebrating medal award winner cartoon`,
+    image_url: getPollinationsImageUrl('Kindergarten children cheering celebrating medal award winner cartoon', 1024, 768, 14)
+  };
+
+  // Slide 13: IMAGE_SOURCES
+  const s13: AILessonSlide = {
+    slide_number: 13,
+    layout_type: 'IMAGE_SOURCES',
+    title: 'Image Sources',
+    image_sources: [
+      { url: s1.image_url || '', source: 'www.pollinations.ai' },
+      { url: s5.image_url || '', source: 'www.pollinations.ai' },
+      { url: s9.image_url || '', source: 'www.pollinations.ai' },
+      { url: s11.image_url || '', source: 'www.pollinations.ai' }
+    ],
+    content_points: ['Danh sách nguồn hình ảnh minh họa cho slide'],
+    image_prompt: 'Source credits illustration list'
+  };
+
+  return [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13];
+}
+
+/**
  * Generates Traditional 5-Step Preschool Lesson Plan + Dynamic Framework Injection + Mermaid Mindmap + Pollinations Images
  */
 export async function generateAILessonPlan(params: {
@@ -214,52 +465,18 @@ export async function generateAILessonPlan(params: {
     instruction: `Cô tập hợp trẻ vào buổi chiều, tổ chức trò chơi củng cố kiến thức về "${safeTopic}". Chuẩn bị: ${studentMaterials.slice(0, 2).join(', ')}. Cách tiến hành: Cô phổ biến luật chơi, trẻ tham gia phản xạ nhanh và nhận phần thưởng dương tính.`
   };
 
-  // PowerPoint Slide Deck Content
-  const slides: AILessonSlide[] = [
-    {
-      slide_number: 1,
-      title: `BÀI GIẢNG: ${safeTopic.toUpperCase()}`,
-      content_points: [
-        `Môn học: ${SUBJECT_NAME_MAP[subject] || subject} • Khối lớp: ${GRADE_LEVEL_MAP[normGrade].label}`,
-        `Chủ đề: ${THEME_NAME_MAP[theme_code]}`,
-        `Thời lượng chuẩn: ${duration} phút`
-      ],
-      image_prompt: `Cute preschool children learning about ${safeTopic}, colorful classroom`,
-      image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`, 1024, 768, 1)
-    },
-    {
-      slide_number: 2,
-      title: 'MỤC TIÊU BÀI HỌC & ĐỒ DÙNG',
-      content_points: [
-        `Mụctiêu: ${target_objectives || steamPillars.science}`,
-        `Học liệu: ${resolvedMaterialsStr}`,
-        `Từ vựng: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}`
-      ],
-      image_prompt: `Preschool science experiment materials, cartoon style`,
-      image_url: getPollinationsImageUrl(`Preschool science experiment materials`, 1024, 768, 2)
-    },
-    {
-      slide_number: 3,
-      title: 'THỰC HÀNH & TRẢI NGHIỆM TRỰC QUAN',
-      content_points: [
-        'Bước 1: Quan sát mẫu trực quan của cô.',
-        'Bước 2: Trẻ thao tác trải nghiệm theo nhóm.',
-        'Bước 3: Trả lời câu hỏi gợi mở và thảo luận.'
-      ],
-      image_prompt: `Little happy Asian kindergarten child exploring ${safeTopic}, bright watercolor`,
-      image_url: getPollinationsImageUrl(`Little happy Asian kindergarten child exploring ${safeTopic}`, 1024, 768, 3)
-    },
-    {
-      slide_number: 4,
-      title: 'SƠ ĐỒ TƯ DUY TỔNG KẾT BÀI HỌC',
-      content_points: [
-        `Tóm tắt chủ đề: ${safeTopic}`,
-        'Bé nhớ bài học và tự giác thu dọn đồ dùng ngăn nắp nhé!'
-      ],
-      image_prompt: `sprout growing stages timeline infographic for kindergarten children`,
-      image_url: getPollinationsImageUrl(`sprout growing stages timeline infographic for kindergarten children`, 1024, 768, 4)
-    }
-  ];
+  // PowerPoint Slide Deck Content complying with Rules.pdf Design System
+  const slides = generateRulesCompliantSlideDeck({
+    topic: safeTopic,
+    subject,
+    grade_level: normGrade,
+    theme_code,
+    materialsNeededStr: resolvedMaterialsStr,
+    studentMaterials,
+    teacherMaterials,
+    framework,
+    targetObjectives: target_objectives
+  });
 
   return {
     id: `ai-lesson-${Date.now()}`,
@@ -529,9 +746,11 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     pptx.author = 'Trường Mầm Non Sương Mai AI Pedagogy Engine';
 
     const FONT_TITLE = 'Arial Rounded MT Bold';
-    const gradeLabel = GRADE_LEVEL_MAP[lesson.grade_level as GradeLevelCode]?.label || lesson.grade_level;
+    const FONT_BODY = 'Arial';
+    const COLOR_DARK_GREEN = '13542E';
+    const COLOR_LIGHT_BG = 'F4FBF7';
+    const COLOR_GOLD = 'FCD34D';
 
-    // Pre-convert slide images to Base64 in parallel for 100% offline embedding
     const slidesData = lesson.slides || [];
     const base64Images: string[] = [];
     for (let i = 0; i < slidesData.length; i++) {
@@ -540,112 +759,154 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
       base64Images.push(b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i));
     }
 
-    // ==================== SLIDE 1: BÌA BÀI GIẢNG ====================
-    const slide1 = pptx.addSlide();
-    slide1.background = { color: 'FEF9C3' }; // Warm yellow pastel
-    
-    slide1.addText(`🌱 BÉ KHÁM PHÁ ${lesson.topic.toUpperCase()} 🌱`, {
-      x: 0.5, y: 0.5, w: '90%', h: 1.0,
-      fontSize: 42, fontFace: FONT_TITLE, color: '15803D',
-      bold: true, align: 'center'
-    });
-
-    if (base64Images[0]) {
-      const isB64 = base64Images[0].startsWith('data:image');
-      slide1.addImage({
-        [isB64 ? 'data' : 'path']: base64Images[0],
-        x: 2.2, y: 1.6, w: 8.9, h: 4.5,
-        rounding: true
-      });
-    }
-
-    slide1.addText(`Trường Mầm Non Sương Mai • Khối ${gradeLabel}`, {
-      x: 0.5, y: 6.4, w: '90%', h: 0.5,
-      fontSize: 22, fontFace: FONT_TITLE, color: '64748B', align: 'center', bold: true
-    });
-
-    // ==================== SLIDE 2: ĐỐ BÉ CÂY CẦN GÌ? ====================
-    const slide2 = pptx.addSlide();
-    slide2.background = { color: 'E0F2FE' }; // Sky blue pastel
-    
-    slide2.addText(`ĐỐ BÉ: ${lesson.topic.toUpperCase()} CẦN GÌ ĐỂ LỚN? ❓`, {
-      x: 0.5, y: 0.5, w: '90%', h: 0.8,
-      fontSize: 36, fontFace: FONT_TITLE, color: '0369A1', bold: true, align: 'center'
-    });
-
-    if (base64Images[1] || base64Images[0]) {
-      const img = base64Images[1] || base64Images[0];
+    for (let i = 0; i < slidesData.length; i++) {
+      const slideItem = slidesData[i];
+      const slide = pptx.addSlide();
+      const img = base64Images[i] || getFallbackPreschoolImage(i);
       const isB64 = img.startsWith('data:image');
-      slide2.addImage({
-        [isB64 ? 'data' : 'path']: img,
-        x: 1.5, y: 1.5, w: 10.3, h: 4.6,
-        rounding: true
-      });
+      const imgObj = { [isB64 ? 'data' : 'path']: img };
+
+      const layoutType = slideItem.layout_type || 'COVER';
+
+      if (layoutType === 'COVER') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: 0.4, w: 12.33, h: 6.7, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 2 } });
+        slide.addText(slideItem.header_tag || '🎓 TRƯỜNG MẦM NON SƯƠNG MAI', { x: 4.2, y: 0.8, w: 4.9, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'DCFCE7' }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+        slide.addText(slideItem.title, { x: 1.0, y: 1.6, w: 11.33, h: 1.4, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.subtitle || '', { x: 1.5, y: 3.2, w: 10.33, h: 0.8, fontSize: 20, fontFace: FONT_BODY, color: '475569', align: 'center' });
+        if (slideItem.pill_badges) {
+          const badges = slideItem.pill_badges;
+          badges.forEach((b, idx) => {
+            slide.addText(b, { x: 1.5 + idx * 3.6, y: 4.8, w: 3.3, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'FFFFFF' }, line: { color: 'A7F3D0', width: 1.5 }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+          });
+        }
+      } else if (layoutType === 'DARK_HERO') {
+        slide.background = { color: COLOR_DARK_GREEN };
+        slide.addText(slideItem.pill_badges?.[0] || '🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ', { x: 4.2, y: 1.2, w: 4.9, h: 0.6, fontSize: 16, fontFace: FONT_TITLE, color: 'FFFFFF', fill: { color: '166534' }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+        slide.addText(slideItem.title, { x: 1.0, y: 2.2, w: 11.33, h: 1.5, fontSize: 42, fontFace: FONT_TITLE, color: COLOR_GOLD, bold: true, align: 'center' });
+        slide.addText(slideItem.subtitle || '', { x: 1.5, y: 4.2, w: 10.33, h: 1.5, fontSize: 22, fontFace: FONT_BODY, color: 'FEF3C7', align: 'center', lineSpacing: 32 });
+      } else if (layoutType === 'GRID_4_CARDS') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const cards = slideItem.cards_data || [];
+        cards.forEach((c, idx) => {
+          const xPos = 0.8 + idx * 3.0;
+          slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.8, w: 2.7, h: 4.8, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
+          slide.addText(c.icon || '🌱', { x: xPos + 0.85, y: 2.2, w: 1.0, h: 1.0, fontSize: 28, align: 'center', fill: { color: 'F0FDF4' }, shape: pptx.ShapeType.roundRect });
+          slide.addText(c.title, { x: xPos + 0.2, y: 3.4, w: 2.3, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(c.desc, { x: xPos + 0.2, y: 4.1, w: 2.3, h: 2.2, fontSize: 13, fontFace: FONT_BODY, color: '334155', align: 'center' });
+        });
+      } else if (layoutType === 'TIMELINE_4_STEPS') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addShape(pptx.ShapeType.line, { x: 1.5, y: 4.0, w: 10.3, h: 0, line: { color: '86EFAC', width: 4 } });
+        const steps = slideItem.steps_data || [];
+        steps.forEach((s, idx) => {
+          const xPos = 0.8 + idx * 3.0;
+          const isTop = idx % 2 === 1;
+          const yPos = isTop ? 1.6 : 4.4;
+          slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: yPos, w: 2.7, h: 2.2, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
+          slide.addText(s.title, { x: xPos + 0.1, y: yPos + 0.2, w: 2.5, h: 0.5, fontSize: 16, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(s.desc, { x: xPos + 0.1, y: yPos + 0.7, w: 2.5, h: 1.3, fontSize: 12, fontFace: FONT_BODY, color: '334155', align: 'center' });
+        });
+      } else if (layoutType === 'IMAGE_CARDS_3') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const cards = slideItem.cards_data || [];
+        for (let idx = 0; idx < cards.length; idx++) {
+          const c = cards[idx];
+          const xPos = 0.8 + idx * 4.0;
+          slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.6, w: 3.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
+          const cardImg = c.image_url ? await toBase64(c.image_url) : img;
+          const cardImgObj = { [cardImg.startsWith('data:image') ? 'data' : 'path']: cardImg.startsWith('data:image') ? cardImg : img };
+          slide.addImage({ ...cardImgObj, x: xPos + 0.15, y: 1.75, w: 3.4, h: 2.4 });
+          slide.addText(c.title, { x: xPos + 0.2, y: 4.3, w: 3.3, h: 0.5, fontSize: 18, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(c.desc, { x: xPos + 0.2, y: 4.8, w: 3.3, h: 1.6, fontSize: 13, fontFace: FONT_BODY, color: '334155', align: 'center' });
+        }
+      } else if (layoutType === 'TWO_COLUMN_CARDS') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const cards = slideItem.cards_data || [];
+        cards.forEach((c, idx) => {
+          const xPos = 0.8 + idx * 6.0;
+          slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.6, w: 5.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
+          slide.addText(`${c.icon || '🌲'} ${c.title}`, { x: xPos + 0.3, y: 1.9, w: 5.1, h: 0.6, fontSize: 22, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+          slide.addText(c.desc, { x: xPos + 0.3, y: 2.6, w: 5.1, h: 3.7, fontSize: 15, fontFace: FONT_BODY, color: '334155', lineSpacing: 24 });
+        });
+      } else if (layoutType === 'LIST_ACCENT_IMAGE') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const points = slideItem.content_points || [];
+        points.forEach((pt, idx) => {
+          const yPos = 1.6 + idx * 1.25;
+          slide.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: yPos, w: 6.2, h: 1.1, rectRadius: 0.05, fill: { color: 'FFFFFF' }, line: { color: 'F1F5F9', width: 1 } });
+          slide.addShape(pptx.ShapeType.rect, { x: 0.8, y: yPos, w: 0.15, h: 1.1, fill: { color: '16A34A' } });
+          slide.addText(pt, { x: 1.1, y: yPos + 0.1, w: 5.7, h: 0.9, fontSize: 13, fontFace: FONT_BODY, color: '334155' });
+        });
+        slide.addImage({ ...imgObj, x: 7.3, y: 1.6, w: 5.0, h: 5.0, rounding: true });
+      } else if (layoutType === 'NUMBERED_STEPS') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const steps = slideItem.steps_data || [];
+        steps.forEach((s, idx) => {
+          const yPos = 1.6 + idx * 1.35;
+          slide.addShape(pptx.ShapeType.roundRect, { x: 1.5, y: yPos, w: 10.3, h: 1.2, rectRadius: 0.08, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
+          slide.addText(`${s.step_num || idx + 1}`, { x: 1.8, y: yPos + 0.25, w: 0.7, h: 0.7, fontSize: 24, fontFace: FONT_TITLE, color: '16A34A', align: 'center', bold: true });
+          slide.addText(`${s.title}: ${s.desc}`, { x: 2.7, y: yPos + 0.15, w: 8.8, h: 0.9, fontSize: 15, fontFace: FONT_BODY, color: '334155' });
+        });
+        if (slideItem.subtitle) {
+          slide.addText(slideItem.subtitle, { x: 1.5, y: 5.8, w: 10.3, h: 0.8, fontSize: 16, fontFace: FONT_TITLE, color: '15803D', fill: { color: 'FFFFFF' }, line: { color: '86EFAC', width: 1.5 }, align: 'center', shape: pptx.ShapeType.roundRect });
+        }
+      } else if (layoutType === 'SPLIT_STORY_IMAGE') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 1.2, w: 5.5, h: 0.8, fontSize: 34, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        slide.addText(slideItem.subtitle || '', { x: 0.8, y: 2.2, w: 5.5, h: 4.2, fontSize: 18, fontFace: FONT_BODY, color: '334155', lineSpacing: 28 });
+        slide.addImage({ ...imgObj, x: 6.6, y: 0.5, w: 6.2, h: 6.5 });
+      } else if (layoutType === 'STAT_CALLOUT') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const stat = slideItem.stat_highlight;
+        slide.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: 1.6, w: 11.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 2 } });
+        if (stat) {
+          slide.addShape(pptx.ShapeType.roundRect, { x: 1.2, y: 2.0, w: 4.0, h: 4.2, rectRadius: 0.1, fill: { color: 'BBF7D0' } });
+          slide.addText(stat.number, { x: 1.2, y: 2.8, w: 4.0, h: 1.2, fontSize: 54, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(stat.label, { x: 1.2, y: 4.2, w: 4.0, h: 0.6, fontSize: 20, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+          slide.addText(stat.hero_title, { x: 5.6, y: 2.2, w: 6.5, h: 0.8, fontSize: 26, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+          slide.addText(stat.hero_desc, { x: 5.6, y: 3.1, w: 6.5, h: 3.0, fontSize: 18, fontFace: FONT_BODY, color: '334155', lineSpacing: 28 });
+        }
+      } else if (layoutType === 'HERO_OVERLAY') {
+        slide.addImage({ ...imgObj, x: 0, y: 0, w: 13.33, h: 7.5 });
+        slide.addShape(pptx.ShapeType.roundRect, { x: 1.5, y: 1.5, w: 10.33, h: 4.5, rectRadius: 0.15, fill: { color: 'FFFFFF' } });
+        slide.addText(slideItem.title, { x: 1.8, y: 2.0, w: 9.7, h: 1.0, fontSize: 36, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.subtitle || '', { x: 2.0, y: 3.2, w: 9.3, h: 2.2, fontSize: 20, fontFace: FONT_BODY, color: '334155', align: 'center', lineSpacing: 30 });
+      } else if (layoutType === 'OUTRO_PRAISE') {
+        slide.background = { color: 'FEF9C3' };
+        slide.addShape(pptx.ShapeType.roundRect, { x: 0.5, y: 0.4, w: 12.33, h: 6.7, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'FEF08A', width: 2 } });
+        slide.addText(slideItem.title, { x: 1.0, y: 1.8, w: 11.33, h: 1.2, fontSize: 44, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true, align: 'center' });
+        slide.addText(slideItem.subtitle || '', { x: 1.5, y: 3.2, w: 10.33, h: 1.0, fontSize: 22, fontFace: FONT_BODY, color: '475569', align: 'center' });
+        if (slideItem.pill_badges?.[0]) {
+          slide.addText(slideItem.pill_badges[0], { x: 2.2, y: 4.8, w: 8.9, h: 0.9, fontSize: 22, fontFace: FONT_TITLE, color: 'CA8A04', fill: { color: 'FEF9C3' }, line: { color: 'FDE047', width: 2 }, align: 'center', bold: true, shape: pptx.ShapeType.roundRect });
+        }
+      } else if (layoutType === 'IMAGE_SOURCES') {
+        slide.background = { color: COLOR_LIGHT_BG };
+        slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_DARK_GREEN, bold: true });
+        const sources = slideItem.image_sources || [];
+        sources.forEach((srcItem, idx) => {
+          const yPos = 1.6 + idx * 1.3;
+          slide.addShape(pptx.ShapeType.line, { x: 0.8, y: yPos + 1.2, w: 11.7, h: 0, line: { color: 'CBD5E1', width: 1 } });
+          const srcImg = srcItem.url ? base64Images[idx] || img : img;
+          const srcImgObj = { [srcImg.startsWith('data:image') ? 'data' : 'path']: srcImg };
+          slide.addImage({ ...srcImgObj, x: 0.8, y: yPos, w: 1.6, h: 1.0 });
+          slide.addText(srcItem.url, { x: 2.6, y: yPos + 0.1, w: 9.5, h: 0.4, fontSize: 13, fontFace: FONT_BODY, color: '334155' });
+          slide.addText(`Source: ${srcItem.source}`, { x: 2.6, y: yPos + 0.5, w: 9.5, h: 0.4, fontSize: 13, fontFace: FONT_BODY, color: '4F46E5' });
+        });
+      }
     }
 
-    slide2.addText("☀️ Ánh Nắng  •  💧 Nước Mát  •  🪴 Đất Mùn  •  💨 Không Khí", {
-      x: 0.5, y: 6.4, w: '90%', h: 0.6,
-      fontSize: 26, fontFace: FONT_TITLE, color: '0F172A', bold: true, align: 'center'
-    });
-
-    // ==================== SLIDE 3: BÉ CÙNG THỰC HÀNH ====================
-    const slide3 = pptx.addSlide();
-    slide3.background = { color: 'DCFCE7' }; // Fresh green pastel
-
-    slide3.addText(`👐 BÉ CÙNG GIEO HẠT NHÉ!`, {
-      x: 0.5, y: 0.5, w: '90%', h: 0.8,
-      fontSize: 36, fontFace: FONT_TITLE, color: '15803D', bold: true, align: 'center'
-    });
-
-    if (base64Images[2] || base64Images[0]) {
-      const img = base64Images[2] || base64Images[0];
-      const isB64 = img.startsWith('data:image');
-      slide3.addImage({
-        [isB64 ? 'data' : 'path']: img,
-        x: 0.8, y: 1.5, w: 6.0, h: 5.0,
-        rounding: true
-      });
-    }
-
-    const practiceSteps = [
-      "1️⃣  Lót bông gòn vào cốc",
-      "2️⃣  Thấm một chút nước sạch",
-      "3️⃣  Đặt hạt đỗ vào ngủ ngon"
-    ];
-    slide3.addText(practiceSteps.join("\n\n"), {
-      x: 7.2, y: 2.0, w: 5.5, h: 4.0,
-      fontSize: 28, fontFace: FONT_TITLE, color: '166534', bold: true, lineSpacing: 36
-    });
-
-    // ==================== SLIDE 4: KHEN NGỢI & DẶN DÒ ====================
-    const slide4 = pptx.addSlide();
-    slide4.background = { color: 'FEF9C3' }; // Warm yellow pastel
-
-    slide4.addText("👏 BÉ GIỎI LẮM! HOAN HÔ CẢ LỚP!", {
-      x: 0.5, y: 0.6, w: '90%', h: 1.0,
-      fontSize: 40, fontFace: FONT_TITLE, color: 'EA580C', bold: true, align: 'center'
-    });
-
-    if (base64Images[3] || base64Images[0]) {
-      const img = base64Images[3] || base64Images[0];
-      const isB64 = img.startsWith('data:image');
-      slide4.addImage({
-        [isB64 ? 'data' : 'path']: img,
-        x: 3.2, y: 1.8, w: 7.0, h: 4.4,
-        rounding: true
-      });
-    }
-
-    slide4.addText("Hằng ngày bé nhớ chăm sóc cây mau lớn nha!", {
-      x: 0.5, y: 6.4, w: '90%', h: 0.6,
-      fontSize: 24, fontFace: FONT_TITLE, color: '475569', bold: true, align: 'center'
-    });
-
-    // Save File
     const filename = `GiaoAn_${lesson.topic.replace(/\s+/g, '_')}_SmartTV.pptx`;
     await pptx.writeFile({ fileName: filename });
   } catch (err) {
-    console.error('Lỗi xuất PowerPoint:', err);
+    console.error('Lỗi khi xuất file PowerPoint:', err);
     alert('Không thể xuất file PowerPoint: ' + (err as any)?.message);
   }
 }
