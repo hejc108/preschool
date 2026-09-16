@@ -122,6 +122,172 @@ export function getThemeMatrix(themeCode?: string): ThemeColorPalette {
   return THEME_MATRIX[themeCode] || THEME_MATRIX.THUC_VAT;
 }
 
+export interface ThemeArchetypeInfo {
+  archetypeType: 'SCIENCE_EXPLORATION' | 'ROLEPLAY_SITUATIONS' | 'QUIZ_TRUE_FALSE';
+  archetypeName: string;
+  storyTitle: string;
+  openerType: 'RHYMING_RIDDLE' | 'SOUND_SIMULATION' | 'MOVEMENT_GAME';
+  openerHeadline: string;
+  openerDetail: string;
+  localizedElements: string[];
+  calloutDialogue: {
+    teacherAsk: string;
+    childAnswer: string;
+  };
+}
+
+export function getThemeArchetype(themeCode?: string): ThemeArchetypeInfo {
+  const code = themeCode || 'THUC_VAT';
+
+  if (code === 'THUC_VAT' || code === 'DONG_VAT' || code === 'NUOC_HTTN') {
+    if (code === 'THUC_VAT') {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: '🔬 Thí Nghiệm Bí Mật Của Hạt Mầm Xanh',
+        openerType: 'RHYMING_RIDDLE',
+        openerHeadline: '🧩 Câu Đố Vần Điệu Mở Đầu',
+        openerDetail: '🗣️ Cô đố bé: "Cây gì lá nhỏ cành xanh - Cho hoa dâng quả ngọt lành cho bé?" Trẻ cùng nhau suy đoán bí mật của hạt mầm.',
+        localizedElements: ['Hoa mai vàng', 'Hoa đào hồng', 'Vườn rau sạch sân trường Sương Mai', 'Cây lúa vàng chín rộ', 'Bánh chưng lá dong'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Các nhà khoa học tí hon ơi! Đố bé biết vì sao cây lại xanh lá nhỉ?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, vì cây được uống nước mát và đón ánh nắng mặt trời ạ!"'
+        }
+      };
+    } else if (code === 'DONG_VAT') {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: '🔎 Hành Trình Khám Phá Thế Giới Động Vật',
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🏃 Trò Chơi Vận Động Mô Phỏng',
+        openerDetail: '🐾 Bé cùng nhún nhảy làm chú thỏ con tai dài vẫy vẫy, bắt chước dáng đi của chú trâu vàng đồng quê.',
+        localizedElements: ['Chú trâu vàng đồng quê', 'Con cò trắng bay la', 'Con mèo hen góc bếp', 'Đàn gà con lông vàng'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Đố các bạn nhỏ biết chú thỏ thích ăn củ gì nhất nào?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, chú thỏ thích ăn củ cà rốt cam giòn ngon ạ!"'
+        }
+      };
+    } else {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: '🌈 Kỳ Diệu Nước & Các Hiện Tượng Tự Nhiên',
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🎧 Âm Thanh Mô Phỏng Tự Nhiên',
+        openerDetail: '☔ "Tí tách! Tí tách! Tiếng giọt mưa rơi xuống tán lá reo ca!" Trẻ lắng nghe âm thanh và đoán hiện tượng thời tiết.',
+        localizedElements: ['Giọt sương mai trên lá', 'Cầu vồng rực rỡ sau mưa', 'Ánh nắng ban mai ấm áp', 'Dòng suối mát lành'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Sau cơn mưa rào, trên bầu trời xuất hiện dải cầu vồng mấy màu các bé nhỉ?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, cầu vồng có 7 màu rực rỡ lấp lánh ạ!"'
+        }
+      };
+    }
+  } else if (code === 'GIAO_THONG' || code === 'QUE_HUONG') {
+    if (code === 'GIAO_THONG') {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: '🚨 Thử Thách Hiệp Sĩ Giao Thông An Toàn',
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🔊 Phản Xạ Âm Thanh Giao Thông',
+        openerDetail: '🚗 "Bíp bíp! Xình xịch! Tiếng còi xe ô tô và tàu hỏa reo vang!" Bé tinh mắt nhận diện phương tiện và biển báo.',
+        localizedElements: ['Mũ bảo hiểm xe máy đạt chuẩn', 'Vạch sang đường cho người đi bộ', 'Chú cảnh sát giao thông còi hiệu', 'Xe bus trường Sương Mai'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Đèn đỏ bật sáng trên đường, đội hiệp sĩ giao thông sẽ làm gì?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, ĐÃ ĐÈN ĐỎ LÀ BẮT BUỘC PHẢI DỪNG LẠI NGAY Ạ!"'
+        }
+      };
+    } else {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: '🇻🇳 Thử Thách Hiệp Sĩ Quê Hương - Bác Hồ Kính Yêu',
+        openerType: 'RHYMING_RIDDLE',
+        openerHeadline: '🧩 Câu Đố Vần Điệu Yêu Nước',
+        openerDetail: '🗣️ "Bông hoa nào nở trong hồ - Tỏa hương thơm ngát Bác Hồ yêu thương?" Trẻ cùng giải đố bài ca quê hương.',
+        localizedElements: ['Hoa sen hồng ngát hương', 'Lăng Bác Hồ kính yêu', 'Cờ đỏ sao vàng tung bay', 'Áo dài truyền thống Việt Nam'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Bác Hồ yêu thương ai nhất trong cả nước chúng mình?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, Bác Hồ yêu thương các cháu thiếu niên mầm non nhất ạ!"'
+        }
+      };
+    }
+  } else {
+    if (code === 'NGHE_NGHIEP') {
+      return {
+        archetypeType: 'ROLEPLAY_SITUATIONS',
+        archetypeName: 'Nhân vật nhập vai & Xử lý tình huống',
+        storyTitle: '👩‍⚕️ Biệt Đội Nhập Vai Khám Phá Nghề Nghiệp',
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🎭 Nhập Vai Hành Quân & Khám Bệnh',
+        openerDetail: '🎖️ Bé khoác áo chú bộ đội hành quân nghiêm trang hoặc đeo ống nghe làm bác sĩ tí hon chữa bệnh.',
+        localizedElements: ['Chú bộ đội Cụ Hồ mũ cờ sao vàng', 'Cô giáo mầm non Sương Mai', 'Bác sĩ áo blouse trắng', 'Kỹ sư công trình mũ bảo hộ'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Khi có người cần giúp đỡ, chú bộ đội Cụ Hồ và bác sĩ sẽ làm gì?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, chú bộ đội và bác sĩ sẵn sàng giúp đỡ và chăm sóc mọi người ạ!"'
+        }
+      };
+    } else if (code === 'GIA_DINH') {
+      return {
+        archetypeType: 'ROLEPLAY_SITUATIONS',
+        archetypeName: 'Nhân vật nhập vai & Xử lý tình huống',
+        storyTitle: '🏡 Nhập Vai Bữa Cơm Gia Đình Yêu Thương',
+        openerType: 'RHYMING_RIDDLE',
+        openerHeadline: '🧩 Câu Đố Vần Điệu Ấm Cúng',
+        openerDetail: '🗣️ "Ai nấu cơm ngon, chăm bé ngoan - Yêu thương che chở suốt bao ngày?" Trẻ đoán câu đố về Bố Mẹ.',
+        localizedElements: ['Bữa cơm gia đình Việt Nam sum vầy', 'Mâm ngũ quả ngày Tết', 'Ngôi nhà ấm cúng', 'Bánh chưng xanh gói lá dong'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Khi đi học về, bé nhập vai ngoan ngoãn sẽ chào ai đầu tiên?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, con khoanh tay lễ phép chào Ông Bà và Bố Mẹ ạ!"'
+        }
+      };
+    } else if (code === 'BAN_THAN') {
+      return {
+        archetypeType: 'ROLEPLAY_SITUATIONS',
+        archetypeName: 'Nhân vật nhập vai & Xử lý tình huống',
+        storyTitle: '😃 Biệt Đội Cảm Xúc & 5 Giác Quan',
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🏃 Vận Động Cơ Thể & Nụ Cười',
+        openerDetail: '🖐️ Bé lắc lư cái đầu, xòe 10 ngón tay nhỏ xinh và cười thật tươi thể hiện các cảm xúc vui buồn.',
+        localizedElements: ['Nụ cười rạng rỡ của bé', 'Đôi bàn tay nhỏ ngoan', 'Trái tim yêu thương', '5 giác quan tinh mắt'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Khi gặp niềm vui hoặc được cô khen, gương mặt bé thể hiện thế nào?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, bé mỉm cười rạng rỡ và mắt sáng long lanh ạ!"'
+        }
+      };
+    } else if (code === 'LOP_MOT') {
+      return {
+        archetypeType: 'ROLEPLAY_SITUATIONS',
+        archetypeName: 'Nhân vật nhập vai & Xử lý tình huống',
+        storyTitle: '🎒 Nhập Vai Học Sinh Lớp 1 Tự Tin',
+        openerType: 'RHYMING_RIDDLE',
+        openerHeadline: '🧩 Câu Đố Bạn Nhỏ Đeo Ba Lô',
+        openerDetail: '🗣️ "Cây bút chì nhỏ, cuốn sách tô màu - Đeo chiếc ba lô bước vào trường mới?" Trẻ háo hức nhập vai làm anh chị Lớp 1.',
+        localizedElements: ['Ba lô siêu nhẹ', 'Bút chì & thước kẻ', 'Sách tô màu & bảng đen', 'Đồng hồ báo thức đúng giờ'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Để làm học sinh Lớp 1 ngoan, tối đến bé cần chuẩn bị đồ dùng gì?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, bé tự soạn sách vở, hộp bút vào ba lô gọn gàng ạ!"'
+        }
+      };
+    } else {
+      return {
+        archetypeType: 'ROLEPLAY_SITUATIONS',
+        archetypeName: 'Nhân vật nhập vai & Xử lý tình huống',
+        storyTitle: '🏫 Nhập Vai Bé Ngoan Trường Sương Mai',
+        openerType: 'RHYMING_RIDDLE',
+        openerHeadline: '🧩 Câu Đố Mái Trường Thân Yêu',
+        openerDetail: '🗣️ "Trường gì rợp mát hoa tươi - Cô yêu bạn quý nụ cười hân hoan?" Trẻ tự hào kể về Trường Mầm Non Sương Mai.',
+        localizedElements: ['Góc sân trường Sương Mai xanh mát', 'Đồ chơi dân gian', 'Góc thư viện mầm non', 'Cờ bé ngoan khen tặng'],
+        calloutDialogue: {
+          teacherAsk: '🗣️ Cô hỏi: "Đến lớp Sương Mai, khi chơi xong đồ chơi bé phải làm gì?"',
+          childAnswer: '👦 Trẻ đáp: "Thưa cô, bé tự giác xếp đồ chơi ngăn nắp vào giá kệ ạ!"'
+        }
+      };
+    }
+  }
+}
+
 export const GRADE_LEVEL_MAP: Record<GradeLevelCode, { label: string; duration: string }> = {
   NHA_TRE: { label: 'Nhà Trẻ (12-36 tháng)', duration: '12-15 phút' },
   MAM: { label: 'Mầm (3-4 tuổi)', duration: '15-20 phút' },

@@ -44,3 +44,30 @@ Bất kể chủ đề nào được chọn, bộ slide sinh ra phải tuân th�
 ## 4. QUY TẮC PROMPT CHO API HÌNH ẢNH (IMAGE ENGINE RULES)
 Khi tạo prompt sinh ảnh tự động (qua pollinations hoặc AI image tool), TUYỆT ĐỐI KHÔNG để chữ/văn bản xuất hiện trên ảnh. Luôn áp dụng công thức sau:
 `"cute preschool 3D cartoon style, soft clay or papercraft look, vibrant [MÀU THEO MA TRẬN CHỦ ĐỀ], cheerful kindergarten kids, no text, no letters, high contrast, clean background, 16:9 ratio"`
+
+---
+
+## 5. CƠ CHẾ SINH NỘI DUNG BIẾN THIÊN (DYNAMIC CONTENT ENGINE)
+
+Để tránh bài giảng bị trùng lặp công thức giữa các chủ đề:
+
+### 1. Phân loại Archetype Bài Học
+- **Tự nhiên / Khoa học (THUC_VAT, DONG_VAT, NUOC_HTTN):** Cốt truyện *Thí nghiệm & Khám phá bí ẩn* (Hành trình giải mã bí mật thiên nhiên...).
+- **Xã hội / Cảm xúc / Nghề nghiệp / Bản thân / Gia đình / Trường MN / Lớp 1 (BAN_THAN, GIA_DINH, NGHE_NGHIEP, TRUONG_MN, LOP_MOT):** Cốt truyện *Nhân vật nhập vai & Xử lý tình huống* (Biệt đội nhập vai bác sĩ, chú bộ đội, bữa cơm gia đình...).
+- **Kỹ năng sống / Quy tắc / Giao thông / Quê hương (GIAO_THONG, QUE_HUONG):** Kịch bản *Trò chơi Đố vui phản xạ Đúng - Sai* (Hiệp sĩ giao thông, thử thách tinh mắt...).
+
+### 2. Ngôn ngữ & Tương tác (Interactive Dialogue)
+- **Hoạt động mở đầu linh hoạt:** Luân phiên áp dụng:
+  - *Câu đố vần điệu (Rhyming Riddle)*
+  - *Âm thanh mô phỏng (Sound Effects Simulation)*
+  - *Trò chơi vận động tại chỗ (Movement Game)*
+- **Thẻ tương tác Cô & Trẻ (Callout Box):** Bắt buộc lồng ghép kịch bản lời thoại gợi mở dạng:
+  `🗣️ Cô hỏi: ... | 👦 Trẻ đáp: ...`
+
+### 3. Tính bản địa hóa Việt Nam (Localization)
+- Tự động lồng ghép hình ảnh thực tế gần gũi với trẻ em Việt Nam:
+  - *Hoa mai vàng, hoa đào hồng, bánh chưng xanh, cây lúa vàng, vườn rau sạch sân trường Sương Mai.*
+  - *Chú bộ đội Cụ Hồ mũ cờ sao vàng, cô giáo mầm non Sương Mai, bác sĩ, kỹ sư.*
+  - *Mũ bảo hiểm xe máy đạt chuẩn, vạch sang đường, chú cảnh sát giao thông.*
+  - *Hoa sen ngát hương, Lăng Bác Hồ, cờ đỏ sao vàng, áo dài Việt Nam.*
+

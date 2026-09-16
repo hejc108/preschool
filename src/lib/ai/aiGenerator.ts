@@ -1,7 +1,8 @@
 import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType, PreschoolAISchemaResponse } from '../types/schema';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
-  SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX 
+  SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
+  getThemeArchetype 
 } from '../utils/curriculumHelper';
 
 /**
@@ -33,7 +34,18 @@ Nhiệm vụ của bạn là lập kế hoạch bài dạy chi tiết, hấp d�
 Nếu teaching_type == 'PROJECT_BASED':
 - Phân bổ hoạt động thành chuỗi 5 ngày trong tuần (Thứ 2 -> Thứ 6) xoay quanh việc hoàn thiện 01 sản phẩm thực tế của trẻ.
 - Tích hợp tự nhiên các môn: Khoa học (S), Công nghệ (T), Kỹ thuật (E), Nghệ thuật (A), Toán học (M).
-- Soạn 01 đoạn thông báo ngắn gửi phụ huynh (Parent Project Card) để cùng chuẩn bị học liệu tại nhà.`;
+- Soạn 01 đoạn thông báo ngắn gửi phụ huynh (Parent Project Card) để cùng chuẩn bị học liệu tại nhà.
+
+[CƠ CHẾ SINH NỘI DUNG BIẾN THIÊN (DYNAMIC CONTENT ENGINE)]
+1. Archetype Bài Học Linh Hoạt:
+   - Tự nhiên / Khoa học (THUC_VAT, DONG_VAT, NUOC_HTTN): Áp dụng cốt truyện "Thí nghiệm & Khám phá bí ẩn".
+   - Xã hội / Cảm xúc / Nghề nghiệp / Bản thân / Gia đình / Trường MN / Lớp 1 (BAN_THAN, GIA_DINH, NGHE_NGHIEP, TRUONG_MN, LOP_MOT): Áp dụng cốt truyện "Nhân vật nhập vai & Xử lý tình huống".
+   - Kỹ năng sống / Quy tắc / Giao thông / Quê hương (GIAO_THONG, QUE_HUONG): Áp dụng kịch bản "Trò chơi Đố vui phản xạ Đúng - Sai".
+2. Ngôn ngữ & Thẻ Tương tác Cô - Trẻ (Callout Box):
+   - Hoạt động mở đầu luân phiên: Sử dụng câu đố có vần điệu, âm thanh mô phỏng hoặc trò chơi vận động tại chỗ (không chỉ dùng bài hát).
+   - Bắt buộc lồng ghép kịch bản lời thoại gợi mở dạng thẻ tương tác: "🗣️ Cô hỏi: ... | 👦 Trẻ đáp: ..."
+3. Bản địa hóa Việt Nam (Localization):
+   - Tự động lồng ghép hình ảnh Việt Nam gần gũi (hoa mai, hoa đào, bánh chưng, chú bộ đội Cụ Hồ, mũ bảo hiểm xe máy, hoa sen, lăng Bác, góc sân trường Sương Mai...).`;
 
 /**
  * Generates Pollinations.ai 3D Cartoon Illustration Image URL (Free 0 VNĐ)
@@ -128,13 +140,10 @@ export function generateRulesCompliantSlideDeck(params: {
   const safeTopic = topic.trim() || 'Khám Phá Bài Học Trực Quan';
   const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
   const themeMatrix = getThemeMatrix(theme_code);
+  const archetype = getThemeArchetype(theme_code);
   const themeName = THEME_NAME_MAP[theme_code] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
-  const normSub = subject.toUpperCase();
   const keywords = themeMatrix.imageStyleKeywords;
-
-  const lowerTopic = safeTopic.toLowerCase();
-  const isPlantTopic = lowerTopic.includes('cây') || lowerTopic.includes('thực vật') || lowerTopic.includes('hạt mầm') || lowerTopic.includes('hoa') || lowerTopic.includes('quả');
 
   // Slide 1: COVER
   const s1: AILessonSlide = {
@@ -142,7 +151,7 @@ export function generateRulesCompliantSlideDeck(params: {
     layout_type: 'COVER',
     header_tag: '🎓 TRƯỜNG MẦM NON SƯƠNG MAI',
     title: safeTopic,
-    subtitle: `Giáo án ${subjectName} trực quan dành cho trẻ mầm non`,
+    subtitle: `Giáo án ${subjectName} • ${archetype.archetypeName}`,
     pill_badges: [`🎓 Khối ${gradeInfo.label}`, `⏱ Thời lượng: ${gradeInfo.duration}`, `${themeMatrix.defaultIcon} Chủ đề: ${themeName}`],
     content_points: [`Khối: ${gradeInfo.label}`, `Thời lượng: ${gradeInfo.duration}`, `Chủ đề: ${themeName}`],
     image_prompt: `Preschool children learning about ${safeTopic}, bright classroom`,
@@ -153,191 +162,154 @@ export function generateRulesCompliantSlideDeck(params: {
   const s2: AILessonSlide = {
     slide_number: 2,
     layout_type: 'DARK_HERO',
-    pill_badges: ['🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ (ENGAGE)'],
-    title: isPlantTopic ? 'Điều Kỳ Diệu Của Hạt Mầm' : `Điều Kỳ Diệu Về ${safeTopic}`,
-    subtitle: framework.pedagogical_guidelines.songs_or_poems?.[0] 
-      ? `Cùng hát vang bài ca "${framework.pedagogical_guidelines.songs_or_poems[0]}" và lắng nghe câu chuyện sinh động rực rỡ chào đón bài học mới.`
-      : `Cùng hát vang bài ca vui nhộn và lắng nghe câu chuyện sinh động chào đón bài học mới!`,
-    content_points: ['Gắn kết và đặt vấn đề gây hứng thú cho trẻ'],
-    image_prompt: `Magic glowing educational concept vector style`,
+    pill_badges: [`🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ (${archetype.archetypeName.toUpperCase()})`],
+    title: archetype.storyTitle,
+    subtitle: `${archetype.openerHeadline}\n${archetype.openerDetail}`,
+    content_points: ['Gắn kết và đặt vấn đề gây hứng thú cho trẻ qua tương tác linh hoạt'],
+    image_prompt: `Magic glowing educational illustration about ${safeTopic}`,
     image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords)
   };
 
   // Slide 3: GRID_4_CARDS (5E - Explore)
-  let gridCards = [
-    { icon: themeMatrix.defaultIcon, title: 'Yếu Tố 1', desc: `Tìm hiểu điểm nổi bật nhất của đề tài ${safeTopic}.` },
-    { icon: '⭐', title: 'Yếu Tố 2', desc: 'Quan sát chi tiết hình dáng, màu sắc và âm thanh trực quan.' },
-    { icon: '🔍', title: 'Yếu Tố 3', desc: 'Trải nghiệm sờ nắn, đàm thoại đếm số lượng và so sánh.' },
-    { icon: '💡', title: 'Yếu Tố 4', desc: 'Phân loại đối tượng và rút ra kết luận sáng tạo của trẻ.' }
+  const gridCards = [
+    { icon: themeMatrix.defaultIcon, title: 'Điểm Trực Quan 1', desc: `Trẻ quan sát đặc điểm nổi bật nhất của đề tài ${safeTopic}.` },
+    { icon: '⭐', title: 'Điểm Trực Quan 2', desc: `Phân tích màu sắc, hình dáng và âm thanh thực tế (${archetype.localizedElements[0] || 'đồ dùng mầm non'}).` },
+    { icon: '🔍', title: 'Trải Nghiệm Thao Tác', desc: `Trẻ tự tay thao tác với học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng học tập'}.` },
+    { icon: '💡', title: 'Kết Luận Sáng Tạo', desc: 'Trẻ thảo luận nhóm, phân loại đối tượng và rút ra ghi nhớ bài học.' }
   ];
-
-  if (isPlantTopic) {
-    gridCards = [
-      { icon: '☀️', title: 'Ánh Nắng', desc: 'Mặt trời ấm áp sưởi ấm mầm xanh và giúp lá cây quang hợp để tạo chất dinh dưỡng mỗi ngày.' },
-      { icon: '💧', title: 'Nước Mát', desc: 'Nước tưới làm mềm hạt giống, giúp rễ cây hút dinh dưỡng từ đất để nuôi thân và lá luôn tươi tốt.' },
-      { icon: '⛰️', title: 'Đất Mùn', desc: 'Đất tơi xốp giữ chặt rễ cây đứng vững và chứa nguồn khoáng chất quý giá nuôi cây mau lớn.' },
-      { icon: '💨', title: 'Không Khí', desc: 'Cây xanh hít thở không khí trong lành để trao đổi chất, phát triển cành lá vươn cao.' }
-    ];
-  } else if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
-    gridCards = [
-      { icon: '🔢', title: 'Số Lượng', desc: 'Trẻ đếm chính xác nhóm đồ dùng theo số lượng quy định và nhận biết nhóm tương ứng.' },
-      { icon: '🔺', title: 'Hình Khối', desc: 'Nhận biết phân biệt hình tròn, hình vuông, hình tam giác, hình chữ nhật quanh bé.' },
-      { icon: '⚖️', title: 'So Sánh', desc: 'So sánh kích thước to - nhỏ, cao - thấp, dài - ngắn của các đối tượng trực quan.' },
-      { icon: '📦', title: 'Phân Loại', desc: 'Gộp và phân loại đối tượng theo 1-2 dấu hiệu đặc trưng rõ ràng.' }
-    ];
-  } else if (normSub.includes('LQCC') || normSub.includes('CHỮ CÁI')) {
-    gridCards = [
-      { icon: '⭕', title: 'Nét Cong', desc: 'Nhận biết nét cong tròn khép kín, nét cong hở trái, cong hở phải.' },
-      { icon: '📏', title: 'Nét Thẳng', desc: 'Phân biệt nét móc ngược, nét xiên trái, xiên phải và nét ngang.' },
-      { icon: '🔤', title: 'Ghép Chữ', desc: 'Thực hành ghép các nét rời để tạo thành chữ cái hoàn chỉnh.' },
-      { icon: '🔊', title: 'Phát Âm', desc: 'Luyện phát âm chuẩn khẩu hình chữ cái, không nói ngọng, nói lắp.' }
-    ];
-  } else if (normSub.includes('TAO_HINH') || normSub.includes('TẠO HÌNH')) {
-    gridCards = [
-      { icon: '🎨', title: 'Màu Sắc', desc: 'Phối kết hợp các mảng màu rực rỡ, hài hòa để tạo nên sản phẩm tươi sáng.' },
-      { icon: '✏️', title: 'Đường Nét', desc: 'Sử dụng nét vẽ uốn lượn, nét xiên, nét xoắn ốc khéo léo của đôi bàn tay.' },
-      { icon: '🖼️', title: 'Bố Cục', desc: 'Sắp xếp bố cục hình ảnh cân đối ở chính giữa trang giấy A4.' },
-      { icon: '✨', title: 'Sáng Tạo', desc: 'Vận dụng vật liệu mở tự nhiên trang trí thêm cho bức tranh sinh động.' }
-    ];
-  }
 
   const s3: AILessonSlide = {
     slide_number: 3,
     layout_type: 'GRID_4_CARDS',
-    title: isPlantTopic ? '⚙ Cây Xanh Cần Gì Để Lớn Lên?' : `⚙ Yếu Tố Cốt Lõi Của ${safeTopic}`,
+    title: `⚙ Yếu Tố Khám Phá Của ${safeTopic}`,
     cards_data: gridCards,
     content_points: gridCards.map(c => `${c.title}: ${c.desc}`),
-    image_prompt: `Educational 4 icons set layout for kindergarten learning`,
-    image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning`, 1024, 768, 3, keywords)
+    image_prompt: `Educational 4 icons set layout for kindergarten learning about ${safeTopic}`,
+    image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning about ${safeTopic}`, 1024, 768, 3, keywords)
   };
 
   // Slide 4: TIMELINE_4_STEPS (5E - Explain)
-  const timelineSteps = isPlantTopic ? [
-    { step_num: 1, title: '1. Hạt Giống', desc: 'Bé gieo hạt nhỏ xuống đất tơi xốp, hạt uống no nước rồi dần phình to.' },
-    { step_num: 2, title: '2. Nảy Mầm', desc: 'Chiếc mầm nhỏ nhú lên khỏi mặt đất, cắm chiếc rễ đầu tiên xuống lòng đất.' },
-    { step_num: 3, title: '3. Cây Con', desc: 'Cây bung hai lá mầm xanh non, thân cây vươn cao đón ánh nắng rực rỡ.' },
-    { step_num: 4, title: '4. Cây Trưởng Thành', desc: 'Cây sum suê cành lá, trổ ngàn hoa thơm và kết thành những quả ngọt ngào.' }
-  ] : [
-    { step_num: 1, title: '1. Quan Sát', desc: 'Trẻ cùng cô quan sát mẫu trực quan và đàm thoại tìm hiểu đặc điểm.' },
-    { step_num: 2, title: '2. Trải Nghiệm', desc: 'Trẻ tự tay thao tác với học liệu chuẩn bị theo nhóm 4-5 bạn.' },
-    { step_num: 3, title: '3. Luyện Tập', desc: 'Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức bài học.' },
-    { step_num: 4, title: '4. Sản Phẩm', desc: 'Hoàn thiện sản phẩm trải nghiệm và tự tin giới thiệu với các bạn.' }
+  const timelineSteps = [
+    { step_num: 1, title: '1. Quan Sát & Ghi Nhận', desc: `Trẻ quan sát mẫu trực quan (${archetype.localizedElements[1] || 'học liệu bài dạy'}) và lắng nghe hướng dẫn.` },
+    { step_num: 2, title: '2. Thao Tác Trực Tiếp', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'đồ dùng'} thực hành trải nghiệm.` },
+    { step_num: 3, title: '3. Phản Xạ Đồng Đội', desc: `Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức bài học.` },
+    { step_num: 4, title: '4. Giới Thiệu Sản Phẩm', desc: 'Trẻ tự tin trình bày sản phẩm trải nghiệm trước cô và các bạn.' }
   ];
 
   const s4: AILessonSlide = {
     slide_number: 4,
     layout_type: 'TIMELINE_4_STEPS',
-    title: isPlantTopic ? '🔄 Vòng Đời Kỳ Diệu Của Cây' : `🔄 Tiến Trình Vòng Đời & Các Bước Học`,
+    title: `🔄 Tiến Trình Vòng Đời & Các Bước Học`,
     steps_data: timelineSteps,
     content_points: timelineSteps.map(s => `${s.title}: ${s.desc}`),
-    image_prompt: `Growth timeline infographic cartoon`,
-    image_url: getPollinationsImageUrl(`Growth timeline infographic cartoon`, 1024, 768, 4, keywords)
+    image_prompt: `Growth timeline infographic cartoon for ${safeTopic}`,
+    image_url: getPollinationsImageUrl(`Growth timeline infographic cartoon for ${safeTopic}`, 1024, 768, 4, keywords)
   };
 
-  // Slide 5: IMAGE_CARDS_3
+  // Slide 5: IMAGE_CARDS_3 (Interactive Dialogue & Callout Box)
   const imageCards = [
-    { title: 'Hạt Nảy Mầm', desc: 'Hạt đỗ tách vỏ, mầm nhỏ hé nụ trắng vươn về phía có ánh sáng.', image_url: getPollinationsImageUrl('sprout germination stage cartoon', 600, 400, 5) },
-    { title: 'Cây Non Lớn Lên', desc: 'Cây mọc thêm nhiều lá xanh thẫm, thân cứng cáp đung đưa theo gió.', image_url: getPollinationsImageUrl('happy green sprout growing cute cartoon', 600, 400, 6) },
-    { title: 'Đơm Hoa Kết Trái', desc: 'Cây trĩu quả thơm ngon, lại tạo ra hạt giống cho mùa sau.', image_url: getPollinationsImageUrl('fruit tree with red apples watercolor cartoon', 600, 400, 7) }
+    { title: 'Thẻ Tương Tác 1', desc: `${archetype.calloutDialogue.teacherAsk}`, image_url: getPollinationsImageUrl(`${safeTopic} teacher presentation`, 600, 400, 5, keywords) },
+    { title: 'Thẻ Tương Tác 2', desc: `${archetype.calloutDialogue.childAnswer}`, image_url: getPollinationsImageUrl(`${safeTopic} happy kids responding`, 600, 400, 6, keywords) },
+    { title: 'Thẻ Trực Quan', desc: `Hình ảnh thực tế gần gũi: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, image_url: getPollinationsImageUrl(`${safeTopic} vietnamese preschool visual`, 600, 400, 7, keywords) }
   ];
 
   const s5: AILessonSlide = {
     slide_number: 5,
     layout_type: 'IMAGE_CARDS_3',
-    title: `🖼 Các Giai Đoạn Của Cây Xanh`,
+    title: `🖼 Kịch Bản Lời Thoại Tương Tác Cô & Trẻ`,
     cards_data: imageCards,
     content_points: imageCards.map(c => `${c.title}: ${c.desc}`),
     image_prompt: `3 stage illustrations of ${safeTopic}`,
-    image_url: imageCards[1].image_url
+    image_url: imageCards[0].image_url
   };
 
   // Slide 6: TWO_COLUMN_CARDS
   const twoColCards = [
-    { icon: '↓↓', title: 'Rễ Cây & Thân Cây', desc: 'Rễ cây: Nằm sâu dưới lòng đất, giống như những bàn tay nhỏ bám thật chắc để giữ cây không bị đổ khi gió bão và hút nước mát nuôi cây.\n\nThân cây: Là chiếc cột vững chãi vận chuyển nhựa và dinh dưỡng từ rễ tỏa đi khắp các cành lá trên cao.' },
-    { icon: '🍃', title: 'Cành, Lá, Hoa & Quả', desc: 'Cành & Lá: Xòe rộng như chiếc ô xanh hứng nắng mặt trời, hít thở và thanh lọc không khí trong lành.\n\nHoa & Quả: Hoa tỏa hương khoe sắc mời các bạn ong bướm đến thụ phấn, sau đó biến thành những quả ngọt mọng cho bé thưởng thức.' }
+    { icon: themeMatrix.defaultIcon, title: 'Nội Dung Trọng Tâm Cô Hướng Dẫn', desc: `Cô giới thiệu học liệu trực quan (${teacherMaterials.join(', ') || 'đồ dùng cô'}). Hướng dẫn trẻ quan sát và nắm vững quy trình bài học.` },
+    { icon: '✨', title: 'Hình Ảnh Bản Địa Hóa Gần Gũi', desc: `Bài học tích hợp các hình ảnh Việt Nam quen thuộc: ${archetype.localizedElements.join(', ')}. Giúp trẻ cảm nhận sâu sắc tình yêu quê hương đất nước.` }
   ];
 
   const s6: AILessonSlide = {
     slide_number: 6,
     layout_type: 'TWO_COLUMN_CARDS',
-    title: `🌲 Cấu Tạo Cơ Bản Của Cây Xanh`,
+    title: `🧩 Phân Tích Nội Dung & Hình Ảnh Thực Tế`,
     cards_data: twoColCards,
     content_points: twoColCards.map(c => `${c.title}: ${c.desc}`),
-    image_prompt: `Detailed plant anatomy structural breakdown diagram for kids`,
-    image_url: getPollinationsImageUrl('Detailed plant anatomy structural breakdown diagram for kids', 1024, 768, 8)
+    image_prompt: `Detailed structural breakdown diagram for kids about ${safeTopic}`,
+    image_url: getPollinationsImageUrl(`Detailed structural breakdown diagram for kids about ${safeTopic}`, 1024, 768, 8, keywords)
   };
 
   // Slide 7: LIST_ACCENT_IMAGE
   const listPoints = [
-    'Tạo khí oxy trong lành: Cây xanh là "nhà máy lọc không khí" khổng lồ giúp bé và muôn loài hít thở khỏe mạnh.',
-    'Tỏa bóng râm mát rượi: Dưới tán lá xanh, sân trường Sương Mai luôn râm mát cho các bé vui chơi thỏa thích.',
-    'Cho quả ngọt, hoa thơm: Những trái táo, chuối, cam thơm ngon mang nhiều vitamin bổ dưỡng cho cơ thể.',
-    'Ngôi nhà của muông thú: Chim làm tổ trên cành, sóc nô đùa và côn trùng ríu rít ca hát.'
+    `Phát triển nhận thức: Trẻ bóc tách và phân biệt rõ các đặc trưng của ${safeTopic}.`,
+    `Hình thành kỹ năng: Trẻ tự tay thực hành với học liệu ${studentMaterials.slice(0, 2).join(', ')}.`,
+    `Tương tác tự tin: Luyện phản xạ lời thoại "🗣️ Cô hỏi - 👦 Trẻ đáp" tự nhiên tại lớp.`,
+    `Giáo dục tình cảm: Hình thành thói quen tốt và tình yêu đối với bài học.`
   ];
 
   const s7: AILessonSlide = {
     slide_number: 7,
     layout_type: 'LIST_ACCENT_IMAGE',
-    title: `🍃 Lợi Ích Tuyệt Vời Của Cây`,
+    title: `🍃 Giá Trị & Mục Tiêu Bài Học`,
     content_points: listPoints,
-    image_prompt: `Cute plant sprout growing in fertile soil doodle cartoon illustration`,
-    image_url: getPollinationsImageUrl('Cute plant sprout growing in fertile soil doodle cartoon illustration', 800, 800, 9)
+    image_prompt: `Preschool learning concept illustration about ${safeTopic}`,
+    image_url: getPollinationsImageUrl(`Preschool learning concept illustration about ${safeTopic}`, 800, 800, 9, keywords)
   };
 
   // Slide 8: NUMBERED_STEPS
   const numSteps = [
-    { step_num: 1, title: 'Bước 1 - Chuẩn bị tổ ấm cho hạt', desc: 'Bé lấy chiếc cốc sạch và nhẹ nhàng lót một lớp bông gòn mềm mại vào đáy cốc làm đệm êm.' },
-    { step_num: 2, title: 'Bước 2 - Tưới giọt nước yêu thương', desc: 'Thấm một chút nước sạch vừa đủ ẩm vào bông gòn, không để nước ngập làm hạt bị úng nhé.' },
-    { step_num: 3, title: 'Bước 3 - Đặt hạt đỗ ngủ ngon', desc: 'Đặt hạt đậu xanh khỏe khoắn vào giữa lớp bông, chúc hạt ngủ ngon và mau thức dậy nảy mầm.' }
+    { step_num: 1, title: 'Bước 1 - Chuẩn bị học liệu', desc: `Trẻ nhận khay đồ dùng: ${studentMaterials.join(', ') || 'đồ dùng học tập'}.` },
+    { step_num: 2, title: 'Bước 2 - Thực hành theo nhóm', desc: `Các nhóm phân công nhau quan sát, trao đổi và thao tác khéo léo.` },
+    { step_num: 3, title: 'Bước 3 - Hoàn thiện & Thu dọn', desc: 'Trẻ hoàn thành sản phẩm trải nghiệm và tự giác cất đồ dùng về đúng nơi quy định.' }
   ];
 
   const s8: AILessonSlide = {
     slide_number: 8,
     layout_type: 'NUMBERED_STEPS',
-    title: `🧪 3 Bước Bé Thực Hành Gieo Hạt`,
+    title: `🧪 3 Bước Trẻ Thực Hành Tại Lớp`,
     steps_data: numSteps,
-    subtitle: '💚 Chăm sóc mỗi ngày: Đặt cốc ở nơi có ánh sáng chan hòa và theo dõi hạt lớn lên từng ngày cùng cô giáo!',
+    subtitle: `💚 Hướng dẫn cô giáo: Khích lệ trẻ tự tin sáng tạo và hỗ trợ kịp thời các bé còn bỡ ngỡ!`,
     content_points: numSteps.map(s => `${s.title}: ${s.desc}`),
-    image_prompt: `Preschool children planting seeds step by step cartoon`,
-    image_url: getPollinationsImageUrl('Preschool children planting seeds step by step cartoon', 1024, 768, 10)
+    image_prompt: `Preschool children practicing step by step cartoon for ${safeTopic}`,
+    image_url: getPollinationsImageUrl(`Preschool children practicing step by step cartoon for ${safeTopic}`, 1024, 768, 10, keywords)
   };
 
   // Slide 9: SPLIT_STORY_IMAGE
   const s9: AILessonSlide = {
     slide_number: 9,
     layout_type: 'SPLIT_STORY_IMAGE',
-    title: '🌱 Vườn Rau Của Bé',
-    subtitle: 'Tại sân vườn Trường Mầm Non Sương Mai, mỗi ngày đến trường là một ngày hội khám phá thiên nhiên tươi đẹp.\n\nBé cùng các bạn tự tay tưới nước, bắt sâu và ngắm nhìn những mầm cây lớn lên xanh mướt dưới ánh nắng ấm áp.',
-    content_points: ['Trẻ tự tay tưới nước và chăm sóc vườn rau sân trường Sương Mai'],
-    image_prompt: `Happy Asian kindergarten children gardening in vegetable garden under sunflower sunny watercolor cartoon`,
-    image_url: getPollinationsImageUrl('Happy Asian kindergarten children gardening in vegetable garden under sunflower sunny watercolor cartoon', 1024, 768, 11)
+    title: `🏫 Góc Trải Nghiệm Trường Sương Mai`,
+    subtitle: `Tại không gian học tập Trường Mầm Non Sương Mai, mỗi ngày đến trường là một ngày vui hội ngập tràn nụ cười.\n\nBé cùng các bạn hăng hái khám phá đề tài "${safeTopic}" qua các hình ảnh thân thuộc: ${archetype.localizedElements.slice(0, 3).join(', ')}.`,
+    content_points: ['Trẻ hăng hái trải nghiệm tại góc học tập Trường Mầm Non Sương Mai'],
+    image_prompt: `Happy Asian kindergarten children learning about ${safeTopic} in Suong Mai school watercolor cartoon`,
+    image_url: getPollinationsImageUrl(`Happy Asian kindergarten children learning about ${safeTopic} in Suong Mai school watercolor cartoon`, 1024, 768, 11, keywords)
   };
 
   // Slide 10: STAT_CALLOUT
   const s10: AILessonSlide = {
     slide_number: 10,
     layout_type: 'STAT_CALLOUT',
-    title: `⭐ Thông Điệp Xanh Của Lớp ${gradeInfo.label.split(' ')[0]}`,
+    title: `⭐ Thông Điệp Lớp ${gradeInfo.label.split(' ')[0]}`,
     stat_highlight: {
       number: '100%',
-      label: 'Bé Yêu Cây Xanh',
-      hero_title: 'Bé Là Hiệp Sĩ Bảo Vệ Mầm Xanh',
-      hero_desc: `Tất cả các bạn nhỏ Khối ${gradeInfo.label} của Trường Mầm Non Sương Mai đều hiểu rằng: Yêu thiên nhiên là bảo vệ cuộc sống của chính mình. Mỗi hạt giống nhỏ bé hôm nay được chăm sóc bằng tình yêu thương sẽ trở thành những bóng cây râm mát cho tương lai.`
+      label: 'Bé Tự Tin Học Ngoan',
+      hero_title: archetype.storyTitle,
+      hero_desc: `${archetype.calloutDialogue.teacherAsk}\n${archetype.calloutDialogue.childAnswer}\n\nTất cả các bạn nhỏ Khối ${gradeInfo.label} của Trường Mầm Non Sương Mai đều tích cực tham gia và hào hứng ghi nhớ kiến thức bài học.`
     },
-    content_points: ['100% Bé yêu thiên nhiên và bảo vệ mầm xanh'],
-    image_prompt: `Green leaf emblem shield vector badge for environment protection`,
-    image_url: getPollinationsImageUrl('Green leaf emblem shield vector badge for environment protection', 1024, 768, 12)
+    content_points: ['100% Bé tích cực tham gia và ghi nhớ bài học'],
+    image_prompt: `Excellence badge emblem shield vector for kindergarten achievement`,
+    image_url: getPollinationsImageUrl(`Excellence badge emblem shield vector for kindergarten achievement`, 1024, 768, 12, keywords)
   };
 
   // Slide 11: HERO_OVERLAY
   const s11: AILessonSlide = {
     slide_number: 11,
     layout_type: 'HERO_OVERLAY',
-    title: `Cùng Chung Tay Bảo Vệ Cây Xanh`,
-    subtitle: 'Bé nhớ: Không bẻ cành bứt lá, không giẫm lên cỏ xanh. Hằng ngày nhớ tưới nước đều đặn và rủ bạn bè cùng chăm sóc vườn cây thêm xanh mát ngập tràn tiếng chim ca!',
-    content_points: ['Hành động thiết thực bảo vệ môi trường xung quanh'],
-    image_prompt: `Beautiful forest nature landscape with stream background cartoon`,
-    image_url: getPollinationsImageUrl('Beautiful forest nature landscape with stream background cartoon', 1024, 768, 13)
+    title: `Hành Động Đẹp - Bé Ngoan Sương Mai`,
+    subtitle: `Bé ghi nhớ những hành động đẹp, giữ gìn vệ sinh lớp học, yêu thương bạn bè và chăm sóc cảnh quan môi trường xung quanh!`,
+    content_points: ['Hành động đẹp và bài học đạo đức tích cực'],
+    image_prompt: `Beautiful preschool environment landscape with cheerful children cartoon`,
+    image_url: getPollinationsImageUrl(`Beautiful preschool environment landscape with cheerful children cartoon`, 1024, 768, 13, keywords)
   };
 
   // Slide 12: OUTRO_PRAISE
@@ -345,11 +317,11 @@ export function generateRulesCompliantSlideDeck(params: {
     slide_number: 12,
     layout_type: 'OUTRO_PRAISE',
     title: 'Bé Đố Cô - Cô Đố Bé!',
-    subtitle: `Cả lớp mình hôm nay học rất ngoan và xuất sắc vượt qua các câu hỏi khám phá khoa học về cây xanh.`,
+    subtitle: `Cả lớp mình hôm nay học rất ngoan và xuất sắc vượt qua các câu hỏi khám phá bài học "${safeTopic}".`,
     pill_badges: [`🏅 HOAN HÔ CÁC BÉ LỚP ${gradeInfo.label.split(' ')[0].toUpperCase()} TRƯỜNG SƯƠNG MAI!`],
     content_points: ['Khen ngợi nỗ lực và trao danh hiệu bé ngoan'],
     image_prompt: `Kindergarten children cheering celebrating medal award winner cartoon`,
-    image_url: getPollinationsImageUrl('Kindergarten children cheering celebrating medal award winner cartoon', 1024, 768, 14)
+    image_url: getPollinationsImageUrl(`Kindergarten children cheering celebrating medal award winner cartoon`, 1024, 768, 14, keywords)
   };
 
   // Slide 13: IMAGE_SOURCES
@@ -429,27 +401,28 @@ export async function generateAILessonPlan(params: {
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
   // 5-Step Traditional / 5E Pedagogy Structure
+  const archetype = getThemeArchetype(theme_code);
   const isLaGroup = normGrade === 'LA';
   const fiveSteps = [
     {
       step_number: 1,
-      step_title: isLaGroup ? '1. Gắn kết (Engage) - Ổn định & Đặt vấn đề' : '1. Gắn kết & Khởi động (Ổn định tổ chức)',
-      description: 'Gây hứng thú cho trẻ qua bài hát vui nhộn và câu hỏi gợi mở.',
-      teacher_action: `Cô cùng cả lớp hát bài "${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Mầm non vui vẻ'}" và gợi mở câu hỏi khám phá về đề tài "${safeTopic}".`,
-      child_activity: 'Trẻ hào hứng nhún nhảy theo nhạc, lắng nghe và hăng hái trả lời câu hỏi của cô.'
+      step_title: isLaGroup ? `1. Gắn kết (Engage) - ${archetype.archetypeName}` : '1. Gắn kết & Khởi động (Ổn định tổ chức)',
+      description: `Khởi động sinh động theo phương thức ${archetype.openerHeadline}`,
+      teacher_action: `Cô áp dụng ${archetype.openerHeadline}: ${archetype.openerDetail}. Kịch bản tương tác: "${archetype.calloutDialogue.teacherAsk}"`,
+      child_activity: `Trẻ hào hứng tương tác linh hoạt: "${archetype.calloutDialogue.childAnswer}"`
     },
     {
       step_number: 2,
       step_title: isLaGroup ? '2. Khám phá (Explore) - Trải nghiệm thực tế' : '2. Khám phá & Trải nghiệm thực tế (Hoạt động trọng tâm)',
       description: 'Cho trẻ quan sát trực quan, sờ nắn và thực hành trải nghiệm trực tiếp.',
-      teacher_action: `Cô giới thiệu học liệu chuẩn: ${resolvedMaterialsStr}. Hướng dẫn trẻ quan sát và thao tác.`,
+      teacher_action: `Cô giới thiệu học liệu chuẩn: ${resolvedMaterialsStr}. Hình ảnh bản địa hóa gần gũi: ${archetype.localizedElements.slice(0, 2).join(', ')}.`,
       child_activity: `Trẻ chia nhóm 4-5 bé, tự tay sờ nắn, quan sát và trải nghiệm đồ dùng cùng các bạn.`
     },
     {
       step_number: 3,
       step_title: isLaGroup ? '3. Giải thích (Explain) - Thảo luận & Trò chơi' : '3. Giải thích & Thảo luận nhóm (Luyện tập trò chơi)',
       description: 'Giúp trẻ ghi nhớ kiến thức qua trò chơi đồng đội tương tác.',
-      teacher_action: `Cô tổ chức trò chơi "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Đội nào nhanh nhất'}" khắc sâu bài học. Từ vựng cốt lõi: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}.`,
+      teacher_action: `Cô tổ chức trò chơi "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Đội nào nhanh nhất'}" bám sát cốt truyện ${archetype.archetypeName}. Từ vựng cốt lõi: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}.`,
       child_activity: 'Các nhóm phân công nhau cầm thẻ tranh nhanh chân lên dán vào bảng nhóm.'
     },
     {
@@ -457,7 +430,7 @@ export async function generateAILessonPlan(params: {
       step_title: isLaGroup ? '4. Áp dụng & Mở rộng (Elaborate)' : '4. Củng cố & Tổng kết kiến thức',
       description: isLaGroup ? 'Trẻ tự tay vận dụng kiến thức thực hành sáng tạo sản phẩm.' : 'Hệ thống lại nội dung qua Sơ đồ tư duy Mermaid visual.',
       teacher_action: isLaGroup 
-        ? `Cô hướng dẫn trẻ ứng dụng kiến thức tự tay thực hành (gieo hạt, tạo hình hoặc làm thí nghiệm) về "${safeTopic}".`
+        ? `Cô hướng dẫn trẻ ứng dụng kiến thức tự tay thực hành sáng tạo sản phẩm về đề tài "${safeTopic}".`
         : 'Cô trình chiếu Sơ đồ tư duy trên SmartTV, mời đại diện bé lên chỉ và tóm tắt lại bài học.',
       child_activity: isLaGroup
         ? 'Trẻ hào hứng tự tay thực hành cá nhân / theo nhóm để hoàn thành sản phẩm trải nghiệm của mình.'
