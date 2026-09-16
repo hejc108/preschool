@@ -174,8 +174,9 @@ export const SUB_THEME_MAP: Record<ThemeCode, string[]> = {
   QUE_HUONG: ['Quê hương Sương Mai', 'Thủ đô Hà Nội & Bác Hồ', 'Bản sắc văn hóa Việt Nam'],
 };
 
-export function getFrameworkByGradeAndTheme(grade: GradeLevelCode, theme: ThemeCode): CurriculumFramework | undefined {
-  return INITIAL_CURRICULUM_FRAMEWORKS.find(
+export function getFrameworkByGradeAndTheme(grade: GradeLevelCode, theme: ThemeCode): CurriculumFramework {
+  const found = INITIAL_CURRICULUM_FRAMEWORKS.find(
     (cf) => cf.grade_level === grade && cf.theme_code === theme
   ) || INITIAL_CURRICULUM_FRAMEWORKS.find((cf) => cf.grade_level === grade) || INITIAL_CURRICULUM_FRAMEWORKS[0];
+  return found;
 }

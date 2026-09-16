@@ -358,15 +358,17 @@ export default function TeacherAILessonPlanNewPage() {
           </form>
 
           {/* Preprocessed Guidelines Card */}
-          <div className="bg-sky-50/80 border border-sky-200 rounded-convent p-3.5 text-xs space-y-1.5">
-            <span className="font-bold text-sky-950 flex items-center gap-1.5 text-[11px]">
-              <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-              Mục tiêu S-T-E-A-M bóc tách từ DB:
-            </span>
-            <p className="text-slate-600 text-[11px] leading-relaxed">
-              {currentFramework.pedagogical_guidelines.steam_objectives?.science}
-            </p>
-          </div>
+          {currentFramework && (
+            <div className="bg-sky-50/80 border border-sky-200 rounded-convent p-3.5 text-xs space-y-1.5">
+              <span className="font-bold text-sky-950 flex items-center gap-1.5 text-[11px]">
+                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                Mục tiêu S-T-E-A-M bóc tách từ DB:
+              </span>
+              <p className="text-slate-600 text-[11px] leading-relaxed">
+                {currentFramework.pedagogical_guidelines?.steam_objectives?.science}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN: 65% Width (Preview Canvas Workspace with 2 Tabs) */}
