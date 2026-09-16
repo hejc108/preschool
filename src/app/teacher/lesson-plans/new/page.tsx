@@ -621,53 +621,67 @@ export default function TeacherAILessonPlanNewPage() {
                 </div>
               )}
 
-              {/* TAB 2: SLIDE TRÌNH CHIẾU TV (LARGE IMAGES, BIG READABLE TEXT FOR KIDS) */}
+              {/* TAB 2: SLIDE TRÌNH CHIẾU TV (PRESCHOOL SMARTTV DESIGN SYSTEM) */}
               {canvasTab === 'SLIDES' && (
                 <div className="bg-white border border-slate-200 rounded-convent p-5 shadow-sm space-y-6 text-xs">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                     <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
                       <Tv className="w-5 h-5 text-indigo-600" />
-                      <span>Xem trước Slide trình chiếu TV SmartTV lớp học (Chữ to, ảnh lớn)</span>
+                      <span>Xem trước Slide trình chiếu TV SmartTV mầm non (Tỉ lệ 16:9, Màu Pastel dịu mắt, Ảnh lớn 60-70%, Chữ to rõ)</span>
                     </h3>
                   </div>
 
                   <div className="space-y-6">
-                    {generatedLesson.slides.map((slide) => (
-                      <div key={slide.slide_number} className="border border-slate-300 rounded-2xl overflow-hidden shadow-md bg-white">
-                        {/* Slide Top Banner */}
-                        <div className="p-3 bg-sky-600 text-white flex items-center justify-between font-bold text-xs">
-                          <span>SLIDE {slide.slide_number} TRÌNH CHIẾU SMARTTV</span>
-                          <span className="font-mono text-[11px]">Tỷ lệ 16:9 HD</span>
-                        </div>
+                    {generatedLesson.slides.map((slide, idx) => {
+                      const bgColors = ['bg-[#FEF9C3]', 'bg-[#E0F2FE]', 'bg-[#DCFCE7]', 'bg-[#FEF9C3]'];
+                      const titleColors = ['text-emerald-800', 'text-sky-800', 'text-emerald-800', 'text-orange-700'];
+                      const cardBg = bgColors[idx % bgColors.length];
+                      const titleColor = titleColors[idx % titleColors.length];
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 items-center">
-                          {/* Left Image with automatic fallback */}
-                          <img
-                            src={slide.image_url || getFallbackPreschoolImage(slide.slide_number)}
-                            alt={slide.title}
-                            className="w-full h-56 object-cover rounded-xl border border-slate-200 shadow-sm"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = getFallbackPreschoolImage(slide.slide_number);
-                            }}
-                          />
+                      return (
+                        <div key={slide.slide_number} className={`border-2 border-slate-300 rounded-2xl overflow-hidden shadow-lg ${cardBg}`}>
+                          {/* Top Banner Header */}
+                          <div className="p-3 bg-slate-900 text-white flex items-center justify-between font-bold text-xs">
+                            <span className="flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-amber-400" />
+                              SLIDE {slide.slide_number}: GIAO DIỆN TRỰC QUAN SMARTTV MẦM NON
+                            </span>
+                            <span className="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-amber-300">Tỷ lệ 16:9 HD</span>
+                          </div>
 
-                          {/* Right Content */}
-                          <div className="space-y-3">
-                            <h4 className="font-bold text-sky-900 text-lg leading-snug">{slide.title}</h4>
-                            <ul className="space-y-2 text-slate-700 text-xs sm:text-sm leading-relaxed">
-                              {slide.content_points.map((pt, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <span className="text-sky-600 font-bold">•</span>
-                                  <span>{pt}</span>
-                                </li>
-                              ))}
-                            </ul>
+                          <div className="p-6 text-center space-y-4">
+                            <h4 className={`font-black ${titleColor} text-xl sm:text-2xl uppercase tracking-wide leading-tight`}>
+                              {slide.title}
+                            </h4>
+
+                            {/* Center Big Hero Image (60-70% visual focus) */}
+                            <div className="max-w-2xl mx-auto rounded-2xl overflow-hidden border-4 border-white shadow-md bg-white">
+                              <img
+                                src={slide.image_url || getFallbackPreschoolImage(slide.slide_number)}
+                                alt={slide.title}
+                                className="w-full h-64 sm:h-80 object-cover"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  target.onerror = null;
+                                  target.src = getFallbackPreschoolImage(slide.slide_number);
+                                }}
+                              />
+                            </div>
+
+                            {/* Large Readable Text Legend */}
+                            <div className="pt-2 max-w-xl mx-auto">
+                              <ul className="inline-flex flex-wrap items-center justify-center gap-3 text-slate-900 font-bold text-sm sm:text-base">
+                                {slide.content_points.map((pt, i) => (
+                                  <li key={i} className="bg-white/90 backdrop-blur px-3.5 py-1.5 rounded-full shadow-sm border border-slate-200">
+                                    {pt}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

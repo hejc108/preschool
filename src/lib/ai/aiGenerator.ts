@@ -498,89 +498,146 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     pptx.layout = 'LAYOUT_16x9';
     pptx.author = 'Mầm Non Sương Mai AI Pedagogy Engine';
 
-    // Slide 1: Cover Slide
-    const slide1 = pptx.addSlide();
-    slide1.background = { color: 'F0F9FF' };
-    slide1.addText(lesson.topic.toUpperCase(), {
-      x: 0.8,
-      y: 1.2,
-      w: 8.5,
-      h: 1.2,
-      fontSize: 26,
-      bold: true,
-      color: '0369A1',
-      align: 'left'
-    });
-    slide1.addText(`Loại bài dạy: ${lesson.teaching_type === 'PROJECT_BASED' ? 'DỰ ÁN HỌC TẬP STEAM (PBL)' : 'BÀI GIẢNG TRUYỀN THỐNG 5 BƯỚC'}`, {
-      x: 0.8,
-      y: 2.5,
-      w: 8.5,
-      h: 0.5,
-      fontSize: 16,
-      bold: true,
-      color: '0D9488'
-    });
-    slide1.addText(`Môn: ${lesson.subject} | Khối: ${lesson.grade_level} | Thời lượng: ${lesson.duration_minutes} phút`, {
-      x: 0.8,
-      y: 3.1,
-      w: 8.5,
-      h: 0.5,
-      fontSize: 14,
-      color: '475569'
-    });
+/**
+ * Triggers PowerPoint (.pptx) file generation using dynamic client-side PptxGenJS library
+ * Follows Preschool SmartTV Design System (Pastel background, 16:9 HD, 60-70% image area, 36-42pt bold font)
+ */
+export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
+  try {
+    if (typeof window === 'undefined') return;
 
-    // Slide 2: Objectives & Materials
-    const slide2 = pptx.addSlide();
-    slide2.addText('MỤC TIÊU & CHUẨN BỊ HỌC LIỆU', { x: 0.8, y: 0.6, fontSize: 22, bold: true, color: '0369A1' });
-    slide2.addText(`Mục tiêu bài dạy:\n${lesson.target_objectives}`, { x: 0.8, y: 1.4, w: 8.5, h: 1.5, fontSize: 13, color: '1E293B' });
-    slide2.addText(`Học liệu đồ dùng:\n${lesson.materials_needed.join(', ')}`, { x: 0.8, y: 3.1, w: 8.5, h: 1.5, fontSize: 13, color: '047857' });
-
-    // Loop through lesson.slides to create full visual slides with images
-    if (lesson.slides && lesson.slides.length > 0) {
-      for (const slideData of lesson.slides) {
-        const slide = pptx.addSlide();
-        
-        // Slide Title Header
-        slide.addText(slideData.title.toUpperCase(), {
-          x: 0.5,
-          y: 0.4,
-          w: 9.0,
-          h: 0.6,
-          fontSize: 20,
-          bold: true,
-          color: '0369A1'
-        });
-
-        // Left Content Points
-        const textContent = slideData.content_points.map((pt) => `• ${pt}`).join('\n\n');
-        slide.addText(textContent, {
-          x: 0.5,
-          y: 1.2,
-          w: 4.8,
-          h: 3.8,
-          fontSize: 13,
-          color: '1E293B',
-          valign: 'top'
-        });
-
-        // Right Slide Image
-        const imgUrl = slideData.image_url || getFallbackPreschoolImage(slideData.slide_number);
-        try {
-          slide.addImage({
-            path: imgUrl,
-            x: 5.5,
-            y: 1.2,
-            w: 4.0,
-            h: 3.2
-          });
-        } catch (imgErr) {
-          console.warn('PPTX Image add fallback:', imgErr);
-        }
-      }
+    // Dynamically load pptxgenjs client script
+    if (!(window as any).PptxGenJS) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Không thể nạp thư viện pptxgenjs'));
+        document.head.appendChild(script);
+      });
     }
 
+    const PptxGenJS = (window as any).PptxGenJS;
+    const pptx = new PptxGenJS();
+
+    pptx.layout = 'LAYOUT_16x9'; // 16:9 SmartTV layout
+    pptx.author = 'Trường Mầm Non Sương Mai AI Pedagogy Engine';
+
+    const FONT_TITLE = 'Arial Rounded MT Bold';
+    const gradeLabel = GRADE_LEVEL_MAP[lesson.grade_level as GradeLevelCode]?.label || lesson.grade_level;
+
+    // Pre-convert slide images to Base64 in parallel for 100% offline embedding
+    const slidesData = lesson.slides || [];
+    const base64Images: string[] = [];
+    for (let i = 0; i < slidesData.length; i++) {
+      const rawUrl = slidesData[i].image_url || getFallbackPreschoolImage(i);
+      const b64 = await toBase64(rawUrl);
+      base64Images.push(b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i));
+    }
+
+    // ==================== SLIDE 1: BÌA BÀI GIẢNG ====================
+    const slide1 = pptx.addSlide();
+    slide1.background = { color: 'FEF9C3' }; // Warm yellow pastel
+    
+    slide1.addText(`🌱 BÉ KHÁM PHÁ ${lesson.topic.toUpperCase()} 🌱`, {
+      x: 0.5, y: 0.5, w: '90%', h: 1.0,
+      fontSize: 42, fontFace: FONT_TITLE, color: '15803D',
+      bold: true, align: 'center'
+    });
+
+    if (base64Images[0]) {
+      const isB64 = base64Images[0].startsWith('data:image');
+      slide1.addImage({
+        [isB64 ? 'data' : 'path']: base64Images[0],
+        x: 2.2, y: 1.6, w: 8.9, h: 4.5,
+        rounding: true
+      });
+    }
+
+    slide1.addText(`Trường Mầm Non Sương Mai • Khối ${gradeLabel}`, {
+      x: 0.5, y: 6.4, w: '90%', h: 0.5,
+      fontSize: 22, fontFace: FONT_TITLE, color: '64748B', align: 'center', bold: true
+    });
+
+    // ==================== SLIDE 2: ĐỐ BÉ CÂY CẦN GÌ? ====================
+    const slide2 = pptx.addSlide();
+    slide2.background = { color: 'E0F2FE' }; // Sky blue pastel
+    
+    slide2.addText(`ĐỐ BÉ: ${lesson.topic.toUpperCase()} CẦN GÌ ĐỂ LỚN? ❓`, {
+      x: 0.5, y: 0.5, w: '90%', h: 0.8,
+      fontSize: 36, fontFace: FONT_TITLE, color: '0369A1', bold: true, align: 'center'
+    });
+
+    if (base64Images[1] || base64Images[0]) {
+      const img = base64Images[1] || base64Images[0];
+      const isB64 = img.startsWith('data:image');
+      slide2.addImage({
+        [isB64 ? 'data' : 'path']: img,
+        x: 1.5, y: 1.5, w: 10.3, h: 4.6,
+        rounding: true
+      });
+    }
+
+    slide2.addText("☀️ Ánh Nắng  •  💧 Nước Mát  •  🪴 Đất Mùn  •  💨 Không Khí", {
+      x: 0.5, y: 6.4, w: '90%', h: 0.6,
+      fontSize: 26, fontFace: FONT_TITLE, color: '0F172A', bold: true, align: 'center'
+    });
+
+    // ==================== SLIDE 3: BÉ CÙNG THỰC HÀNH ====================
+    const slide3 = pptx.addSlide();
+    slide3.background = { color: 'DCFCE7' }; // Fresh green pastel
+
+    slide3.addText(`👐 BÉ CÙNG GIEO HẠT NHÉ!`, {
+      x: 0.5, y: 0.5, w: '90%', h: 0.8,
+      fontSize: 36, fontFace: FONT_TITLE, color: '15803D', bold: true, align: 'center'
+    });
+
+    if (base64Images[2] || base64Images[0]) {
+      const img = base64Images[2] || base64Images[0];
+      const isB64 = img.startsWith('data:image');
+      slide3.addImage({
+        [isB64 ? 'data' : 'path']: img,
+        x: 0.8, y: 1.5, w: 6.0, h: 5.0,
+        rounding: true
+      });
+    }
+
+    const practiceSteps = [
+      "1️⃣  Lót bông gòn vào cốc",
+      "2️⃣  Thấm một chút nước sạch",
+      "3️⃣  Đặt hạt đỗ vào ngủ ngon"
+    ];
+    slide3.addText(practiceSteps.join("\n\n"), {
+      x: 7.2, y: 2.0, w: 5.5, h: 4.0,
+      fontSize: 28, fontFace: FONT_TITLE, color: '166534', bold: true, lineSpacing: 36
+    });
+
+    // ==================== SLIDE 4: KHEN NGỢI & DẶN DÒ ====================
+    const slide4 = pptx.addSlide();
+    slide4.background = { color: 'FEF9C3' }; // Warm yellow pastel
+
+    slide4.addText("👏 BÉ GIỎI LẮM! HOAN HÔ CẢ LỚP!", {
+      x: 0.5, y: 0.6, w: '90%', h: 1.0,
+      fontSize: 40, fontFace: FONT_TITLE, color: 'EA580C', bold: true, align: 'center'
+    });
+
+    if (base64Images[3] || base64Images[0]) {
+      const img = base64Images[3] || base64Images[0];
+      const isB64 = img.startsWith('data:image');
+      slide4.addImage({
+        [isB64 ? 'data' : 'path']: img,
+        x: 3.2, y: 1.8, w: 7.0, h: 4.4,
+        rounding: true
+      });
+    }
+
+    slide4.addText("Hằng ngày bé nhớ chăm sóc cây mau lớn nha!", {
+      x: 0.5, y: 6.4, w: '90%', h: 0.6,
+      fontSize: 24, fontFace: FONT_TITLE, color: '475569', bold: true, align: 'center'
+    });
+
     // Save File
-    const filename = `GiaoAn_${lesson.topic.replace(/\s+/g, '_')}_${Date.now()}.pptx`;
+    const filename = `GiaoAn_${lesson.topic.replace(/\s+/g, '_')}_SmartTV.pptx`;
     await pptx.writeFile({ fileName: filename });
   } catch (err) {
     console.error('Lỗi xuất PowerPoint:', err);
