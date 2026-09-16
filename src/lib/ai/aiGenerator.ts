@@ -1,5 +1,5 @@
 import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType, PreschoolAISchemaResponse } from '../types/schema';
-import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, SUBJECT_NAME_MAP } from '../utils/curriculumHelper';
+import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions } from '../utils/curriculumHelper';
 
 /**
  * System Instruction Prompt for Gemini / AI Engine
@@ -13,6 +13,18 @@ Nhiệm vụ của bạn là lập kế hoạch bài dạy chi tiết, hấp d�
 2. KHỐI MẦM (3-4 tuổi): Thời lượng 15-20 phút. Tiến trình 3 bước truyền thống. Nhận biết trong phạm vi 5, so sánh kích thước, hình khối cơ bản. Không dạy viết chữ cái.
 3. KHỐI CHỒI (4-5 tuổi): Thời lượng 20-25 phút. Tiến trình 5E rút gọn. Phạm vi 10, phân tích nguyên nhân - kết quả, kể chuyện đóng vai kịch ngắn.
 4. KHỐI LÁ (5-6 tuổi): Thời lượng 25-30 phút. Bắt buộc áp dụng 5E chuẩn (Engage, Explore, Explain, Elaborate, Evaluate) kết hợp mục tiêu STEAM bóc tách rõ S-T-E-A-M. Bắt buộc có từ mới giải thích và 1 trò chơi hoạt động chiều.
+
+[QUY TẮC BẮT BUỘC VỀ HỌC LIỆU & ĐỒ DÙNG DẠY HỌC DỘNG]
+1. TUYỆT ĐỐI KHÔNG sử dụng các đồ dùng mặc định cố định (như "hạt đỗ, bông gòn, sỏi, cát, chai nhựa") trừ khi đề tài bài học trực tiếp yêu cầu thí nghiệm đó.
+2. Học liệu trong phần "preparations" PHẢI bám sát 100% vào Đề tài ({topic}) và Phân môn ({subject}):
+   - Nếu môn Âm nhạc: bắt buộc có nhạc cụ (phách tre, xắc xô, đàn, micro, nơ tay).
+   - Nếu môn Toán: bắt buộc có rổ đồ dùng số lượng tương ứng, thẻ chữ số, que tính, que đo.
+   - Nếu môn Chữ cái: bắt buộc có thẻ chữ, các nét rời, hột hạt/dây uốn chữ, bảng con.
+   - Nếu môn Vận động: bắt buộc có dụng cụ thể dục (bóng, thang, túi cát, ghế, vạch kẻ).
+   - Nếu môn Tạo hình: bắt buộc có giấy A4, sáp màu, hồ dán, đất nặn, vật liệu mở tự nhiên.
+3. Phân định rõ ràng:
+   - "teacher": Đồ dùng trực quan của cô (kích thước lớn, video máy tính, tranh mẫu, vật thật).
+   - "students": Đồ dùng thực hành của trẻ (đủ số lượng cho từng trẻ hoặc từng nhóm).
 
 [QUY TẮC DẠY HỌC THEO DỰ ÁN (PBL)]
 Nếu teaching_type == 'PROJECT_BASED':
@@ -119,6 +131,20 @@ export async function generateAILessonPlan(params: {
     normGrade === 'MAM' ? 20 :
     normGrade === 'CHOI' ? 25 : 30;
 
+  // Dynamic Material Engine: Resolve subject & topic dynamic materials
+  const dynamicMats = getDynamicMaterialSuggestions(subject, safeTopic, normGrade);
+  const resolvedMaterialsStr = materials_needed && materials_needed.trim().length > 0 
+    ? materials_needed.trim()
+    : dynamicMats.allTags.join(', ');
+
+  const teacherMaterials = materials_needed && materials_needed.trim().length > 0
+    ? materials_needed.split(',').map((s) => s.trim()).filter(Boolean)
+    : dynamicMats.teacher;
+
+  const studentMaterials = materials_needed && materials_needed.trim().length > 0
+    ? materials_needed.split(',').map((s) => s.trim()).filter(Boolean)
+    : dynamicMats.students;
+
   // Mermaid.js Mindmap Diagram Code
   const mermaidCode = `graph TD
   Root["🌱 ${safeTopic}"] --> Step1["1. Khởi động (Bé quan sát)"]
@@ -127,7 +153,7 @@ export async function generateAILessonPlan(params: {
   Root --> Step4["4. Củng cố (Sơ đồ tư duy)"]
   
   Step1 --> S1_Detail["Thơ & Hát cùng cô: ${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Bài hát mầm non'}"]
-  Step2 --> S2_Detail["Trải nghiệm trực quan: ${framework.pedagogical_guidelines.basic_materials.slice(0, 2).join(', ')}"]
+  Step2 --> S2_Detail["Trải nghiệm trực quan: ${studentMaterials.slice(0, 3).join(', ')}"]
   Step3 --> S3_Detail["Trò chơi: ${framework.pedagogical_guidelines.interactive_games?.[0] || 'Thi đội nào nhanh' }"]
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
@@ -145,7 +171,7 @@ export async function generateAILessonPlan(params: {
       step_number: 2,
       step_title: isLaGroup ? '2. Khám phá (Explore) - Trải nghiệm thực tế' : '2. Khám phá & Trải nghiệm thực tế (Hoạt động trọng tâm)',
       description: 'Cho trẻ quan sát trực quan, sờ nắn và thực hành trải nghiệm trực tiếp.',
-      teacher_action: `Cô giới thiệu học liệu chuẩn: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}. Hướng dẫn trẻ quan sát và vần thao tác.`,
+      teacher_action: `Cô giới thiệu học liệu chuẩn: ${resolvedMaterialsStr}. Hướng dẫn trẻ quan sát và thao tác.`,
       child_activity: `Trẻ chia nhóm 4-5 bé, tự tay sờ nắn, quan sát và trải nghiệm đồ dùng cùng các bạn.`
     },
     {
@@ -185,7 +211,7 @@ export async function generateAILessonPlan(params: {
 
   const afternoonActivity = {
     name: `Trò chơi hoạt động chiều (HĐC): "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Cùng ôn bài học'}"`,
-    instruction: `Cô tập hợp trẻ vào buổi chiều, tổ chức trò chơi củng cố kiến thức về "${safeTopic}". Chuẩn bị: ${framework.pedagogical_guidelines.basic_materials.slice(0, 2).join(', ')}. Cách tiến hành: Cô phổ biến luật chơi, trẻ tham gia phản xạ nhanh và nhận phần thưởng dương tính.`
+    instruction: `Cô tập hợp trẻ vào buổi chiều, tổ chức trò chơi củng cố kiến thức về "${safeTopic}". Chuẩn bị: ${studentMaterials.slice(0, 2).join(', ')}. Cách tiến hành: Cô phổ biến luật chơi, trẻ tham gia phản xạ nhanh và nhận phần thưởng dương tính.`
   };
 
   // PowerPoint Slide Deck Content
@@ -205,8 +231,8 @@ export async function generateAILessonPlan(params: {
       slide_number: 2,
       title: 'MỤC TIÊU BÀI HỌC & ĐỒ DÙNG',
       content_points: [
-        `Mục tiêu: ${target_objectives || steamPillars.science}`,
-        `Học liệu: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}`,
+        `Mụctiêu: ${target_objectives || steamPillars.science}`,
+        `Học liệu: ${resolvedMaterialsStr}`,
         `Từ vựng: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}`
       ],
       image_prompt: `Preschool science experiment materials, cartoon style`,
@@ -243,7 +269,7 @@ export async function generateAILessonPlan(params: {
     teaching_type: 'TRADITIONAL',
     target_objectives: target_objectives || `S: ${steamPillars.science} | T: ${steamPillars.technology} | E: ${steamPillars.engineering} | A: ${steamPillars.art} | M: ${steamPillars.math}`,
     duration_minutes: duration,
-    materials_needed: (materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')).split(',').map((s) => s.trim()),
+    materials_needed: resolvedMaterialsStr.split(',').map((s) => s.trim()).filter(Boolean),
     five_steps: fiveSteps,
     mermaid_mindmap_code: mermaidCode,
     youtube_video_suggestions: [
@@ -252,8 +278,8 @@ export async function generateAILessonPlan(params: {
     ],
     slides,
     preparations: {
-      teacher: (materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')).split(',').map((s) => s.trim()),
-      students: framework.pedagogical_guidelines.basic_materials.slice(0, 3)
+      teacher: teacherMaterials,
+      students: studentMaterials
     },
     afternoon_activity: afternoonActivity,
     steam_pillars: steamPillars,

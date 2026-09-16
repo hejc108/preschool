@@ -180,3 +180,71 @@ export function getFrameworkByGradeAndTheme(grade: GradeLevelCode, theme: ThemeC
   ) || INITIAL_CURRICULUM_FRAMEWORKS.find((cf) => cf.grade_level === grade) || INITIAL_CURRICULUM_FRAMEWORKS[0];
   return found;
 }
+
+/**
+ * Dynamic Material Engine: Generates subject-specific and topic-relevant material suggestions
+ */
+export function getDynamicMaterialSuggestions(
+  subject: string,
+  topic: string = '',
+  grade: GradeLevelCode = 'LA'
+): { teacher: string[]; students: string[]; allTags: string[] } {
+  const normSubject = subject.toUpperCase();
+  const lowerTopic = topic.toLowerCase();
+
+  let teacherMats: string[] = [];
+  let studentMats: string[] = [];
+
+  if (normSubject.includes('KPKH') || normSubject.includes('KHÁM PHÁ')) {
+    teacherMats = ['Máy tính SmartTV', 'Mô hình trực quan sa bàn', 'Video clip thực tế', 'Tranh lô tô phóng to'];
+    if (lowerTopic.includes('cây') || lowerTopic.includes('thực vật') || lowerTopic.includes('nảy mầm')) {
+      studentMats = ['Hạt đỗ xanh', 'Cốc nhựa trong', 'Bông gòn y tế', 'Nước sạch', 'Khay nhựa thực hành'];
+    } else if (lowerTopic.includes('giao thông') || lowerTopic.includes('xe') || lowerTopic.includes('ô tô')) {
+      studentMats = ['Rổ lô tô phương tiện giao thông', 'Mô hình xe đồ chơi', 'Tranh bóc dán', 'Vô lăng nhựa', 'Mũ bảo hiểm trẻ em'];
+    } else if (lowerTopic.includes('động vật') || lowerTopic.includes('con vật')) {
+      studentMats = ['Rổ lô tô các con vật', 'Mô hình động vật nhựa', 'Tranh lật ghép hình', 'Thức ăn mô hình cho vật nuôi'];
+    } else if (lowerTopic.includes('nước') || lowerTopic.includes('thí nghiệm') || lowerTopic.includes('lọc')) {
+      studentMats = ['Chai nhựa 500ml cắt đôi', 'Sỏi to', 'Sỏi nhỏ', 'Cát sạch', 'Than hoạt tính', 'Bông y tế'];
+    } else {
+      studentMats = ['Rổ lô tô học liệu khám phá', 'Kính lúp nhựa', 'Tranh bóc dán trải nghiệm', 'Khay nhóm thực hành'];
+    }
+  } else if (normSubject.includes('LQVT') || normSubject.includes('TOÁN')) {
+    teacherMats = ['Mô hình trực quan số lượng lớn', 'Thẻ chữ số 1-10 phóng to', 'Bảng nỉ tương tác của cô', 'Video bài tập toán'];
+    studentMats = ['Rổ đồ dùng con vật/quả nhựa', 'Bộ thẻ chữ số tương ứng', 'Que tính', 'Hạt bắp/sỏi sạch', 'Bảng con & phấn'];
+  } else if (normSubject.includes('LQCC') || normSubject.includes('CHỮ CÁI')) {
+    teacherMats = ['Bộ thẻ chữ in hoa/in thường/viết thường phóng to', 'Rổ nét chữ rời của cô', 'Tranh từ khóa gạch chân chữ cái'];
+    studentMats = ['Thẻ chữ cái của trẻ', 'Dây điện mềm uốn chữ', 'Hạt bắp/sỏi để xếp chữ', 'Bảng con', 'Đất nặn uốn nét chữ'];
+  } else if (normSubject.includes('TAO_HINH') || normSubject.includes('TẠO HÌNH')) {
+    teacherMats = ['Tranh mẫu hoàn thiện của cô (3 mẫu)', 'Giá treo tranh triển lãm', 'Vật thật mẫu trực quan', 'Nhạc không lời thư giãn'];
+    if (lowerTopic.includes('vẽ') || lowerTopic.includes('tô')) {
+      studentMats = ['Giấy vẽ A4', 'Hộp sáp màu', 'Bút chì', 'Gọt tẩy', 'Khăn lau tay'];
+    } else if (lowerTopic.includes('nặn') || lowerTopic.includes('bánh')) {
+      studentMats = ['Đất nặn nhiều màu', 'Bảng con nặn', 'Dao nhựa bo tròn', 'Đĩa nhựa đựng sản phẩm', 'Khăn lau tay ẩm'];
+    } else if (lowerTopic.includes('xé') || lowerTopic.includes('dán') || lowerTopic.includes('cắt')) {
+      studentMats = ['Giấy màu các loại', 'Hồ dán thủ công', 'Kéo đầu tròn an toàn', 'Giấy nền A4', 'Khăn lau tay'];
+    } else {
+      studentMats = ['Giấy màu A4', 'Hồ dán', 'Sáp màu', 'Kéo đầu tròn', 'Đất nặn nhiều màu', 'Bảng con'];
+    }
+  } else if (normSubject.includes('LQAN') || normSubject.includes('ÂM NHẠC')) {
+    teacherMats = ['Đàn piano/organ', 'Nhạc beat chất lượng cao', 'SmartTV clip bài hát', 'Trang phục múa mẫu'];
+    studentMats = ['Phách tre', 'Xắc xô', 'Trống lắc mini', 'Hoa đeo tay biểu diễn', 'Nơ tay múa', 'Mũ múa hóa trang'];
+  } else if (normSubject.includes('PTVĐ') || normSubject.includes('VẬN ĐỘNG')) {
+    teacherMats = ['Ghế thể dục mầm non', 'Vạch chuẩn xuất phát', 'Nhạc khởi động/hồi tĩnh', 'Còi thể thao'];
+    studentMats = ['Trang phục thể thao gọn gàng', 'Bóng nhựa nhiều màu', 'Túi cát thể dục', 'Cờ dây nhiều màu'];
+  } else if (normSubject.includes('NBTN') || normSubject.includes('NHẬN BIẾT TẬP NÓI')) {
+    teacherMats = ['Hộp quà kỳ diệu', 'Đồ chơi phát tiếng nhạc/chuyển động', 'Vật thật to màu sắc nổi bật'];
+    studentMats = ['Bóng nhựa to màu đỏ/vàng', 'Khối gỗ xếp hình', 'Búp bê vải', 'Tranh lô tô nhận biết'];
+  } else if (normSubject.includes('HDVDV') || normSubject.includes('HOẠT ĐỘNG VỚI ĐỒ VẬT')) {
+    teacherMats = ['Tháp xếp chồng mẫu', 'Hộp thả hình khối', 'Bảng lồng khay hạt'];
+    studentMats = ['Vòng nhựa nhiều màu', 'Khối gỗ hình vuông/tròn', 'Khay hạt xỏ dây', 'Tháp nhựa 5 tầng'];
+  } else if (normSubject.includes('LQVH') || normSubject.includes('VĂN HỌC') || normSubject.includes('KỂ CHUYỆN')) {
+    teacherMats = ['Rối tay nhân vật truyện', 'Sa bàn rối dẹt/rối que', 'Tranh minh họa truyện phóng to', 'Video hoạt hình câu chuyện'];
+    studentMats = ['Mũ hóa trang nhân vật', 'Tranh lô tô trình tự câu chuyện', 'Trang phục đóng kịch', 'Rối ngón tay'];
+  } else {
+    teacherMats = ['Máy tính SmartTV', 'Tranh ảnh trực quan bài học', 'Mô hình minh họa'];
+    studentMats = ['Học liệu trải nghiệm nhóm', 'Tranh bóc dán', 'Giấy màu & sáp màu'];
+  }
+
+  const allTags = Array.from(new Set([...teacherMats, ...studentMats]));
+  return { teacher: teacherMats, students: studentMats, allTags };
+}

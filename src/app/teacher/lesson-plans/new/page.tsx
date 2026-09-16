@@ -12,7 +12,7 @@ import { AILessonPlan, GradeLevelCode, ThemeCode, TeachingType } from '@/lib/typ
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
-  SUB_THEME_MAP, SUBJECT_NAME_MAP 
+  SUB_THEME_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions
 } from '@/lib/utils/curriculumHelper';
 
 export default function TeacherAILessonPlanNewPage() {
@@ -25,7 +25,9 @@ export default function TeacherAILessonPlanNewPage() {
   // Traditional Form States
   const [topic, setTopic] = useState<string>('Khám phá sự phát triển của cây xanh');
   const [targetObjectives, setTargetObjectives] = useState<string>('Trẻ biết cây cần đất, nước, không khí và ánh sáng để lớn lên');
-  const [materialsNeeded, setMaterialsNeeded] = useState<string>('Hạt đỗ, bông gòn, cốc nhựa, nước sạch, khay thực hành');
+  const [materialsNeeded, setMaterialsNeeded] = useState<string>(
+    getDynamicMaterialSuggestions('KPKH', 'Khám phá sự phát triển của cây xanh', 'LA').allTags.join(', ')
+  );
 
   // PBL Form States
   const [projectName, setProjectName] = useState<string>('Dự án Chế tạo Xe Ô tô Đồ chơi Tải nặng');
@@ -331,47 +333,62 @@ export default function TeacherAILessonPlanNewPage() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
                   />
 
-                  {/* Smart Material Suggestion Tags from curriculum_frameworks Seed Data */}
-                  {currentFramework?.pedagogical_guidelines?.basic_materials && (
-                    <div className="mt-2 space-y-1">
-                      <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        Gợi ý học liệu chuẩn từ BGH (bấm chọn nhanh):
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {currentFramework.pedagogical_guidelines.basic_materials.map((mat, idx) => {
-                          const isSelected = materialsNeeded.toLowerCase().includes(mat.toLowerCase());
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  const updated = materialsNeeded
-                                    .split(',')
-                                    .map((s) => s.trim())
-                                    .filter((s) => s.toLowerCase() !== mat.toLowerCase() && s.length > 0)
-                                    .join(', ');
-                                  setMaterialsNeeded(updated);
-                                } else {
-                                  const trimmed = materialsNeeded.trim();
-                                  const updated = trimmed ? `${trimmed}, ${mat}` : mat;
-                                  setMaterialsNeeded(updated);
-                                }
-                              }}
-                              className={`px-2 py-0.5 rounded-pill text-[11px] font-medium border transition-all ${
-                                isSelected
-                                  ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
-                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-300'
-                              }`}
-                            >
-                              {isSelected ? `✓ ${mat}` : `+ ${mat}`}
-                            </button>
-                          );
-                        })}
+                  {/* Smart Material Suggestion Tags from Dynamic Material Engine */}
+                  {(() => {
+                    const dynamicSuggestion = getDynamicMaterialSuggestions(subject, topic, gradeLevel);
+                    const tags = dynamicSuggestion.allTags;
+                    if (tags.length === 0) return null;
+
+                    return (
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-sky-900 font-semibold flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                            Gợi ý học liệu chuẩn theo môn & đề tài (bấm chọn nhanh):
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setMaterialsNeeded(tags.join(', '))}
+                            className="text-[10px] font-bold text-sky-600 hover:text-sky-800 underline"
+                          >
+                            Áp dụng tất cả
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tags.map((mat, idx) => {
+                            const isSelected = materialsNeeded.toLowerCase().includes(mat.toLowerCase());
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    const updated = materialsNeeded
+                                      .split(',')
+                                      .map((s) => s.trim())
+                                      .filter((s) => s.toLowerCase() !== mat.toLowerCase() && s.length > 0)
+                                      .join(', ');
+                                    setMaterialsNeeded(updated);
+                                  } else {
+                                    const trimmed = materialsNeeded.trim();
+                                    const updated = trimmed ? `${trimmed}, ${mat}` : mat;
+                                    setMaterialsNeeded(updated);
+                                  }
+                                }}
+                                className={`px-2 py-0.5 rounded-pill text-[11px] font-medium border transition-all ${
+                                  isSelected
+                                    ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-300'
+                                }`}
+                              >
+                                {isSelected ? `✓ ${mat}` : `+ ${mat}`}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </>
             ) : (
