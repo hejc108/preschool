@@ -76,13 +76,7 @@ export function mapSchemaResponseToLessonPlan(
   };
 }
 
-/**
- * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
- */
-export function getPollinationsImageUrl(prompt: string, width = 1024, height = 768): string {
-  const encodedPrompt = encodeURIComponent(`cute preschool cartoon illustration, colorful, friendly, ${prompt}`);
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
-}
+
 
 /**
  * Generates Traditional 5-Step Preschool Lesson Plan + Dynamic Framework Injection + Mermaid Mindmap + Pollinations Images
