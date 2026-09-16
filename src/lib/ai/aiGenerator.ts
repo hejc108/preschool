@@ -1,5 +1,5 @@
 import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject, TeachingType, PreschoolAISchemaResponse } from '../types/schema';
-import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP } from '../utils/curriculumHelper';
+import { getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, SUBJECT_NAME_MAP } from '../utils/curriculumHelper';
 
 /**
  * System Instruction Prompt for Gemini / AI Engine
