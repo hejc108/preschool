@@ -477,27 +477,6 @@ Trân trọng cảm ơn sự đồng hành quý báu của Quý Phụ Huynh!
 /**
  * Triggers PowerPoint (.pptx) file generation using dynamic client-side PptxGenJS library
  */
-export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
-  try {
-    if (typeof window === 'undefined') return;
-
-    // Dynamically load pptxgenjs client script
-    if (!(window as any).PptxGenJS) {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Không thể nạp thư viện pptxgenjs'));
-        document.head.appendChild(script);
-      });
-    }
-
-    const PptxGenJS = (window as any).PptxGenJS;
-    const pptx = new PptxGenJS();
-
-    pptx.layout = 'LAYOUT_16x9';
-    pptx.author = 'Mầm Non Sương Mai AI Pedagogy Engine';
-
 /**
  * Triggers PowerPoint (.pptx) file generation using dynamic client-side PptxGenJS library
  * Follows Preschool SmartTV Design System (Pastel background, 16:9 HD, 60-70% image area, 36-42pt bold font)
