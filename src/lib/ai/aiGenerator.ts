@@ -122,44 +122,62 @@ export async function generateAILessonPlan(params: {
   Step3 --> S3_Detail["Trò chơi: ${framework.pedagogical_guidelines.interactive_games?.[0] || 'Thi đội nào nhanh' }"]
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
-  // 5-Step Traditional Pedagogy Structure
+  // 5-Step Traditional / 5E Pedagogy Structure
+  const isLaGroup = normGrade === 'LA';
   const fiveSteps = [
     {
       step_number: 1,
-      step_title: '1. Gắn kết & Khởi động (Ổn định tổ chức)',
+      step_title: isLaGroup ? '1. Gắn kết (Engage) - Ổn định & Đặt vấn đề' : '1. Gắn kết & Khởi động (Ổn định tổ chức)',
       description: 'Gây hứng thú cho trẻ qua bài hát vui nhộn và câu hỏi gợi mở.',
-      teacher_action: `Cô cùng cả lớp hát bài "${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Mầm non vui vẻ'}" và gợi mở về "${safeTopic}".`,
+      teacher_action: `Cô cùng cả lớp hát bài "${framework.pedagogical_guidelines.songs_or_poems?.[0] || 'Mầm non vui vẻ'}" và gợi mở câu hỏi khám phá về đề tài "${safeTopic}".`,
       child_activity: 'Trẻ hào hứng nhún nhảy theo nhạc, lắng nghe và hăng hái trả lời câu hỏi của cô.'
     },
     {
       step_number: 2,
-      step_title: '2. Khám phá & Trải nghiệm thực tế (Hoạt động trọng tâm)',
+      step_title: isLaGroup ? '2. Khám phá (Explore) - Trải nghiệm thực tế' : '2. Khám phá & Trải nghiệm thực tế (Hoạt động trọng tâm)',
       description: 'Cho trẻ quan sát trực quan, sờ nắn và thực hành trải nghiệm trực tiếp.',
-      teacher_action: `Cô giới thiệu học liệu: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}. Hướng dẫn trẻ quan sát và vần thao tác.`,
+      teacher_action: `Cô giới thiệu học liệu chuẩn: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}. Hướng dẫn trẻ quan sát và vần thao tác.`,
       child_activity: `Trẻ chia nhóm 4-5 bé, tự tay sờ nắn, quan sát và trải nghiệm đồ dùng cùng các bạn.`
     },
     {
       step_number: 3,
-      step_title: '3. Giải thích & Thảo luận nhóm (Luyện tập trò chơi)',
+      step_title: isLaGroup ? '3. Giải thích (Explain) - Thảo luận & Trò chơi' : '3. Giải thích & Thảo luận nhóm (Luyện tập trò chơi)',
       description: 'Giúp trẻ ghi nhớ kiến thức qua trò chơi đồng đội tương tác.',
       teacher_action: `Cô tổ chức trò chơi "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Đội nào nhanh nhất'}" khắc sâu bài học. Từ vựng cốt lõi: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}.`,
       child_activity: 'Các nhóm phân công nhau cầm thẻ tranh nhanh chân lên dán vào bảng nhóm.'
     },
     {
       step_number: 4,
-      step_title: '4. Củng cố & Tổng kết kiến thức',
-      description: 'Hệ thống lại nội dung qua Sơ đồ tư duy Mermaid visual.',
-      teacher_action: 'Cô trình chiếu Sơ đồ tư duy trên SmartTV, mời đại diện bé lên chỉ và tóm tắt lại bài học.',
-      child_activity: 'Bé đại diện tự tin lên bảng SmartTV giới thiệu quy trình bài học cho các bạn.'
+      step_title: isLaGroup ? '4. Áp dụng & Mở rộng (Elaborate)' : '4. Củng cố & Tổng kết kiến thức',
+      description: isLaGroup ? 'Trẻ tự tay vận dụng kiến thức thực hành sáng tạo sản phẩm.' : 'Hệ thống lại nội dung qua Sơ đồ tư duy Mermaid visual.',
+      teacher_action: isLaGroup 
+        ? `Cô hướng dẫn trẻ ứng dụng kiến thức tự tay thực hành (gieo hạt, tạo hình hoặc làm thí nghiệm) về "${safeTopic}".`
+        : 'Cô trình chiếu Sơ đồ tư duy trên SmartTV, mời đại diện bé lên chỉ và tóm tắt lại bài học.',
+      child_activity: isLaGroup
+        ? 'Trẻ hào hứng tự tay thực hành cá nhân / theo nhóm để hoàn thành sản phẩm trải nghiệm của mình.'
+        : 'Bé đại diện tự tin lên bảng SmartTV giới thiệu quy trình bài học cho các bạn.'
     },
     {
       step_number: 5,
-      step_title: '5. Đánh giá & Mở rộng (Kết thúc)',
+      step_title: isLaGroup ? '5. Đánh giá (Evaluate) - Nhận xét & Kết thúc' : '5. Đánh giá & Mở rộng (Kết thúc)',
       description: 'Khen ngợi nỗ lực của trẻ và hướng dẫn thu dọn đồ dùng gọn gàng.',
       teacher_action: 'Cô nhận xét dương tính từng nhóm, trao nhãn dán bé ngoan và dặn dò bé chăm sóc sản phẩm.',
       child_activity: 'Trẻ vui vẻ nhận phần thưởng và tự giác thu dọn khay đồ dùng về đúng nơi quy định.'
     }
   ];
+
+  const steamPillars = {
+    science: framework.pedagogical_guidelines.steam_objectives?.science || `Trẻ nhận biết các đặc điểm cơ bản và quy luật của đề tài "${safeTopic}".`,
+    technology: framework.pedagogical_guidelines.steam_objectives?.technology || 'Trẻ sử dụng khéo léo các dụng cụ, đồ dùng học liệu đơn giản.',
+    engineering: framework.pedagogical_guidelines.steam_objectives?.engineering || 'Trẻ biết sắp xếp các bước thực hiện theo trình tự hợp lý.',
+    art: framework.pedagogical_guidelines.steam_objectives?.art || 'Trẻ trang trí sản phẩm đẹp mắt, hài hòa về màu sắc.',
+    math: framework.pedagogical_guidelines.steam_objectives?.math || 'Trẻ đếm số lượng, so sánh kích thước và phân biệt hình khối.'
+  };
+
+  const afternoonActivity = {
+    name: `Trò chơi hoạt động chiều (HĐC): "${framework.pedagogical_guidelines.interactive_games?.[0] || 'Cùng ôn bài học'}"`,
+    instruction: `Cô tập hợp trẻ vào buổi chiều, tổ chức trò chơi củng cố kiến thức về "${safeTopic}". Chuẩn bị: ${framework.pedagogical_guidelines.basic_materials.slice(0, 2).join(', ')}. Cách tiến hành: Cô phổ biến luật chơi, trẻ tham gia phản xạ nhanh và nhận phần thưởng dương tính.`
+  };
 
   // PowerPoint Slide Deck Content
   const slides: AILessonSlide[] = [
@@ -167,23 +185,23 @@ export async function generateAILessonPlan(params: {
       slide_number: 1,
       title: `BÀI GIẢNG: ${safeTopic.toUpperCase()}`,
       content_points: [
-        `Môn học: ${subject} • Khối lớp: ${GRADE_LEVEL_MAP[normGrade].label}`,
+        `Môn học: ${SUBJECT_NAME_MAP[subject] || subject} • Khối lớp: ${GRADE_LEVEL_MAP[normGrade].label}`,
         `Chủ đề: ${THEME_NAME_MAP[theme_code]}`,
         `Thời lượng chuẩn: ${duration} phút`
       ],
       image_prompt: `Cute preschool children learning about ${safeTopic}, colorful classroom`,
-      image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`)
+      image_url: getPollinationsImageUrl(`Cute preschool children learning about ${safeTopic}`, 1024, 768, 1)
     },
     {
       slide_number: 2,
       title: 'MỤC TIÊU BÀI HỌC & ĐỒ DÙNG',
       content_points: [
-        `Mục tiêu: ${target_objectives || framework.pedagogical_guidelines.steam_objectives?.science || 'Trẻ nhận biết và trình bày được nội dung bài học'}`,
+        `Mục tiêu: ${target_objectives || steamPillars.science}`,
         `Học liệu: ${materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')}`,
         `Từ vựng: ${framework.pedagogical_guidelines.key_vocabulary.join(', ')}`
       ],
       image_prompt: `Preschool science experiment materials, cartoon style`,
-      image_url: getPollinationsImageUrl(`Preschool science experiment materials`)
+      image_url: getPollinationsImageUrl(`Preschool science experiment materials`, 1024, 768, 2)
     },
     {
       slide_number: 3,
@@ -194,7 +212,7 @@ export async function generateAILessonPlan(params: {
         'Bước 3: Trả lời câu hỏi gợi mở và thảo luận.'
       ],
       image_prompt: `Little happy Asian kindergarten child exploring ${safeTopic}, bright watercolor`,
-      image_url: getPollinationsImageUrl(`Little happy Asian kindergarten child exploring ${safeTopic}`)
+      image_url: getPollinationsImageUrl(`Little happy Asian kindergarten child exploring ${safeTopic}`, 1024, 768, 3)
     },
     {
       slide_number: 4,
@@ -204,17 +222,17 @@ export async function generateAILessonPlan(params: {
         'Bé nhớ bài học và tự giác thu dọn đồ dùng ngăn nắp nhé!'
       ],
       image_prompt: `sprout growing stages timeline infographic for kindergarten children`,
-      image_url: getPollinationsImageUrl(`sprout growing stages timeline infographic for kindergarten children`)
+      image_url: getPollinationsImageUrl(`sprout growing stages timeline infographic for kindergarten children`, 1024, 768, 4)
     }
   ];
 
   return {
     id: `ai-lesson-${Date.now()}`,
     topic: safeTopic,
-    subject,
+    subject: SUBJECT_NAME_MAP[subject] || subject,
     grade_level: normGrade,
     teaching_type: 'TRADITIONAL',
-    target_objectives: target_objectives || framework.pedagogical_guidelines.steam_objectives?.science || 'Trẻ tự tin trình bày kiến thức và thực hành khéo léo.',
+    target_objectives: target_objectives || `S: ${steamPillars.science} | T: ${steamPillars.technology} | E: ${steamPillars.engineering} | A: ${steamPillars.art} | M: ${steamPillars.math}`,
     duration_minutes: duration,
     materials_needed: (materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')).split(',').map((s) => s.trim()),
     five_steps: fiveSteps,
@@ -224,9 +242,58 @@ export async function generateAILessonPlan(params: {
       { title: `Khám phá "${safeTopic}" (VTV7 Nhi Khoa)`, url: 'https://www.youtube.com/results?search_query=vtv7+nhi+khoa' }
     ],
     slides,
+    preparations: {
+      teacher: (materials_needed || framework.pedagogical_guidelines.basic_materials.join(', ')).split(',').map((s) => s.trim()),
+      students: framework.pedagogical_guidelines.basic_materials.slice(0, 3)
+    },
+    afternoon_activity: afternoonActivity,
+    steam_pillars: steamPillars,
     framework_id: framework.id,
     created_at: new Date().toISOString()
   };
+}
+
+/**
+ * Helper: Convert URL sang Base64 tránh lỗi CORS và mất ảnh trên PowerPoint
+ */
+export async function toBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Chuyển đổi Base64 thất bại'));
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn('Không thể fetch ảnh để chuyển sang Base64:', err);
+    return '';
+  }
+}
+
+/**
+ * High quality preschool cartoon fallback images if AI image server is unreachable
+ */
+export const FALLBACK_PRESCHOOL_IMAGES = [
+  'https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80'
+];
+
+export function getFallbackPreschoolImage(index: number = 0): string {
+  return FALLBACK_PRESCHOOL_IMAGES[index % FALLBACK_PRESCHOOL_IMAGES.length];
+}
+
+/**
+ * Generates Pollinations.ai Flux.1 Cartoon Illustration Image URL (Free 0 VNĐ)
+ */
+export function getPollinationsImageUrl(prompt: string, width = 1024, height = 768, seedIndex = 1): string {
+  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cute preschool children illustration';
+  const encodedPrompt = encodeURIComponent(`cute preschool cartoon illustration, colorful, friendly, ${cleanPrompt}`);
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }
 
 /**

@@ -304,6 +304,7 @@ export interface AILessonPlan {
   framework_id?: string;
   preparations?: { teacher: string[]; students: string[] };
   afternoon_activity?: { name: string; instruction: string };
+  steam_pillars?: { science: string; technology: string; engineering: string; art: string; math: string };
   schema_response?: PreschoolAISchemaResponse;
   created_by?: string;
   created_at?: string;

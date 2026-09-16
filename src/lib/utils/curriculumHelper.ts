@@ -21,15 +21,15 @@ export const GRADE_LEVEL_MAP: Record<GradeLevelCode, { label: string; duration: 
 };
 
 export const SUBJECT_NAME_MAP: Record<string, string> = {
-  NBTN: 'Nhận biết tập nói (Nhà Trẻ)',
-  HDVDV: 'Hoạt động với đồ vật (Nhà Trẻ)',
-  KPKH: 'Khám phá khoa học',
-  LQVT: 'Làm quen với toán',
-  LQCC: 'Làm quen chữ cái',
-  LQVH: 'Làm quen văn học / Kể chuyện',
-  TAO_HINH: 'Tạo hình & Khéo tay',
-  LQAN: 'Làm quen âm nhạc & Vận động',
-  PTVĐ: 'Phát triển vận động',
+  NBTN: 'Nhận biết tập nói (NBTN)',
+  HDVDV: 'Hoạt động với đồ vật (HĐVĐV)',
+  KPKH: 'Khám phá khoa học (KPKH)',
+  LQVT: 'Làm quen với toán (LQVT)',
+  LQCC: 'Làm quen chữ cái (LQCC)',
+  LQVH: 'Làm quen văn học / Kể chuyện (LQVH)',
+  TAO_HINH: 'Tạo hình & Khéo tay (TẠO HÌNH)',
+  LQAN: 'Giáo dục âm nhạc (LQÂN)',
+  PTVĐ: 'Phát triển vận động (PTVĐ)',
 };
 
 export const INITIAL_CURRICULUM_FRAMEWORKS: CurriculumFramework[] = [

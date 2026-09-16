@@ -294,13 +294,15 @@ export default function TeacherAILessonPlanNewPage() {
                 onChange={(e) => setSubject(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-800"
               >
-                <option value="KPKH">Khám phá khoa học</option>
-                <option value="LQVT">Làm quen với toán</option>
-                <option value="LQCC">Làm quen chữ cái</option>
-                <option value="LQVH">Làm quen văn học / Kể chuyện</option>
-                <option value="TAO_HINH">Tạo hình & Khéo tay</option>
-                <option value="LQAN">Làm quen âm nhạc & Vận động</option>
-                <option value="PTVĐ">Phát triển vận động</option>
+                <option value="KPKH">Khám phá khoa học (KPKH)</option>
+                <option value="LQVT">Làm quen với toán (LQVT)</option>
+                <option value="LQCC">Làm quen chữ cái (LQCC)</option>
+                <option value="LQVH">Làm quen văn học / Kể chuyện (LQVH)</option>
+                <option value="TAO_HINH">Tạo hình & Khéo tay (TẠO HÌNH)</option>
+                <option value="LQAN">Giáo dục âm nhạc (LQÂN)</option>
+                <option value="PTVĐ">Phát triển vận động (PTVĐ)</option>
+                <option value="NBTN">Nhận biết tập nói (NBTN)</option>
+                <option value="HDVDV">Hoạt động với đồ vật (HĐVĐV)</option>
               </select>
             </div>
 
@@ -328,6 +330,48 @@ export default function TeacherAILessonPlanNewPage() {
                     placeholder="VD: Bông gòn, hạt giống, cốc nhựa, nước sạch..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
                   />
+
+                  {/* Smart Material Suggestion Tags from curriculum_frameworks Seed Data */}
+                  {currentFramework?.pedagogical_guidelines?.basic_materials && (
+                    <div className="mt-2 space-y-1">
+                      <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                        Gợi ý học liệu chuẩn từ BGH (bấm chọn nhanh):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {currentFramework.pedagogical_guidelines.basic_materials.map((mat, idx) => {
+                          const isSelected = materialsNeeded.toLowerCase().includes(mat.toLowerCase());
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  const updated = materialsNeeded
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .filter((s) => s.toLowerCase() !== mat.toLowerCase() && s.length > 0)
+                                    .join(', ');
+                                  setMaterialsNeeded(updated);
+                                } else {
+                                  const trimmed = materialsNeeded.trim();
+                                  const updated = trimmed ? `${trimmed}, ${mat}` : mat;
+                                  setMaterialsNeeded(updated);
+                                }
+                              }}
+                              className={`px-2 py-0.5 rounded-pill text-[11px] font-medium border transition-all ${
+                                isSelected
+                                  ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-300'
+                              }`}
+                            >
+                              {isSelected ? `✓ ${mat}` : `+ ${mat}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -521,6 +565,18 @@ export default function TeacherAILessonPlanNewPage() {
                       {generatedLesson.mermaid_mindmap_code}
                     </div>
                   </div>
+
+                  {/* Afternoon Activity Section (HĐC) */}
+                  {generatedLesson.afternoon_activity && (
+                    <div className="bg-amber-50/90 border border-amber-200 rounded-convent p-4 space-y-2 shadow-sm text-xs">
+                      <span className="font-bold text-amber-950 flex items-center gap-2 text-xs uppercase tracking-wider">
+                        <Sparkles className="w-4 h-4 text-amber-600" />
+                        IV. Hoạt động chiều (HĐC)
+                      </span>
+                      <h4 className="font-bold text-amber-900 text-sm">{generatedLesson.afternoon_activity.name}</h4>
+                      <p className="text-amber-950 leading-relaxed">{generatedLesson.afternoon_activity.instruction}</p>
+                    </div>
+                  )}
 
                   {/* Parent Announcement Card (If PBL) */}
                   {generatedLesson.parent_announcement && (
