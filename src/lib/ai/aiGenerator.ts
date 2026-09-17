@@ -48,6 +48,21 @@ Nếu teaching_type == 'PROJECT_BASED':
    - Tự động lồng ghép hình ảnh Việt Nam gần gũi (hoa mai, hoa đào, bánh chưng, chú bộ đội Cụ Hồ, mũ bảo hiểm xe máy, hoa sen, lăng Bác, góc sân trường Sương Mai...).`;
 
 /**
+ * Helper to remove Vietnamese diacritics for clean URL prompts
+ */
+export function removeVietnameseTones(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Generates Pollinations.ai 3D Cartoon Illustration Image URL (Free 0 VNĐ)
  * Enforces strict Rule 4: No text, no letters, 16:9 ratio, parametric colors
  */
@@ -58,8 +73,9 @@ export function getPollinationsImageUrl(
   seedIndex = 1,
   themeStyleKeywords = 'colorful cheerful'
 ): string {
-  const cleanPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'cheerful kindergarten kids learning';
-  const fullPrompt = `cute preschool 3D cartoon style, soft clay or papercraft look, vibrant ${themeStyleKeywords}, cheerful kindergarten kids, no text, no letters, high contrast, clean background, 16:9 ratio, ${cleanPrompt}`;
+  const cleanPrompt = removeVietnameseTones(prompt).slice(0, 100) || 'cheerful kindergarten kids learning';
+  const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 80) || 'vibrant cartoon';
+  const fullPrompt = `cute preschool 3D cartoon style, soft clay or papercraft look, vibrant ${cleanKeywords}, cheerful kindergarten kids, no text, no letters, high contrast, clean background, 16:9 ratio, ${cleanPrompt}`;
   const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }

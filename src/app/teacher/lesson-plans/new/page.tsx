@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { generateAILessonPlan, generateAILearningProject, exportToPowerPoint, getFallbackPreschoolImage } from '@/lib/ai/aiGenerator';
 import { AILessonPlan, GradeLevelCode, ThemeCode, TeachingType } from '@/lib/types/schema';
+import { PreschoolSmartImage } from '@/components/PreschoolSmartImage';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
@@ -866,12 +867,15 @@ export default function TeacherAILessonPlanNewPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                   {(slide.cards_data || []).map((card, cIdx) => (
                                     <div key={cIdx} className="bg-white border border-emerald-200 rounded-2xl overflow-hidden shadow-sm flex flex-col">
-                                      <img 
-                                        src={card.image_url || getFallbackPreschoolImage(cIdx, activeTheme)} 
-                                        alt={card.title} 
-                                        className="w-full h-40 object-cover"
-                                        onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(cIdx, activeTheme); }}
-                                      />
+                                      <div className="w-full h-40">
+                                        <PreschoolSmartImage 
+                                          src={card.image_url} 
+                                          fallbackSrc={getFallbackPreschoolImage(cIdx, activeTheme)}
+                                          alt={card.title}
+                                          topic={topic}
+                                          className="w-full h-40 object-cover"
+                                        />
+                                      </div>
                                       <div className="p-4 text-center space-y-2 flex-1 flex flex-col justify-between">
                                         <h4 className="font-bold text-[#13542E] text-base">{card.title}</h4>
                                         <p className="text-slate-600 text-xs leading-relaxed">{card.desc}</p>
@@ -918,12 +922,13 @@ export default function TeacherAILessonPlanNewPage() {
                                       </div>
                                     ))}
                                   </div>
-                                  <div className="lg:col-span-5 flex justify-center">
-                                    <img 
-                                      src={slide.image_url || getFallbackPreschoolImage(7, activeTheme)} 
+                                  <div className="lg:col-span-5 flex justify-center w-full max-w-xs h-64 mx-auto">
+                                    <PreschoolSmartImage 
+                                      src={slide.image_url} 
+                                      fallbackSrc={getFallbackPreschoolImage(7, activeTheme)}
                                       alt={slide.title}
-                                      className="rounded-2xl border-4 border-white shadow-lg w-full max-w-xs h-64 object-cover"
-                                      onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(7, activeTheme); }}
+                                      topic={topic}
+                                      className="w-full h-64 object-cover border-4 border-white shadow-lg rounded-2xl"
                                     />
                                   </div>
                                 </div>
@@ -968,12 +973,13 @@ export default function TeacherAILessonPlanNewPage() {
                                     {slide.subtitle}
                                   </p>
                                 </div>
-                                <div className="lg:col-span-6 flex justify-center">
-                                  <img 
-                                    src={slide.image_url || getFallbackPreschoolImage(9, activeTheme)} 
+                                <div className="lg:col-span-6 flex justify-center w-full h-72">
+                                  <PreschoolSmartImage 
+                                    src={slide.image_url} 
+                                    fallbackSrc={getFallbackPreschoolImage(9, activeTheme)}
                                     alt={slide.title}
-                                    className="rounded-2xl border-4 border-white shadow-xl w-full h-72 object-cover"
-                                    onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(9, activeTheme); }}
+                                    topic={topic}
+                                    className="w-full h-72 object-cover border-4 border-white shadow-xl rounded-2xl"
                                   />
                                 </div>
                               </div>
@@ -1009,11 +1015,12 @@ export default function TeacherAILessonPlanNewPage() {
                             {/* 11. HERO OVERLAY LAYOUT */}
                             {layout === 'HERO_OVERLAY' && (
                               <div className="relative rounded-2xl overflow-hidden min-h-[320px] flex items-center justify-center p-6 bg-slate-800">
-                                <img 
-                                  src={slide.image_url || getFallbackPreschoolImage(11, activeTheme)} 
-                                  alt={slide.title} 
+                                <PreschoolSmartImage 
+                                  src={slide.image_url} 
+                                  fallbackSrc={getFallbackPreschoolImage(11, activeTheme)}
+                                  alt={slide.title}
+                                  topic={topic}
                                   className="absolute inset-0 w-full h-full object-cover opacity-60"
-                                  onError={(e) => { e.currentTarget.src = getFallbackPreschoolImage(11, activeTheme); }}
                                 />
                                 <div className="relative z-10 bg-white/95 backdrop-blur border border-white rounded-2xl p-8 text-center max-w-2xl space-y-4 shadow-2xl">
                                   <h3 className="text-2xl sm:text-3xl font-black text-[#13542E]">
