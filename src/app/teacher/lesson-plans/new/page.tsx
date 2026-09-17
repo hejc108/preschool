@@ -288,8 +288,6 @@ export default function TeacherAILessonPlanNewPage() {
             <p className="text-xs text-sky-100 font-semibold">Tự động ghép khung chương trình, vẽ tranh minh họa & xuất slide trình chiếu</p>
           </div>
         </div>
-
-        <LanguageSwitcher />
       </header>
 
       {/* Main Workspace Split-Screen Container (Left 35%, Right 65%) */}

@@ -81,7 +81,6 @@ export default function AdminHealthPage() {
             <Save className="w-4 h-4" />
             <span>Lưu sổ sức khỏe lớp</span>
           </button>
-          <LanguageSwitcher />
         </div>
       </header>
 

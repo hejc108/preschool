@@ -70,7 +70,6 @@ export default function AdminMenuPage() {
             <Save className="w-4 h-4" />
             <span>Lưu thay đổi</span>
           </button>
-          <LanguageSwitcher />
         </div>
       </header>
 
