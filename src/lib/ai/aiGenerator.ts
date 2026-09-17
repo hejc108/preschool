@@ -880,9 +880,9 @@ export function getFallbackPreschoolImage(index: number = 0, themeCode?: string,
 
   if (subCat === 'GIAO_THONG_WATERWAY') {
     const waterwayFallbacks = [
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop&q=80', // Sailboat on blue water
-      'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=800&auto=format&fit=crop&q=80', // Ship at harbor
-      'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800&auto=format&fit=crop&q=80'  // Harbor sea water
+      'https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=800&auto=format&fit=crop&q=80', // Sailboat on blue water
+      'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&auto=format&fit=crop&q=80', // Ships at harbor
+      'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80'  // Small boat on river
     ];
     return waterwayFallbacks[index % waterwayFallbacks.length];
   }

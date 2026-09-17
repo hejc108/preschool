@@ -119,9 +119,9 @@ export const THEME_MATRIX: Record<string, ThemeColorPalette> = {
     imageStyleKeywords: 'cars, trains, airplanes, sailboat, traffic signs',
     defaultIcon: '🚗',
     fallbackImages: [
-      'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1508974239320-0a029497e820?w=800&auto=format&fit=crop&q=80'
+      'https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=800&auto=format&fit=crop&q=80'
     ]
   },
   HTTN: {
@@ -338,7 +338,8 @@ export interface ThemeArchetypeInfo {
 
 export function getThemeArchetype(themeCode?: string, topic: string = '', subject: string = ''): ThemeArchetypeInfo {
   const code = themeCode || 'THUC_VAT';
-  const cleanTopic = (topic || '').trim().replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '') || 'Bài Học Trực Quan';
+  let cleanTopic = (topic || '').trim().replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '') || 'Bài Học Trực Quan';
+  cleanTopic = cleanTopic.replace(/(\&|\và|\,)\s*(đường\s*)?hàng không/gi, '').replace(/\s+/g, ' ').trim();
   const normSub = (subject || '').toUpperCase();
 
   // 1. SUBJECT DOMAIN OVERRIDES (Take precedence over ThemeCode)
