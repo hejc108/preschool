@@ -214,12 +214,83 @@ export function autoDetectThemeCode(topic: string, fallbackTheme: ThemeCode = 'T
   return fallbackTheme;
 }
 
+export type SubCategoryType = 
+  | 'GIAO_THONG_WATERWAY' | 'GIAO_THONG_AIRWAY' | 'GIAO_THONG_RAILWAY' | 'GIAO_THONG_ROADWAY'
+  | 'DONG_VAT_AQUATIC' | 'DONG_VAT_WILD' | 'DONG_VAT_FARM'
+  | 'THUC_VAT_FRUITS' | 'THUC_VAT_FLOWERS' | 'THUC_VAT_TREES'
+  | 'HTTN_AIR_WIND' | 'HTTN_SUN_SUMMER' | 'HTTN_RAIN_WATER'
+  | 'GENERAL';
+
 /**
- * Dynamic Image Keywords Generator based on Subject Domain and Topic
+ * Auto-detect detailed sub-categories from topic keywords for precise context alignment
+ */
+export function detectTopicSubCategory(topic: string = '', themeCode?: string): SubCategoryType {
+  const lower = (topic || '').toLowerCase();
+  
+  if (themeCode === 'GIAO_THONG' || lower.includes('giao thông') || lower.includes('phương tiện')) {
+    if (/thuỷ|thủy|thuyền|tàu|cano|sông|biển|bến cảng|phao|bến tàu/i.test(lower)) return 'GIAO_THONG_WATERWAY';
+    if (/hàng không|máy bay|phi cơ|khinh khí cầu|sân bay|bầu trời|trực thăng/i.test(lower)) return 'GIAO_THONG_AIRWAY';
+    if (/đường sắt|tàu hỏa|xe lửa|đường ray|ga tàu/i.test(lower)) return 'GIAO_THONG_RAILWAY';
+    return 'GIAO_THONG_ROADWAY';
+  }
+
+  if (themeCode === 'DONG_VAT' || lower.includes('con vật') || lower.includes('động vật')) {
+    if (/dưới nước|biển|cá|tôm|cua|mực|bạch tuộc|đại dương|sông|ao/i.test(lower)) return 'DONG_VAT_AQUATIC';
+    if (/rừng|hổ|voi|khỉ|gấu|sư tử|hươu|hoang dã/i.test(lower)) return 'DONG_VAT_WILD';
+    return 'DONG_VAT_FARM';
+  }
+
+  if (themeCode === 'THUC_VAT' || lower.includes('cây') || lower.includes('hoa') || lower.includes('quả')) {
+    if (/quả|trái|cam|táo|chuối|dưa|xoài|dâu|rau|củ/i.test(lower)) return 'THUC_VAT_FRUITS';
+    if (/hoa|hồng|cúc|mai|đào|sen|lan/i.test(lower)) return 'THUC_VAT_FLOWERS';
+    return 'THUC_VAT_TREES';
+  }
+
+  if (themeCode === 'HTTN' || themeCode === 'NUOC_HTTN' || lower.includes('nước') || lower.includes('tự nhiên')) {
+    if (/gió|không khí|bão|lốc/i.test(lower)) return 'HTTN_AIR_WIND';
+    if (/nắng|mặt trời|mùa hè|nắng nóng/i.test(lower)) return 'HTTN_SUN_SUMMER';
+    return 'HTTN_RAIN_WATER';
+  }
+
+  return 'GENERAL';
+}
+
+/**
+ * Dynamic Image Keywords Generator based on Subject Domain, Topic and Sub-Category
  */
 export function getDynamicImageKeywords(subject: string = '', topic: string = '', themeCode?: string): string {
   const normSub = (subject || '').toUpperCase();
   const lowerTopic = (topic || '').toLowerCase();
+  const subCat = detectTopicSubCategory(topic, themeCode);
+
+  // Sub-category specific image keywords overriding generic theme keywords
+  if (subCat === 'GIAO_THONG_WATERWAY') {
+    return 'toy sailboat on calm blue water river, ship harbor, life jacket safety, kids water transport, bright watercolor illustration';
+  }
+  if (subCat === 'GIAO_THONG_AIRWAY') {
+    return 'toy airplane flying in blue sky, helicopter, airport runway, hot air balloon, bright preschool illustration';
+  }
+  if (subCat === 'GIAO_THONG_RAILWAY') {
+    return 'toy train on wooden track, railway station, train conductor, bright kindergarten illustration';
+  }
+  if (subCat === 'GIAO_THONG_ROADWAY') {
+    return 'toy cars on road, traffic light, school bus, bright preschool illustration';
+  }
+  if (subCat === 'DONG_VAT_AQUATIC') {
+    return 'colorful fish swimming underwater, ocean life, aquarium, cute sea animals, kindergarten illustration';
+  }
+  if (subCat === 'DONG_VAT_WILD') {
+    return 'cute jungle animals, friendly elephant lion monkey, green forest, kindergarten illustration';
+  }
+  if (subCat === 'DONG_VAT_FARM') {
+    return 'cute farm animals, puppy kitten duckling, farmyard, kindergarten illustration';
+  }
+  if (subCat === 'THUC_VAT_FRUITS') {
+    return 'fresh colorful fruits apples oranges bananas, fruit basket for kids, bright kindergarten vector';
+  }
+  if (subCat === 'THUC_VAT_FLOWERS') {
+    return 'colorful spring flowers garden, bright floral arrangement, cute preschool illustration';
+  }
 
   if (normSub.includes('PTVD') || normSub.includes('PTVĐ') || normSub.includes('VẬN ĐỘNG') || lowerTopic.includes('vận động')) {
     return 'kindergarten physical sports exercise, happy children running jumping, colorful gym mats, sports field cartoon';
@@ -431,19 +502,50 @@ export function getThemeArchetype(themeCode?: string, topic: string = '', subjec
       }
     };
   } else if (code === 'DONG_VAT') {
-    return {
-      archetypeType: 'SCIENCE_EXPLORATION',
-      archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
-      storyTitle: `🔎 Hành Trình Thế Giới Động Vật: ${cleanTopic}`,
-      openerType: 'MOVEMENT_GAME',
-      openerHeadline: '🏃 Trò Chơi Vận Động Mô Phỏng',
-      openerDetail: `🐾 Bé cùng nhún nhảy làm các chú vật nhỏ ngộ nghĩnh, mô phỏng dáng đi và hành động đáng yêu liên quan đến bài học "${cleanTopic}".`,
-      localizedElements: ['Chú trâu vàng đồng quê', 'Con cò trắng bay la', 'Con mèo hen góc bếp', 'Đàn gà con lông vàng'],
-      calloutDialogue: {
-        teacherAsk: `🗣️ Cô hỏi: "Đố các bạn nhỏ biết đặc điểm đáng yêu nhất của con vật trong bài học '${cleanTopic}' là gì nào?"`,
-        childAnswer: `👦 Trẻ đáp: "Thưa cô, các bạn nhỏ rất yêu quý các loài vật và thích thú tìm hiểu ạ!"`
-      }
-    };
+    const subCat = detectTopicSubCategory(topic, code);
+    if (subCat === 'DONG_VAT_AQUATIC') {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: `🔎 Bí Mật Thế Giới Đại Dương: ${cleanTopic}`,
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🏃 Trò Chơi Mô Phỏng Cá Bơi',
+        openerDetail: `🐟 Bé cùng nhún nhảy làm các chú cá tung tăng dưới nước, khám phá đặc điểm và bài học "${cleanTopic}".`,
+        localizedElements: ['Bể cá cảnh lớp học Sương Mai', 'Mô hình sinh vật biển', 'Rạn san hô rực rỡ', 'Thẻ hình các loài cá'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Đố các bạn nhỏ biết sinh vật biển bài học '${cleanTopic}' sinh sống và bơi lội bằng bộ phận nào?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, các bạn cá dùng vây và đuôi bơi dưới nước, chúng con cùng bảo vệ nguồn nước sạch ạ!"`
+        }
+      };
+    } else if (subCat === 'DONG_VAT_WILD') {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: `🔎 Khám Phá Rừng Xanh Kỳ Diệu: ${cleanTopic}`,
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🏃 Trò Chơi Vận Động Rừng Xanh',
+        openerDetail: `🐾 Bé mô phỏng dáng đi của chú voi, chú khỉ ngộ nghĩnh, tìm hiểu đặc điểm loài vật trong bài học "${cleanTopic}".`,
+        localizedElements: ['Sa bàn rừng xanh Sương Mai', 'Mô hình động vật hoang dã', 'Cây xanh rừng đại ngàn', 'Thẻ tranh con vật'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Các nhà khám phá nhí ơi! Đố bé biết loài vật rừng xanh bài học '${cleanTopic}' cần bảo vệ thế nào?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, chúng con yêu quý động vật hoang dã và không phá hại môi trường rừng ạ!"`
+        }
+      };
+    } else {
+      return {
+        archetypeType: 'SCIENCE_EXPLORATION',
+        archetypeName: 'Thí nghiệm & Khám phá bí ẩn',
+        storyTitle: `🔎 Hành Trình Thế Giới Động Vật: ${cleanTopic}`,
+        openerType: 'MOVEMENT_GAME',
+        openerHeadline: '🏃 Trò Chơi Vận Động Mô Phỏng',
+        openerDetail: `🐾 Bé cùng nhún nhảy làm các chú vật nhỏ ngộ nghĩnh, mô phỏng dáng đi và hành động đáng yêu liên quan đến bài học "${cleanTopic}".`,
+        localizedElements: ['Chú trâu vàng đồng quê', 'Con cò trắng bay la', 'Con mèo hen góc bếp', 'Đàn gà con lông vàng'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Đố các bạn nhỏ biết đặc điểm đáng yêu nhất của con vật trong bài học '${cleanTopic}' là gì nào?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, các bạn nhỏ rất yêu quý các loài vật và thích thú tìm hiểu ạ!"`
+        }
+      };
+    }
   } else if (code === 'HTTN' || code === 'NUOC_HTTN') {
     return {
       archetypeType: 'SCIENCE_EXPLORATION',
@@ -459,19 +561,64 @@ export function getThemeArchetype(themeCode?: string, topic: string = '', subjec
       }
     };
   } else if (code === 'GIAO_THONG') {
-    return {
-      archetypeType: 'QUIZ_TRUE_FALSE',
-      archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
-      storyTitle: `🚨 Thử Thách Hiệp Sĩ Giao Thông: ${cleanTopic}`,
-      openerType: 'SOUND_SIMULATION',
-      openerHeadline: '🔊 Phản Xạ Âm Thanh Giao Thông',
-      openerDetail: `🚗 "Bíp bíp! Xình xịch!" Bé tinh mắt nhận diện các phương tiện và quy tắc giao thông an toàn trong bài học "${cleanTopic}".`,
-      localizedElements: ['Mũ bảo hiểm xe máy đạt chuẩn', 'Vạch sang đường cho người đi bộ', 'Chú cảnh sát giao thông còi hiệu', 'Xe bus trường Sương Mai'],
-      calloutDialogue: {
-        teacherAsk: `🗣️ Cô hỏi: "Đội hiệp sĩ giao thông ơi! Đố bé biết làm sao để di chuyển an toàn khi tham gia '${cleanTopic}'?"`,
-        childAnswer: `👦 Trẻ đáp: "Thưa cô, ĐÃ THAM GIA GIAO THÔNG LÀ PHẢI CHẤP HÀNH ĐÚNG LUẬT AN TOÀN Ạ!"`
-      }
-    };
+    const subCat = detectTopicSubCategory(topic, code);
+    if (subCat === 'GIAO_THONG_WATERWAY') {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: `⛵ Thử Thách Thủy Thủ Nhí: ${cleanTopic}`,
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🔊 Phản Xạ Âm Thanh Sông Nước & Tàu Thuyền',
+        openerDetail: `⚓ "Tu tu... Còi tàu vang xa!" Bé tinh mắt nhận diện các phương tiện thủy, bến cảng và quy tắc an toàn khi đi tàu thuyền trong bài học "${cleanTopic}".`,
+        localizedElements: ['Áo phao cứu sinh mầm non', 'Mô hình thuyền buồm nhỏ', 'Bến tàu/bờ sông Sương Mai', 'Phao tròn an toàn sắc màu'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Các thủy thủ nhí Sương Mai ơi! Đố bé biết làm sao để di chuyển an toàn khi tham gia '${cleanTopic}'?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, CHÚNG CON PHẢI MẶC ÁO PHAO CHẮC CHẮN VÀ NGOAN NGOÃN NGOỒI YÊN TRÊN THUYỀN Ạ!"`
+        }
+      };
+    } else if (subCat === 'GIAO_THONG_AIRWAY') {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: `✈️ Hành Trình Phi Công Nhí: ${cleanTopic}`,
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🔊 Phản Xạ Âm Thanh Bầu Trời & Máy Bay',
+        openerDetail: `✈️ "Vù vù! Tiếng động cơ cất cánh!" Bé khám phá phương tiện hàng không và quy tắc bay an toàn trong bài học "${cleanTopic}".`,
+        localizedElements: ['Thắt dây an toàn mầm non', 'Mô hình máy bay sắc màu', 'Sân bay mầm non Sương Mai', 'Vé máy bay trải nghiệm'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Các phi công nhí Sương Mai ơi! Đố bé biết quy tắc an toàn khi bay trên bầu trời là gì?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, CHÚNG CON PHẢI THẮT DÂY AN TOÀN VÀ LẮNG NGHE HƯỚNG DẪN CỦA TIẾP VIÊN Ạ!"`
+        }
+      };
+    } else if (subCat === 'GIAO_THONG_RAILWAY') {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: `🚂 Hành Trình Tàu Hỏa Vui Nhộn: ${cleanTopic}`,
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🔊 Phản Xạ Âm Thanh Ga Tàu & Xe Lửa',
+        openerDetail: `🚂 "Xình xịch, tu tu!" Bé khám phá đoàn tàu hỏa và quy tắc an toàn đường sắt qua bài học "${cleanTopic}".`,
+        localizedElements: ['Ga tàu hỏa mầm non Sương Mai', 'Đường ray xe lửa gỗ', 'Rào chắn giao thông tự động', 'Còi hiệu ga tàu'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Các hành khách nhí Sương Mai ơi! Đố bé biết làm sao để di chuyển an toàn khi đi tàu hỏa?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, KHÔNG ĐƯỢC CHƠI GẦN ĐƯỜNG RAY VÀ PHẢI CHỜ RÀO CHẮN MỞ ĐÚNG QUY ĐỊNH Ạ!"`
+        }
+      };
+    } else {
+      return {
+        archetypeType: 'QUIZ_TRUE_FALSE',
+        archetypeName: 'Trò chơi Đố vui phản xạ Đúng - Sai',
+        storyTitle: `🚨 Thử Thách Hiệp Sĩ Giao Thông: ${cleanTopic}`,
+        openerType: 'SOUND_SIMULATION',
+        openerHeadline: '🔊 Phản Xạ Âm Thanh Giao Thông',
+        openerDetail: `🚗 "Bíp bíp! Xình xịch!" Bé tinh mắt nhận diện các phương tiện và quy tắc giao thông an toàn trong bài học "${cleanTopic}".`,
+        localizedElements: ['Mũ bảo hiểm xe máy đạt chuẩn', 'Vạch sang đường cho người đi bộ', 'Chú cảnh sát giao thông còi hiệu', 'Xe bus trường Sương Mai'],
+        calloutDialogue: {
+          teacherAsk: `🗣️ Cô hỏi: "Đội hiệp sĩ giao thông ơi! Đố bé biết làm sao để di chuyển an toàn khi tham gia '${cleanTopic}'?"`,
+          childAnswer: `👦 Trẻ đáp: "Thưa cô, ĐỘI MŨ BẢO HIỂM VÀ ĐI ĐÚNG VẠCH KẺ ĐƯỜNG CHO NGƯỜI ĐI BỘ Ạ!"`
+        }
+      };
+    }
   } else if (code === 'QUE_HUONG') {
     return {
       archetypeType: 'QUIZ_TRUE_FALSE',

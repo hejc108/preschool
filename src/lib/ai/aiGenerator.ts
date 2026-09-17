@@ -2,7 +2,7 @@ import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
-  getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords
+  getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords, detectTopicSubCategory
 } from '../utils/curriculumHelper';
 
 /**
@@ -441,19 +441,60 @@ export function generateRulesCompliantSlideDeck(params: {
   } else {
     // KPKH / Default Science Exploration (Fall back to theme-based gridCards if set)
     if (effectiveThemeCode === 'DONG_VAT') {
-      gridCards = [
-        { icon: '🐾', title: 'Dáng Đi & Tiếng Kêu', desc: `Trẻ nhận biết ngoại hình, tiếng kêu và đặc điểm vận động của ${cleanTopic}.` },
-        { icon: '🌾', title: 'Thức Ăn & Môi Trường', desc: `Tìm hiểu món ăn yêu thích và môi trường sống tự nhiên của con vật.` },
-        { icon: '🎭', title: 'Nhập Vai Mô Phỏng', desc: `Trẻ đóng vai mô phỏng động tác khéo léo và tương tác cùng các bạn.` },
-        { icon: '❤️', title: 'Yêu Thương Động Vật', desc: `Hình thành tình cảm quý mến và thói quen bảo vệ các loài động vật.` }
-      ];
+      const subCat = detectTopicSubCategory(safeTopic, effectiveThemeCode);
+      if (subCat === 'DONG_VAT_AQUATIC') {
+        gridCards = [
+          { icon: '🐟', title: 'Cấu Tạo Vây & Đuôi', desc: `Trẻ nhận biết ngoại hình, vây bơi, đuôi và cách sinh tồn dưới nước của ${cleanTopic}.` },
+          { icon: '🌊', title: 'Môi Trường Thủy Sinh', desc: `Phân tích nguồn nước, thức ăn và môi trường đại dương/sông hồ của loài cá.` },
+          { icon: '🎭', title: 'Mô Phỏng Cá Bơi', desc: `Trẻ nhún nhảy mô phỏng động tác cá bơi uốn lượn rộn ràng cùng bạn.` },
+          { icon: '🪸', title: 'Bảo Vệ Nguồn Nước', desc: `Rèn luyện ý thức giữ gìn nguồn nước sạch và bảo vệ sinh vật biển.` }
+        ];
+      } else if (subCat === 'DONG_VAT_WILD') {
+        gridCards = [
+          { icon: '🦁', title: 'Dáng Đi & Tiếng Gầm', desc: `Trẻ nhận biết vóc dáng, dấu chân, tiếng kêu và sự di chuyển của ${cleanTopic}.` },
+          { icon: '🌳', title: 'Môi Trường Rừng Xanh', desc: `Khám phá nơi sinh sống hoang dã và nguồn thức ăn tự nhiên trong rừng.` },
+          { icon: '🎭', title: 'Nhập Vai Rừng Đại Ngàn', desc: `Trẻ đeo mũ hóa trang mô phỏng dáng đi của động vật hoang dã.` },
+          { icon: '💚', title: 'Bảo Vệ Rừng Xanh', desc: `Hình thành thói quen yêu quý động vật hoang dã và thiên nhiên.` }
+        ];
+      } else {
+        gridCards = [
+          { icon: '🐾', title: 'Dáng Đi & Tiếng Kêu', desc: `Trẻ nhận biết ngoại hình, tiếng kêu và đặc điểm vận động của ${cleanTopic}.` },
+          { icon: '🌾', title: 'Thức Ăn & Môi Trường', desc: `Tìm hiểu món ăn yêu thích và môi trường sống tự nhiên của con vật.` },
+          { icon: '🎭', title: 'Nhập Vai Mô Phỏng', desc: `Trẻ đóng vai mô phỏng động tác khéo léo và tương tác cùng các bạn.` },
+          { icon: '❤️', title: 'Yêu Thương Động Vật', desc: `Hình thành tình cảm quý mến và thói quen bảo vệ các loài động vật.` }
+        ];
+      }
     } else if (effectiveThemeCode === 'GIAO_THONG') {
-      gridCards = [
-        { icon: '🚗', title: 'Đặc Điểm Phương Tiện', desc: `Trẻ phân biệt cấu tạo bánh xe, còi hiệu và môi trường hoạt động của ${cleanTopic}.` },
-        { icon: '🚦', title: 'Biển Báo & Tín Hiệu', desc: `Nhận biết tín hiệu đèn giao thông và vạch đi bộ sang đường an toàn.` },
-        { icon: '🛠', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình xe'}.` },
-        { icon: '🛡', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức chấp hành luật giao thông và bảo vệ bản thân.` }
-      ];
+      const subCat = detectTopicSubCategory(safeTopic, effectiveThemeCode);
+      if (subCat === 'GIAO_THONG_WATERWAY') {
+        gridCards = [
+          { icon: '⛵', title: 'Đặc Điểm Tàu Thuyền', desc: `Trẻ phân biệt cấu tạo thân thuyền, cánh buồm, bánh lái và môi trường sông nước của ${cleanTopic}.` },
+          { icon: '🛟', title: 'Thiết Bị An Toàn', desc: `Nhận biết áo phao cứu sinh, phao tròn và vạch neo đậu tại bến tàu an toàn.` },
+          { icon: '🛠️', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình thuyền buồm, phao tròn'}.` },
+          { icon: '⚓', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức mặc áo phao, ngồi yên trên tàu thuyền và chấp hành quy định.` }
+        ];
+      } else if (subCat === 'GIAO_THONG_AIRWAY') {
+        gridCards = [
+          { icon: '✈️', title: 'Đặc Điểm Máy Bay', desc: `Trẻ phân biệt cấu tạo cánh máy bay, động cơ, phi công và bầu trời của ${cleanTopic}.` },
+          { icon: '🛬', title: 'Tín Hiệu Sân Bay', desc: `Nhận biết dây an toàn, đèn hiệu đường băng và hướng dẫn của tiếp viên.` },
+          { icon: '🛠️', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình máy bay'}.` },
+          { icon: '🛡️', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức thắt dây an toàn và tuân thủ quy định bay.` }
+        ];
+      } else if (subCat === 'GIAO_THONG_RAILWAY') {
+        gridCards = [
+          { icon: '🚂', title: 'Đặc Điểm Tàu Hỏa', desc: `Trẻ phân biệt cấu tạo toa tàu, đầu máy, đường ray và ga tàu của ${cleanTopic}.` },
+          { icon: '🛤️', title: 'Tín Hiệu Đường Sắt', desc: `Nhận biết rào chắn tự động, còi hiệu và đèn cảnh báo ga tàu.` },
+          { icon: '🛠️', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình tàu hỏa'}.` },
+          { icon: '🛡️', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức không chơi gần đường ray và chấp hành luật an toàn.` }
+        ];
+      } else {
+        gridCards = [
+          { icon: '🚗', title: 'Đặc Điểm Phương Tiện', desc: `Trẻ phân biệt cấu tạo bánh xe, còi xe và môi trường đường bộ của ${cleanTopic}.` },
+          { icon: '🚦', title: 'Biển Báo & Tín Hiệu', desc: `Nhận biết tín hiệu đèn giao thông, mũ bảo hiểm và vạch đi bộ sang đường.` },
+          { icon: '🛠️', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình xe'}.` },
+          { icon: '🛡️', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức đội mũ bảo hiểm và chấp hành luật giao thông.` }
+        ];
+      }
     } else if (effectiveThemeCode === 'BAN_THAN') {
       gridCards = [
         { icon: '🖐️', title: 'Khám Phá Giác Quan', desc: `Trẻ nhận biết các giác quan và bộ phận cơ thể liên quan đến ${cleanTopic}.` },
