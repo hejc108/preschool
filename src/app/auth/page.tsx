@@ -7,6 +7,8 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { supabase } from '@/lib/supabase/client';
 
+import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
+
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,27 +62,23 @@ function AuthContent() {
     e.preventDefault();
     setLoading(true);
 
+    const checkStatus = checkUserApprovalStatus(email);
+
     // Save session cookie & localStorage user state for security middleware
     document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
-    const authData = { email, authenticated: true, timestamp: Date.now() };
+    const authData = { 
+      email, 
+      role: checkStatus.profile?.role || (email.includes('teacher') ? 'TEACHER' : email.includes('parent') ? 'PARENT' : 'SUPER_ADMIN'),
+      authenticated: true, 
+      timestamp: Date.now() 
+    };
     if (typeof window !== 'undefined') {
       localStorage.setItem('suongmai_auth_user', JSON.stringify(authData));
     }
 
-    let targetUrl = redirectTo;
-    const lower = email.toLowerCase();
-    if (lower.includes('teacher')) {
-      targetUrl = '/teacher';
-    } else if (lower.includes('parent')) {
-      targetUrl = '/parent';
-    } else if (lower.includes('kitchen') || lower.includes('staff')) {
-      targetUrl = '/admin/menu';
-    } else {
-      targetUrl = '/admin/dashboard';
-    }
     setTimeout(() => {
       setLoading(false);
-      router.push(targetUrl);
+      router.push(checkStatus.redirectUrl);
     }, 800);
   };
 
@@ -210,10 +208,19 @@ function AuthContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEmail('parent')}
-                  className="px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-md font-mono font-bold transition-all"
+                  onClick={() => setEmail('teacher.pending@suongmai.edu.vn')}
+                  className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-md font-mono font-bold transition-all"
+                  title="Giáo viên chờ duyệt"
                 >
-                  parent
+                  teacher.pending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEmail('parent.pending@gmail.com')}
+                  className="px-2 py-0.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-md font-mono font-bold transition-all"
+                  title="Phụ huynh chờ duyệt"
+                >
+                  parent.pending
                 </button>
               </div>
             </div>

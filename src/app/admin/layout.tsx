@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
-  Clock, Bell, LogOut, Smartphone, ChefHat, Mail 
+  Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck 
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -46,6 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   const settingsNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
+    { label: 'Duyệt tài khoản', href: '/admin/users/approvals', icon: UserCheck, badge: 'Mới' },
     { label: 'Cấu hình email', href: '/admin/settings/email', icon: Mail },
   ];
 
