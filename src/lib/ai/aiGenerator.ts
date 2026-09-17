@@ -790,7 +790,8 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     pptx.layout = 'LAYOUT_16x9'; // 16:9 SmartTV layout
     pptx.author = 'Trường Mầm Non Sương Mai AI Pedagogy Engine';
 
-    const themeCode = lesson.schema_response?.theme_code || (lesson as any).theme_code || 'THUC_VAT';
+    const rawThemeCode = lesson.schema_response?.theme_code || (lesson as any).theme_code || 'THUC_VAT';
+    const themeCode = autoDetectThemeCode(lesson.topic, rawThemeCode as any);
     const themeMatrix = getThemeMatrix(themeCode);
 
     const FONT_TITLE = 'Arial Rounded MT Bold';
