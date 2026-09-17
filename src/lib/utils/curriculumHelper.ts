@@ -388,16 +388,64 @@ export const GRADE_LEVEL_MAP: Record<GradeLevelCode, { label: string; duration: 
 };
 
 export const SUBJECT_NAME_MAP: Record<string, string> = {
-  NBTN: 'Nhận biết tập nói (NBTN)',
-  HDVDV: 'Hoạt động với đồ vật (HĐVĐV)',
   KPKH: 'Khám phá khoa học (KPKH)',
+  KPXH: 'Khám phá xã hội (KPXH)',
   LQVT: 'Làm quen với toán (LQVT)',
   LQCC: 'Làm quen chữ cái (LQCC)',
-  LQVH: 'Làm quen văn học / Kể chuyện (LQVH)',
-  TAO_HINH: 'Tạo hình & Khéo tay (TẠO HÌNH)',
-  LQAN: 'Giáo dục âm nhạc (LQÂN)',
-  PTVĐ: 'Phát triển vận động (PTVĐ)',
+  LQVH: 'Làm quen văn học / Kể chuyện - Thơ (LQVH)',
+  TAO_HINH: 'Tạo hình & Khéo tay (Vẽ, Xé dán, Nặn)',
+  LQAN: 'Giáo dục âm nhạc (LQÂN - Hát, Vận động múa, Nghe hát)',
+  PTVD: 'Phát triển vận động (PTVĐ - Vận động cơ bản & Trò chơi vận động)',
+  DINH_DUONG: 'Giáo dục dinh dưỡng & Sức khỏe',
+  KNS: 'Kỹ năng sống & Xử lý tình huống',
+  // Legacy aliases
+  PTVĐ: 'Phát triển vận động (PTVĐ - Vận động cơ bản & Trò chơi vận động)',
+  NBTN: 'Nhận biết tập nói (NBTN)',
+  HDVDV: 'Hoạt động với đồ vật (HĐVĐV)',
 };
+
+export interface SubjectGroup {
+  groupName: string;
+  subjects: { code: string; label: string }[];
+}
+
+export const SUBJECT_GROUPS: SubjectGroup[] = [
+  {
+    groupName: 'NHÓM 1: PHÁT TRIỂN NHẬN THỨC',
+    subjects: [
+      { code: 'KPKH', label: 'Khám phá khoa học (KPKH)' },
+      { code: 'KPXH', label: 'Khám phá xã hội (KPXH)' },
+      { code: 'LQVT', label: 'Làm quen với toán (LQVT)' },
+    ]
+  },
+  {
+    groupName: 'NHÓM 2: PHÁT TRIỂN NGÔN NGỮ',
+    subjects: [
+      { code: 'LQCC', label: 'Làm quen chữ cái (LQCC)' },
+      { code: 'LQVH', label: 'Làm quen văn học / Kể chuyện - Thơ (LQVH)' },
+    ]
+  },
+  {
+    groupName: 'NHÓM 3: PHÁT TRIỂN THẨM MỸ',
+    subjects: [
+      { code: 'TAO_HINH', label: 'Tạo hình & Khéo tay (Vẽ, Xé dán, Nặn)' },
+      { code: 'LQAN', label: 'Giáo dục âm nhạc (LQÂN - Hát, Vận động múa, Nghe hát)' },
+    ]
+  },
+  {
+    groupName: 'NHÓM 4: PHÁT TRIỂN THỂ CHẤT',
+    subjects: [
+      { code: 'PTVD', label: 'Phát triển vận động (PTVĐ - Vận động cơ bản & Trò chơi vận động)' },
+      { code: 'DINH_DUONG', label: 'Giáo dục dinh dưỡng & Sức khỏe' },
+    ]
+  },
+  {
+    groupName: 'NHÓM 5: TÌNH CẢM & KỸ NĂNG XÃ HỘI',
+    subjects: [
+      { code: 'KNS', label: 'Kỹ năng sống & Xử lý tình huống' },
+    ]
+  }
+];
 
 export const INITIAL_CURRICULUM_FRAMEWORKS: CurriculumFramework[] = [
   // 1. NHÀ TRẺ (12-36 Tháng) - NBTN / HDVDV

@@ -12,7 +12,7 @@ import { AILessonPlan, GradeLevelCode, ThemeCode, TeachingType } from '@/lib/typ
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
-  SUB_THEME_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions,
+  SUB_THEME_MAP, SUBJECT_NAME_MAP, SUBJECT_GROUPS, getDynamicMaterialSuggestions,
   getThemeMatrix, autoDetectThemeCode
 } from '@/lib/utils/curriculumHelper';
 
@@ -387,21 +387,21 @@ export default function TeacherAILessonPlanNewPage() {
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 uppercase mb-1">Môn học / Lĩnh vực (*)</label>
+              <label className="block font-bold text-slate-700 uppercase mb-1">Lĩnh vực phát triển / Môn học (*)</label>
               <select
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-800"
               >
-                <option value="KPKH">Khám phá khoa học (KPKH)</option>
-                <option value="LQVT">Làm quen với toán (LQVT)</option>
-                <option value="LQCC">Làm quen chữ cái (LQCC)</option>
-                <option value="LQVH">Làm quen văn học / Kể chuyện (LQVH)</option>
-                <option value="TAO_HINH">Tạo hình & Khéo tay (TẠO HÌNH)</option>
-                <option value="LQAN">Giáo dục âm nhạc (LQÂN)</option>
-                <option value="PTVĐ">Phát triển vận động (PTVĐ)</option>
-                <option value="NBTN">Nhận biết tập nói (NBTN)</option>
-                <option value="HDVDV">Hoạt động với đồ vật (HĐVĐV)</option>
+                {SUBJECT_GROUPS.map((grp) => (
+                  <optgroup key={grp.groupName} label={grp.groupName} className="font-bold text-sky-950 bg-slate-100">
+                    {grp.subjects.map((sub) => (
+                      <option key={sub.code} value={sub.code} className="font-normal text-slate-800 bg-white">
+                        {sub.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
 

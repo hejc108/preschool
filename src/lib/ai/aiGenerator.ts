@@ -176,7 +176,9 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords)
   };
 
-  // Slide 3: GRID_4_CARDS (5E - Explore) - Dynamic Cards tailored to Topic
+  // Slide 3 & Slide 4: Subject Domain Branching for Grid Cards, Timeline, Objectives & Practical Steps
+  const normSub = (subject || '').toUpperCase();
+
   let gridCards = [
     { icon: themeMatrix.defaultIcon, title: `🌱 Đặc Điểm Cốt Lõi`, desc: `Trẻ quan sát trực quan hình dáng, màu sắc và cấu tạo chính của ${cleanTopic}.` },
     { icon: '⭐', title: `🔍 Yếu Tố Tự Nhiên`, desc: `Phân tích môi trường sống, đặc tính và sự phát triển thực tế của ${cleanTopic}.` },
@@ -184,27 +186,266 @@ export function generateRulesCompliantSlideDeck(params: {
     { icon: '💡', title: `Bài Học Chăm Sóc`, desc: `Trẻ thảo luận nhóm, rút ra bài học tự giác bảo vệ và giữ gìn môi trường.` }
   ];
 
-  if (effectiveThemeCode === 'DONG_VAT') {
+  let timelineSteps = [
+    { step_num: 1, title: '1. Khởi Động Quan Sát', desc: `Trẻ tập trung quan sát mẫu trực quan bài học "${cleanTopic}" và lắng nghe gợi mở của cô.` },
+    { step_num: 2, title: '2. Thao Tác Trực Tiếp', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'đồ dùng học tập'} thực hành trải nghiệm.` },
+    { step_num: 3, title: '3. Thảo Luận Đồng Đội', desc: `Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức trọng tâm.` },
+    { step_num: 4, title: '4. Tự Tin Trình Bày', desc: 'Trẻ tự tin giới thiệu sản phẩm trải nghiệm trước cô giáo và các bạn.' }
+  ];
+
+  let listPoints = [
+    `Phát triển nhận thức: Trẻ bóc tách và phân biệt rõ các đặc trưng của ${cleanTopic}.`,
+    `Hình thành kỹ năng: Trẻ tự tay thực hành khéo léo với ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng nhóm'}.`,
+    `Giao tiếp tự tin: Luyện phản xạ lời thoại "🗣️ Cô hỏi - 👦 Trẻ đáp" rạng rỡ tại lớp.`,
+    `Giáo dục tình cảm: Hình thành thói quen tốt và niềm vui khám phá bài học.`
+  ];
+
+  let numSteps = [
+    { step_num: 1, title: 'Bước 1 - Tiếp nhận khay học liệu', desc: `Trẻ nhận đồ dùng trải nghiệm: ${studentMaterials.join(', ') || 'đồ dùng học tập'}.` },
+    { step_num: 2, title: 'Bước 2 - Phối hợp nhóm thực hành', desc: `Các nhóm phân công nhau quan sát, thao tác và trao đổi rôm rả.` },
+    { step_num: 3, title: 'Bước 3 - Hoàn thiện & Thu dọn', desc: 'Trẻ hoàn thành sản phẩm trải nghiệm và tự giác cất đồ dùng về đúng nơi.' }
+  ];
+
+  if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
     gridCards = [
-      { icon: '🐾', title: 'Dáng Đi & Tiếng Kêu', desc: `Trẻ nhận biết ngoại hình, tiếng kêu và đặc điểm vận động của ${cleanTopic}.` },
-      { icon: '🌾', title: 'Thức Ăn & Môi Trường', desc: `Tìm hiểu món ăn yêu thích và môi trường sống tự nhiên của con vật.` },
-      { icon: '🎭', title: 'Nhập Vai Mô Phỏng', desc: `Trẻ đóng vai mô phỏng động tác khéo léo và tương tác cùng các bạn.` },
-      { icon: '❤️', title: 'Yêu Thương Động Vật', desc: `Hình thành tình cảm quý mến và thói quen bảo vệ các loài động vật.` }
+      { icon: '🔢', title: 'Nhận Biết Số Lượng', desc: `Trẻ đếm, nhận biết và so sánh số lượng liên quan đến đề tài ${cleanTopic}.` },
+      { icon: '📐', title: 'Hình Dáng & Kích Thước', desc: `Phân biệt hình khối, kích thước to - nhỏ, cao - thấp hoặc vị trí trong không gian.` },
+      { icon: '🧮', title: 'Thao Tác Đếm Tương Ứng', desc: `Trẻ tự tay thực hành xếp tương ứng 1-1 bằng học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'que tính, thẻ số'}.` },
+      { icon: '🧩', title: 'Thách Thức Toán Học', desc: `Tham gia trò chơi tìm số, xếp chuỗi quy tắc và giải đố toán học rạng rỡ.` }
     ];
-  } else if (effectiveThemeCode === 'GIAO_THONG') {
+    timelineSteps = [
+      { step_num: 1, title: '1. Quan Sát Đồ Dùng Mẫu', desc: `Trẻ quan sát số lượng/hình khối mẫu bài học "${cleanTopic}" và lắng nghe gợi mở của cô.` },
+      { step_num: 2, title: '2. Thao Tác Đếm & Phân Loại', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'que tính, thẻ số'} đếm và xếp tương ứng 1-1.` },
+      { step_num: 3, title: '3. So Sánh & Thảo Luận', desc: `So sánh nhóm nhiều hơn - ít hơn, thảo luận kết quả cùng đồng đội.` },
+      { step_num: 4, title: '4. Phản Xạ Toán Học', desc: `Trẻ tự tin lên bảng tham gia trò chơi nối số, xếp hình và nhận thưởng.` }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ nắm vững khái niệm số lượng, hình khối và kích thước bài toán ${cleanTopic}.`,
+      `Hình thành kỹ năng: Thao tác đếm thành thạo, xếp tương ứng 1-1 chính xác với ${studentMaterials.slice(0, 2).join(', ') || 'thẻ số, que tính'}.`,
+      `Giao tiếp tự tin: Trả lời rành mạch các câu hỏi đếm số và so sánh trước lớp.`,
+      `Hứng thú toán học: Yêu thích môn toán qua các trò chơi tương tác vui nhộn.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Lấy khay đồ dùng toán', desc: `Trẻ nhận khay thẻ số và học liệu đếm: ${studentMaterials.join(', ') || 'thẻ số, hạt bắp'}.` },
+      { step_num: 2, title: 'Bước 2 - Đếm & Xếp tương ứng', desc: 'Trẻ xếp học liệu từ trái sang phải, đếm to và dán thẻ số tương ứng.' },
+      { step_num: 3, title: 'Bước 3 - Kiểm tra & Thu dọn', desc: 'Cô kiểm tra kết quả từng nhóm, trẻ tự giác cất đồ dùng toán gọn gàng.' }
+    ];
+  } else if (normSub.includes('LQCC') || normSub.includes('CHỮ CÁI')) {
     gridCards = [
-      { icon: '🚗', title: 'Đặc Điểm Phương Tiện', desc: `Trẻ phân biệt cấu tạo bánh xe, còi hiệu và môi trường hoạt động của ${cleanTopic}.` },
-      { icon: '🚦', title: 'Biển Báo & Tín Hiệu', desc: `Nhận biết tín hiệu đèn giao thông và vạch đi bộ sang đường an toàn.` },
-      { icon: '🛠', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình xe'}.` },
-      { icon: '🛡', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức chấp hành luật giao thông và bảo vệ bản thân.` }
+      { icon: '🔤', title: 'Nhận Biết Mặt Chữ', desc: `Trẻ quan sát chữ cái in hoa, in thường và viết thường bài học ${cleanTopic}.` },
+      { icon: '🗣️', title: 'Phát Âm Chuẩn', desc: `Luyện phát âm chuẩn khẩu hình, nghe và nhận biết âm đầu trong từ.` },
+      { icon: '✍️', title: 'Tạo Hình Nét Chữ', desc: `Trẻ tự tay xếp nét chữ từ học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'đất nặn, dây điện, hạt bắp'}.` },
+      { icon: '🎮', title: 'Trò Chơi Chữ Cái', desc: `Tìm chữ cái còn thiếu trong từ ghép, chơi đố vui phản xạ chữ cái.` }
     ];
-  } else if (effectiveThemeCode === 'BAN_THAN') {
+    timelineSteps = [
+      { step_num: 1, title: '1. Quan Sát Mặt Chữ Mẫu', desc: `Trẻ quan sát tranh từ khóa chứa chữ cái bài học "${cleanTopic}" và nghe cô phát âm.` },
+      { step_num: 2, title: '2. Phân Tích Nét Chữ', desc: 'Trẻ phân tích nét thẳng, nét cong, nét xiên cấu tạo nên chữ cái.' },
+      { step_num: 3, title: '3. Thực Hành Xếp Nét', desc: `Sử dụng ${studentMaterials[0] || 'đất nặn, hạt bắp'} uốn nét và xếp thành chữ cái hoàn chỉnh.` },
+      { step_num: 4, title: '4. Tìm Chữ Trong Từ', desc: 'Trẻ tự tin tìm và gạch chân chữ cái vừa học trong bảng từ xung quanh lớp.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ nhận biết đúng mặt chữ, phát âm chuẩn khẩu hình chữ cái ${cleanTopic}.`,
+      `Hình thành kỹ năng: Nhận biết cấu tạo nét chữ và tự tay uốn nét với ${studentMaterials.slice(0, 2).join(', ') || 'đất nặn, dây mềm'}.`,
+      `Giao tiếp tự tin: Phát âm to, rõ ràng và nói trọn câu khi tìm từ chứa chữ cái.`,
+      `Thói quen đọc viết: Hình thành tâm thế yêu thích học chữ cái sẵn sàng vào Lớp 1.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Quan sát & Phát âm', desc: 'Trẻ nhìn khẩu hình mẫu của cô, phát âm to rõ ràng chữ cái bài học.' },
+      { step_num: 2, title: 'Bước 2 - Rèn kỹ năng xếp nét', desc: `Trẻ dùng ${studentMaterials.join(', ') || 'đất nặn'} uốn từng nét chữ trên bảng con.` },
+      { step_num: 3, title: 'Bước 3 - Thi tài tìm chữ', desc: 'Các nhóm lên bảng tìm và dán thẻ chữ vào đúng ô từ khóa.' }
+    ];
+  } else if (normSub.includes('LQVH') || normSub.includes('VĂN HỌC') || normSub.includes('THƠ') || normSub.includes('KỂ CHUYỆN')) {
     gridCards = [
-      { icon: '🖐️', title: 'Khám Phá Giác Quan', desc: `Trẻ nhận biết các giác quan và bộ phận cơ thể liên quan đến ${cleanTopic}.` },
-      { icon: '😃', title: 'Cảm Xúc Rạng Rỡ', desc: `Thể hiện nụ cười, niềm vui và sự tự tin khi tham gia hoạt động lớp.` },
-      { icon: '🤝', title: 'Tương Tác Bạn Bè', desc: `Trẻ thực hành phối hợp học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'khay đồ dùng'}.` },
-      { icon: '🌟', title: 'Bài Học Tự Lập', desc: `Rèn thói quen tự chăm sóc bản thân và vệ sinh cá nhân sạch sẽ.` }
+      { icon: '📖', title: 'Cảm Nhận Nhịp Thơ/Truyện', desc: `Lắng nghe cô đọc thơ / kể chuyện diễn cảm về đề tài ${cleanTopic}.` },
+      { icon: '🎭', title: 'Nhân Vật & Tính Cách', desc: `Tìm hiểu hình ảnh, tính cách và cảm xúc của từng nhân vật trong tác phẩm.` },
+      { icon: '💬', title: 'Luyện Nói & Lời Thoại', desc: `Trẻ nói trọn câu, luyện trích dẫn thơ hoặc nhập vai thể hiện lời thoại.` },
+      { icon: '🌟', title: 'Bài Học Nhân Văn', desc: `Rút ra bài học đạo đức, tình yêu thương và sự hiếu thảo từ câu chuyện.` }
     ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Nghe Kể Chuyện / Đọc Thơ', desc: `Trẻ lắng nghe cô đọc thơ / kể chuyện sa bàn diễn cảm đề tài "${cleanTopic}".` },
+      { step_num: 2, title: '2. Đàm Thoại Trích Dẫn', desc: 'Thảo luận nội dung, trích dẫn từng đoạn thơ / lời thoại nhân vật sinh động.' },
+      { step_num: 3, title: '3. Thể Hiện Lời Thoại', desc: 'Trẻ luyện đọc thơ / kể lại đoạn truyện theo nhóm rạng rỡ.' },
+      { step_num: 4, title: '4. Đóng Kịch Minh Họa', desc: 'Đeo mũ hóa trang, tự tin nhập vai thể hiện tiểu phẩm câu chuyện trên sân khấu.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ hiểu nội dung bài thơ / câu chuyện và nhớ tên các nhân vật ${cleanTopic}.`,
+      `Hình thành kỹ năng: Trích dẫn thơ diễn cảm, thể hiện giọng điệu nhân vật với ${studentMaterials.slice(0, 2).join(', ') || 'mũ hóa trang, rối ngón tay'}.`,
+      `Giao tiếp tự tin: Diễn đạt cảm xúc mạch lạc, tự tin đóng kịch trước lớp.`,
+      `Giáo dục nhân văn: Thấm nhuần bài học đạo đức và thói quen yêu thương gia đình, bạn bè.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Lắng nghe tác phẩm', desc: 'Trẻ tập trung quan sát sa bàn rối và nghe cô đọc/kể tác phẩm văn học.' },
+      { step_num: 2, title: 'Bước 2 - Đàm thoại trích dẫn', desc: 'Trẻ trả lời các câu hỏi đàm thoại và tập trích dẫn lời thoại nhân vật.' },
+      { step_num: 3, title: 'Bước 3 - Nhập vai thể hiện', desc: `Đeo ${studentMaterials[0] || 'mũ hóa trang'} cùng bạn thể hiện trọn vẹn tiểu phẩm.` }
+    ];
+  } else if (normSub.includes('TAO_HINH') || normSub.includes('TẠO HÌNH')) {
+    gridCards = [
+      { icon: '🎨', title: 'Quan Sát Mẫu Vẻ Đẹp', desc: `Trẻ đàm thoại về màu sắc, đường nét và bố cục sản phẩm mẫu ${cleanTopic}.` },
+      { icon: '🛠️', title: 'Kỹ Thuật Tạo Hình', desc: `Khám phá kỹ năng vẽ, nặn, xé dán hoặc cắt dán tạo nên sản phẩm.` },
+      { icon: '👐', title: 'Bàn Tay Khéo Léo', desc: `Trẻ tự tay thực hành sáng tạo sản phẩm bằng học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'giấy màu, đất nặn'}.` },
+      { icon: '🖼️', title: 'Triển Lãm Sản Phẩm', desc: `Tự tin trưng bày và chia sẻ ý tưởng sáng tạo độc đáo cùng cô bạn.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Quan Sát Đàm Thoại Mẫu', desc: `Trẻ đàm thoại vẻ đẹp, màu sắc và đường nét sản phẩm mẫu bài học "${cleanTopic}".` },
+      { step_num: 2, title: '2. Cô Hướng Dẫn Thao Tác', desc: 'Cô thao tác mẫu kỹ năng tạo hình và gợi mở các ý tưởng sáng tạo.' },
+      { step_num: 3, title: '3. Trẻ Thực Hành Sáng Tạo', desc: `Các nhóm sử dụng ${studentMaterials[0] || 'giấy màu, đất nặn, sáp màu'} tự tay hoàn thiện sản phẩm.` },
+      { step_num: 4, title: '4. Triển Lãm & Nhận Xét', desc: 'Trẻ trưng bày sản phẩm trên giá triển lãm, chia sẻ cảm xúc sáng tạo.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ cảm nhận vẻ đẹp màu sắc, đường nét và bố cục tạo hình ${cleanTopic}.`,
+      `Hình thành kỹ năng: Sử dụng khéo léo kỹ năng vẽ/nặn/xé dán với ${studentMaterials.slice(0, 2).join(', ') || 'sáp màu, đất nặn, kéo đầu tròn'}.`,
+      `Giao tiếp tự tin: Giới thiệu ý tưởng tác phẩm nghệ thuật trước cô giáo và các bạn.`,
+      `Phát triển thẩm mỹ: Yêu thích cái đẹp, biết giữ gìn và trân trọng sản phẩm của mình và bạn.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Chuẩn bị học liệu tạo hình', desc: `Trẻ nhận khay đồ dùng: ${studentMaterials.join(', ') || 'giấy màu, sáp màu'}.` },
+      { step_num: 2, title: 'Bước 2 - Thực hành sáng tạo', desc: 'Trẻ tập trung thao tác khéo léo tạo nên sản phẩm theo ý tưởng cá nhân.' },
+      { step_num: 3, title: 'Bước 3 - Triển lãm & Trưng bày', desc: 'Trẻ tự tay mang sản phẩm lên giá triển lãm của lớp và thu dọn đồ dùng.' }
+    ];
+  } else if (normSub.includes('LQAN') || normSub.includes('ÂM NHẠC')) {
+    gridCards = [
+      { icon: '🎶', title: 'Giai Điệu & Lời Ca', desc: `Cảm nhận giai điệu vui tươi, nhịp điệu rộn ràng của bài hát ${cleanTopic}.` },
+      { icon: '🎤', title: 'Hát Đúng Nhịp Điệu', desc: `Luyện hát đúng lời, đúng giai điệu và hòa giọng nhịp nhàng cùng các bạn.` },
+      { icon: '🥁', title: 'Gõ Đệm Dụng Cụ', desc: `Thực hành gõ đệm theo tiết tấu bằng học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'phách tre, xắc xô'}.` },
+      { icon: '💃', title: 'Vận Động Minh Họa', desc: `Sáng tạo các động tác múa, nhún nhảy sinh động theo giai điệu bài hát.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Cảm Nhận Giai Điệu', desc: `Trẻ lắng nghe cô hát / phát nhạc bài hát "${cleanTopic}", cảm nhận giai điệu.` },
+      { step_num: 2, title: '2. Luyện Hát Hòa Giọng', desc: 'Trẻ tập hát đúng lời, đúng nhịp điệu rộn ràng cùng cô và các bạn.' },
+      { step_num: 3, title: '3. Gõ Đệm Dụng Cụ', desc: `Sử dụng ${studentMaterials[0] || 'phách tre, xắc xô'} gõ đệm theo tiết tấu bài hát.` },
+      { step_num: 4, title: '4. Biểu Diễn Văn Nghệ', desc: 'Trẻ đeo hoa tay múa, tự tin biểu diễn sân khấu âm nhạc rạng rỡ.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ cảm nhận giai điệu, tên bài hát và tác giả đề tài ${cleanTopic}.`,
+      `Hình thành kỹ năng: Hát đúng nhịp, vận động minh họa khéo léo với ${studentMaterials.slice(0, 2).join(', ') || 'phách tre, xắc xô, hoa đeo tay'}.`,
+      `Giao tiếp tự tin: Biểu diễn văn nghệ rạng rỡ, phối hợp đồng đội nhịp nhàng.`,
+      `Phát triển âm nhạc: Yêu thích âm nhạc, tự tin thể hiện cảm xúc hồn nhiên.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Lắng nghe giai điệu', desc: 'Trẻ tập trung lắng nghe giai điệu bài hát và hát nhẩm theo cô.' },
+      { step_num: 2, title: 'Bước 2 - Luyện hát & Gõ đệm', desc: `Trẻ sử dụng ${studentMaterials[0] || 'phách tre'} gõ đệm theo nhịp bài hát.` },
+      { step_num: 3, title: 'Bước 3 - Biểu diễn sân khấu', desc: 'Từng nhóm trẻ lên sân khấu đeo hoa múa biểu diễn văn nghệ rạng rỡ.' }
+    ];
+  } else if (normSub.includes('PTVD') || normSub.includes('PTVĐ') || normSub.includes('VẬN ĐỘNG')) {
+    gridCards = [
+      { icon: '🧘', title: 'Khởi Động Cơ Thể', desc: `Trẻ thực hành các động tác khởi động xoay khớp, làm nóng toàn thân.` },
+      { icon: '🏃', title: 'Vận Động Cơ Bản', desc: `Luyện kỹ năng vận động (bật, bò, trườn, ném, chạy) đúng kỹ thuật chuẩn.` },
+      { icon: '🎯', title: 'Thi Đua Đồng Đội', desc: `Phối hợp nhóm tham gia trò chơi vận động rèn sức bền và sự khéo léo.` },
+      { icon: '🌿', title: 'Hồi Tĩnh Thư Giãn', desc: `Đi lại nhẹ nhàng, hít thở sâu và điều hòa cơ thể sau khi vận động.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Khởi Động Xoay Khớp', desc: 'Trẻ đi các kiểu đi và xoay khớp cổ tay, cổ chân làm nóng cơ thể.' },
+      { step_num: 2, title: '2. Cô Làm Mẫu Kỹ Thuật', desc: `Cô tập mẫu vận động cơ bản "${cleanTopic}", hướng dẫn tư thế chuẩn.` },
+      { step_num: 3, title: '3. Trẻ Thực Hành Vận Động', desc: `Các nhóm dùng ${studentMaterials[0] || 'vạch chuẩn, bóng nhựa'} thực hành vận động nhiều lần.` },
+      { step_num: 4, title: '4. Thi Đua & Hồi Tĩnh', desc: 'Tham gia trò chơi vận động thi đua và đi lại nhẹ nhàng hồi tĩnh.' }
+    ];
+    listPoints = [
+      `Phát triển thể chất: Trẻ tăng cường sức khỏe, sự dẻo dai và phản xạ nhanh nhẹn với bài tập ${cleanTopic}.`,
+      `Hình thành kỹ năng: Thực hiện đúng kỹ thuật vận động cơ bản phối hợp với ${studentMaterials.slice(0, 2).join(', ') || 'túi cát, bóng nhựa'}.`,
+      `Tinh thần đồng đội: Biết hợp tác, tuân thủ luật chơi trong trò chơi vận động nhóm.`,
+      `Thói quen rèn luyện: Yêu thích vận động thể thao nâng cao sức khỏe mỗi ngày.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Khởi động sinh động', desc: 'Trẻ khởi động các khớp theo nhịp còi hiệu của cô giáo.' },
+      { step_num: 2, title: 'Bước 2 - Thực hành kỹ năng', desc: 'Trẻ nối đuôi nhau thực hiện bài tập vận động cơ bản đúng kỹ thuật.' },
+      { step_num: 3, title: 'Bước 3 - Trò chơi thi đua', desc: 'Các đội thi đua tiếp sức vận động và thả lỏng hồi tĩnh thư giãn.' }
+    ];
+  } else if (normSub.includes('DINH_DUONG') || normSub.includes('DINH DƯỠNG') || normSub.includes('SỨC KHỎE')) {
+    gridCards = [
+      { icon: '🥗', title: '4 Nhóm Thực Phẩm', desc: `Nhận biết 4 nhóm chất dinh dưỡng cần thiết qua bài học ${cleanTopic}.` },
+      { icon: '🧼', title: 'Vệ Sinh 6 Bước', desc: `Thực hành quy trình rửa tay 6 bước, giữ gìn vệ sinh cá nhân sạch sẽ.` },
+      { icon: '🍎', title: 'Thói Quên Ăn Uống', desc: `Rèn thói quen ăn chín uống sôi, ăn hết suất và uống đủ nước mỗi ngày.` },
+      { icon: '🛡️', title: 'Bảo Vệ Cơ Thể', desc: `Hình thành ý thức tự chăm sóc sức khỏe để cơ thể cao lớn khỏe mạnh.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Khám Phá Thực Phẩm / Vệ Sinh', desc: `Quan sát thực tế thực phẩm / quy trình vệ sinh bài học "${cleanTopic}".` },
+      { step_num: 2, title: '2. Thao Tác Trải Nghiệm', desc: `Thực hành phân loại món ăn / rửa tay với ${studentMaterials[0] || 'xà phòng, khăn sạch'}.` },
+      { step_num: 3, title: '3. Thảo Luận Lợi Ích', desc: 'Đàm thoại về tác dụng của món ăn bổ dưỡng và thói quen vệ sinh.' },
+      { step_num: 4, title: '4. Cam Kết Thực Hành', desc: 'Trẻ hứa ăn đủ chất, rửa tay sạch sẽ và giữ gìn sức khỏe mỗi ngày.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ phân biệt 4 nhóm chất thực phẩm và các quy tắc vệ sinh cá nhân ${cleanTopic}.`,
+      `Hình thành kỹ năng: Thực hành thuần thục rửa tay 6 bước và sắp xếp khay ăn với ${studentMaterials.slice(0, 2).join(', ') || 'khăn mặt, xà phòng'}.`,
+      `Giao tiếp tự tin: Trả lời tự tin về ích lợi của thực phẩm sạch đối với sức khỏe.`,
+      `Thói quen văn minh: Hình thành thói quen ăn uống lành mạnh và giữ gìn vệ sinh lớp học.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Quan sát thực phẩm/vệ sinh', desc: 'Trẻ xem mô hình thực phẩm và tranh 6 bước rửa tay chuẩn.' },
+      { step_num: 2, title: 'Bước 2 - Thực hành trải nghiệm', desc: `Trẻ thực hành phân loại món ăn / rửa tay bằng ${studentMaterials[0] || 'xà phòng'}.` },
+      { step_num: 3, title: 'Bước 3 - Tổng kết thói quen ngoan', desc: 'Trẻ cùng cô đúc kết thông điệp dinh dưỡng và nhận sticker Bé Khỏe Ngoan.' }
+    ];
+  } else if (normSub.includes('KNS') || normSub.includes('KỸ NĂNG SỐNG')) {
+    gridCards = [
+      { icon: '🚨', title: 'Nhận Diện Tình Huống', desc: `Trẻ quan sát tình huống thực tế nguy hiểm / ứng xử liên quan đến ${cleanTopic}.` },
+      { icon: '💡', title: 'Giải Pháp An Toàn', desc: `Phân tích quy tắc an toàn, cách xử lý nguy cơ và bảo vệ bản thân.` },
+      { icon: '🤝', title: 'Ứng Xử Văn Minh', desc: `Luyện thói quen chào hỏi lễ phép, nói lời cảm ơn, xin lỗi và chia sẻ.` },
+      { icon: '🎭', title: 'Sắm Vai Thực Hành', desc: `Trẻ thực hành nhập vai xử lý tình huống thực tế cùng các bạn.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Quan Sát Tình Huống', desc: `Xem tình huống giả định thực tế bài học kỹ năng sống "${cleanTopic}".` },
+      { step_num: 2, title: '2. Phân Tích Đúng - Sai', desc: 'Thảo luận nhóm chỉ ra hành động an toàn / chưa an toàn trong tình huống.' },
+      { step_num: 3, title: '3. Sắm Vai Xử Lý', desc: 'Trẻ thực hành sắm vai xử lý tình huống đúng cách cùng đồng đội.' },
+      { step_num: 4, title: '4. Ghi Nhớ Quy Tắc', desc: 'Đúc kết quy tắc an toàn kỹ năng sống và tự tin cam kết thực hiện.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ phân biệt hành động an toàn - nguy hiểm liên quan đến đề tài ${cleanTopic}.`,
+      `Hình thành kỹ năng: Thực hành xử lý tình huống thực tế khéo léo với ${studentMaterials.slice(0, 2).join(', ') || 'thẻ tình huống, mũ nhập vai'}.`,
+      `Giao tiếp văn minh: Biết nói lời chào hỏi, cảm ơn, xin lỗi và kêu gọi sự hỗ trợ khi cần.`,
+      `Ý thức bản thân: Hình thành bản lĩnh tự vệ và kỹ năng sống an toàn mọi lúc mọi nơi.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Xem kịch bản tình huống', desc: 'Trẻ tập trung xem cô minh họa tình huống kỹ năng sống thực tế.' },
+      { step_num: 2, title: 'Bước 2 - Thảo luận & Sắm vai', desc: 'Các nhóm phân công nhau sắm vai xử lý tình huống đúng quy tắc an toàn.' },
+      { step_num: 3, title: 'Bước 3 - Tuyên dương phản xạ tốt', desc: 'Cô nhận xét dương tính và trao huy hiệu Hiệp Sĩ An Toàn cho các bé.' }
+    ];
+  } else if (normSub.includes('KPXH') || normSub.includes('XÃ HỘI')) {
+    gridCards = [
+      { icon: '🏛️', title: 'Đời Sống & Con Người', desc: `Tìm hiểu vai trò, ý nghĩa các hoạt động xã hội xung quanh đề tài ${cleanTopic}.` },
+      { icon: '🇻🇳', title: 'Văn Hóa Quê Hương', desc: `Cảm nhận nét đẹp truyền thống, danh lam thắng cảnh và bản sắc Việt Nam.` },
+      { icon: '🤝', title: 'Giao Tiếp Cộng Đồng', desc: `Luyện kỹ năng hợp tác nhóm, giao tiếp văn minh và chia sẻ tập thể.` },
+      { icon: '🛡️', title: 'Trách Nhiệm Xã Hội', desc: `Hình thành thói quen tuân thủ quy định chung và giữ gìn môi trường.` }
+    ];
+    timelineSteps = [
+      { step_num: 1, title: '1. Xem Tư Liệu Thực Tế', desc: `Quan sát hình ảnh/video đời sống xã hội về đề tài "${cleanTopic}".` },
+      { step_num: 2, title: '2. Khám Phá Vai Trò Ý Nghĩa', desc: 'Trẻ tìm hiểu công việc, nét đẹp văn hóa và tình cảm cộng đồng.' },
+      { step_num: 3, title: '3. Trải Nghiệm Mô Phỏng', desc: `Thực hành sử dụng ${studentMaterials[0] || 'học liệu mô phỏng'} nhập vai công việc.` },
+      { step_num: 4, title: '4. Chia Sẻ Cảm Xúc', desc: 'Trẻ tự tin bày tỏ ước mơ, tình cảm yêu quý quê hương con người.' }
+    ];
+    listPoints = [
+      `Phát triển nhận thức: Trẻ hiểu biết sâu sắc về đời sống xã hội, công việc và nét đẹp quê hương ${cleanTopic}.`,
+      `Hình thành kỹ năng: Thực hành phối hợp nhóm, đóng vai trải nghiệm với ${studentMaterials.slice(0, 2).join(', ') || 'trang phục mô phỏng, lô tô'}.`,
+      `Giao tiếp cộng đồng: Tự tin trò chuyện, thể hiện sự tôn trọng và hòa đồng với mọi người.`,
+      `Tình yêu quê hương: Yêu kính Bác Hồ, tự hào về quê hương đất nước Việt Nam.`
+    ];
+    numSteps = [
+      { step_num: 1, title: 'Bước 1 - Quan sát sa bàn xã hội', desc: 'Trẻ quan sát sa bàn/hình ảnh trực quan về chủ đề xã hội.' },
+      { step_num: 2, title: 'Bước 2 - Trải nghiệm công việc', desc: 'Trẻ nhập vai tham gia hoạt động mô phỏng ngành nghề/lễ hội.' },
+      { step_num: 3, title: 'Bước 3 - Chia sẻ ước mơ', desc: 'Trẻ tự tin chia sẻ cảm nghĩ và thu dọn góc trải nghiệm sạch đẹp.' }
+    ];
+  } else {
+    // KPKH / Default Science Exploration (Fall back to theme-based gridCards if set)
+    if (effectiveThemeCode === 'DONG_VAT') {
+      gridCards = [
+        { icon: '🐾', title: 'Dáng Đi & Tiếng Kêu', desc: `Trẻ nhận biết ngoại hình, tiếng kêu và đặc điểm vận động của ${cleanTopic}.` },
+        { icon: '🌾', title: 'Thức Ăn & Môi Trường', desc: `Tìm hiểu món ăn yêu thích và môi trường sống tự nhiên của con vật.` },
+        { icon: '🎭', title: 'Nhập Vai Mô Phỏng', desc: `Trẻ đóng vai mô phỏng động tác khéo léo và tương tác cùng các bạn.` },
+        { icon: '❤️', title: 'Yêu Thương Động Vật', desc: `Hình thành tình cảm quý mến và thói quen bảo vệ các loài động vật.` }
+      ];
+    } else if (effectiveThemeCode === 'GIAO_THONG') {
+      gridCards = [
+        { icon: '🚗', title: 'Đặc Điểm Phương Tiện', desc: `Trẻ phân biệt cấu tạo bánh xe, còi hiệu và môi trường hoạt động của ${cleanTopic}.` },
+        { icon: '🚦', title: 'Biển Báo & Tín Hiệu', desc: `Nhận biết tín hiệu đèn giao thông và vạch đi bộ sang đường an toàn.` },
+        { icon: '🛠', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình xe'}.` },
+        { icon: '🛡', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức chấp hành luật giao thông và bảo vệ bản thân.` }
+      ];
+    } else if (effectiveThemeCode === 'BAN_THAN') {
+      gridCards = [
+        { icon: '🖐️', title: 'Khám Phá Giác Quan', desc: `Trẻ nhận biết các giác quan và bộ phận cơ thể liên quan đến ${cleanTopic}.` },
+        { icon: '😃', title: 'Cảm Xúc Rạng Rỡ', desc: `Thể hiện nụ cười, niềm vui và sự tự tin khi tham gia hoạt động lớp.` },
+        { icon: '🤝', title: 'Tương Tác Bạn Bè', desc: `Trẻ thực hành phối hợp học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'khay đồ dùng'}.` },
+        { icon: '🌟', title: 'Bài Học Tự Lập', desc: `Rèn thói quen tự chăm sóc bản thân và vệ sinh cá nhân sạch sẽ.` }
+      ];
+    }
   }
 
   const s3: AILessonSlide = {
@@ -216,14 +457,6 @@ export function generateRulesCompliantSlideDeck(params: {
     image_prompt: `Educational 4 icons set layout for kindergarten learning about ${safeTopic}`,
     image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning about ${safeTopic}`, 1024, 768, 3, keywords)
   };
-
-  // Slide 4: TIMELINE_4_STEPS (5E - Explain) - Dynamic Steps
-  const timelineSteps = [
-    { step_num: 1, title: '1. Khởi Động Quan Sát', desc: `Trẻ tập trung quan sát mẫu trực quan bài học "${cleanTopic}" và lắng nghe gợi mở của cô.` },
-    { step_num: 2, title: '2. Thao Tác Trực Tiếp', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'đồ dùng học tập'} thực hành trải nghiệm.` },
-    { step_num: 3, title: '3. Thảo Luận Đồng Đội', desc: `Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức trọng tâm.` },
-    { step_num: 4, title: '4. Tự Tin Trình Bày', desc: 'Trẻ tự tin giới thiệu sản phẩm trải nghiệm trước cô giáo và các bạn.' }
-  ];
 
   const s4: AILessonSlide = {
     slide_number: 4,
@@ -288,14 +521,6 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Detailed structural breakdown diagram for kids about ${safeTopic}`, 1024, 768, 8, keywords)
   };
 
-  // Slide 7: LIST_ACCENT_IMAGE - Dynamic Objectives
-  const listPoints = [
-    `Phát triển nhận thức: Trẻ bóc tách và phân biệt rõ các đặc trưng của ${cleanTopic}.`,
-    `Hình thành kỹ năng: Trẻ tự tay thực hành khéo léo với ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng nhóm'}.`,
-    `Giao tiếp tự tin: Luyện phản xạ lời thoại "🗣️ Cô hỏi - 👦 Trẻ đáp" rạng rỡ tại lớp.`,
-    `Giáo dục tình cảm: Hình thành thói quen tốt và niềm vui khám phá bài học.`
-  ];
-
   const s7: AILessonSlide = {
     slide_number: 7,
     layout_type: 'LIST_ACCENT_IMAGE',
@@ -304,13 +529,6 @@ export function generateRulesCompliantSlideDeck(params: {
     image_prompt: `Preschool learning concept illustration about ${safeTopic}`,
     image_url: getPollinationsImageUrl(`Preschool learning concept illustration about ${safeTopic}`, 800, 800, 9, keywords)
   };
-
-  // Slide 8: NUMBERED_STEPS - Dynamic Practical Steps
-  const numSteps = [
-    { step_num: 1, title: 'Bước 1 - Tiếp nhận khay học liệu', desc: `Trẻ nhận đồ dùng trải nghiệm: ${studentMaterials.join(', ') || 'đồ dùng học tập'}.` },
-    { step_num: 2, title: 'Bước 2 - Phối hợp nhóm thực hành', desc: `Các nhóm phân công nhau quan sát, thao tác và trao đổi rôm rả.` },
-    { step_num: 3, title: 'Bước 3 - Hoàn thiện & Thu dọn', desc: 'Trẻ hoàn thành sản phẩm trải nghiệm và tự giác cất đồ dùng về đúng nơi.' }
-  ];
 
   const s8: AILessonSlide = {
     slide_number: 8,
