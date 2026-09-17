@@ -110,6 +110,7 @@ export default function TeacherAILessonPlanNewPage() {
   // Printable Word / PDF Handler
   const handleExportWord = () => {
     if (!generatedLesson) return;
+    const activeTheme = (generatedLesson as any)?.theme_code || generatedLesson.schema_response?.theme_code || themeCode || 'THUC_VAT';
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
@@ -152,9 +153,9 @@ export default function TeacherAILessonPlanNewPage() {
                   <div class="slide-card">
                     <h3 style="margin: 0; color: #0369a1; font-size: 14px;">SLIDE ${s.slide_number}: ${s.title}</h3>
                     <img 
-                      src="${s.image_url || getFallbackPreschoolImage(s.slide_number)}" 
+                      src="${s.image_url || getFallbackPreschoolImage(s.slide_number, activeTheme)}" 
                       class="slide-img"
-                      onerror="this.onerror=null; this.src='${getFallbackPreschoolImage(s.slide_number)}';"
+                      onerror="this.onerror=null; this.src='${getFallbackPreschoolImage(s.slide_number, activeTheme)}';"
                     />
                     <ul style="font-size: 12px; margin-top: 8px; padding-left: 18px; color: #334155;">
                       ${s.content_points.map(pt => `<li>${pt}</li>`).join('')}
@@ -170,12 +171,107 @@ export default function TeacherAILessonPlanNewPage() {
                 <pre style="white-space: pre-wrap; font-family: inherit;">${generatedLesson.parent_announcement}</pre>
               </div>
             ` : ''}
+
+            <script>
+              window.onload = function() {
+                var imgs = Array.from(document.images);
+                if (imgs.length === 0) {
+                  window.print();
+                  return;
+                }
+                var promises = imgs.map(function(img) {
+                  if (img.complete) return Promise.resolve();
+                  return new Promise(function(resolve) {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                  });
+                });
+                Promise.all(promises).then(function() {
+                  setTimeout(function() {
+                    window.print();
+                  }, 300);
+                });
+              };
+            </script>
           </body>
         </html>
       `);
       printWindow.document.close();
-      printWindow.print();
     }
+  };
+
+  // Download Word (.doc) File Handler
+  const handleDownloadWordDoc = () => {
+    if (!generatedLesson) return;
+    const activeTheme = (generatedLesson as any)?.theme_code || generatedLesson.schema_response?.theme_code || themeCode || 'THUC_VAT';
+    const content = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset='utf-8'>
+          <title>${generatedLesson.teaching_type === 'PROJECT_BASED' ? 'DỰ ÁN HỌC TẬP PBL' : 'KẾ HOẠCH BÀI DẠY'} - ${generatedLesson.topic}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #1e293b; line-height: 1.6; }
+            h1 { color: #0369a1; text-align: center; font-size: 20pt; }
+            h2 { color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 20px; font-size: 14pt; }
+            .box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+            .step { margin-bottom: 15px; padding: 10px; background: #fff; border-left: 4px solid #0284c7; }
+            .announcement { background: #f0fdf4; border: 1px solid #86efac; padding: 15px; border-radius: 8px; }
+            .slides-grid { margin-top: 15px; }
+            .slide-card { border: 1px solid #cbd5e1; padding: 12px; border-radius: 8px; background: #fff; margin-bottom: 15px; }
+            .slide-img { width: 100%; max-width: 400px; height: auto; border-radius: 6px; margin-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>${generatedLesson.teaching_type === 'PROJECT_BASED' ? 'KẾ HOẠCH DỰ ÁN HỌC TẬP STEAM (PBL)' : 'KẾ HOẠCH BÀI DẠY MẦM NON'}</h1>
+          <div class="box">
+            <p><strong>Tên chủ đề / Dự án:</strong> ${generatedLesson.topic}</p>
+            <p><strong>Khối lớp:</strong> ${GRADE_LEVEL_MAP[gradeLevel].label} | <strong>Thời lượng:</strong> ${generatedLesson.duration_minutes} phút</p>
+            <p><strong>Mục tiêu:</strong> ${generatedLesson.target_objectives}</p>
+            <p><strong>Đồ dùng học liệu:</strong> ${generatedLesson.materials_needed.join(', ')}</p>
+          </div>
+          <h2>CẤU TRÚC BÀI GIẢNG</h2>
+          ${generatedLesson.five_steps.map(s => `
+            <div class="step">
+              <h3>${s.step_title}</h3>
+              <p><strong>Hoạt động của cô:</strong> ${s.teacher_action}</p>
+              <p><strong>Hoạt động của trẻ:</strong> ${s.child_activity}</p>
+            </div>
+          `).join('')}
+
+          ${generatedLesson.slides && generatedLesson.slides.length > 0 ? `
+            <h2>HÌNH ẢNH MINH HỌA & SLIDE TRÌNH CHIẾU SMARTTV</h2>
+            <div class="slides-grid">
+              ${generatedLesson.slides.map(s => `
+                <div class="slide-card">
+                  <h3 style="margin: 0; color: #0369a1; font-size: 14px;">SLIDE ${s.slide_number}: ${s.title}</h3>
+                  <img src="${s.image_url || getFallbackPreschoolImage(s.slide_number, activeTheme)}" class="slide-img" />
+                  <ul style="font-size: 12px; margin-top: 8px; padding-left: 18px; color: #334155;">
+                    ${s.content_points.map(pt => `<li>${pt}</li>`).join('')}
+                  </ul>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          ${generatedLesson.parent_announcement ? `
+            <h2>THƯ NGỎ GỬI PHỤ HUYNH ĐỒNG HÀNH</h2>
+            <div class="announcement">
+              <pre style="white-space: pre-wrap; font-family: inherit;">${generatedLesson.parent_announcement}</pre>
+            </div>
+          ` : ''}
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob(['\ufeff' + content], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Ke_hoach_bai_day_${generatedLesson.topic.replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]/g, '_')}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -490,14 +586,22 @@ export default function TeacherAILessonPlanNewPage() {
                   </button>
                 </div>
 
-                {/* Dual Export Buttons */}
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {/* Triple Export Buttons */}
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    onClick={handleDownloadWordDoc}
+                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold px-3 py-2 rounded-pill text-xs border border-blue-200 transition-all active:scale-95 shadow-sm"
+                  >
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span>Tải file Word (.doc)</span>
+                  </button>
+
                   <button
                     onClick={handleExportWord}
-                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-pill text-xs border border-slate-300 transition-all"
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-pill text-xs border border-slate-300 transition-all active:scale-95 shadow-sm"
                   >
                     <Printer className="w-4 h-4 text-sky-600" />
-                    <span>Tải kế hoạch dạy học (Word/PDF)</span>
+                    <span>In / PDF</span>
                   </button>
 
                   <button
@@ -505,7 +609,7 @@ export default function TeacherAILessonPlanNewPage() {
                     className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-pill text-xs shadow transition-all active:scale-95"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Tải bài giảng trình chiếu (PowerPoint)</span>
+                    <span>Tải PowerPoint (.pptx)</span>
                   </button>
                 </div>
               </div>

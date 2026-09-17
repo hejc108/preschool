@@ -499,20 +499,24 @@ export async function generateAILessonPlan(params: {
 }
 
 /**
- * Helper: Convert URL sang Base64 tránh lỗi CORS và mất ảnh trên PowerPoint
+ * Helper: Convert URL sang Base64 tránh lỗi CORS và mất ảnh trên PowerPoint với timeout 2.5s
  */
-export async function toBase64(url: string): Promise<string> {
+export async function toBase64(url: string, timeoutMs = 2500): Promise<string> {
+  if (!url) return '';
   try {
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) return '';
     const blob = await response.blob();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Chuyển đổi Base64 thất bại'));
+      reader.onloadend = () => resolve((reader.result as string) || '');
+      reader.onerror = () => resolve('');
       reader.readAsDataURL(blob);
     });
   } catch (err) {
-    console.warn('Không thể fetch ảnh để chuyển sang Base64:', err);
     return '';
   }
 }
@@ -744,12 +748,16 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
     const COLOR_ACCENT = themeMatrix.accentColor.replace('#', '');
 
     const slidesData = lesson.slides || [];
-    const base64Images: string[] = [];
-    for (let i = 0; i < slidesData.length; i++) {
-      const rawUrl = slidesData[i].image_url || getFallbackPreschoolImage(i, themeCode);
-      const b64 = await toBase64(rawUrl);
-      base64Images.push(b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i, themeCode));
-    }
+    const base64Images: string[] = await Promise.all(
+      slidesData.map(async (s, i) => {
+        const rawUrl = s.image_url || getFallbackPreschoolImage(i, themeCode);
+        let b64 = await toBase64(rawUrl, 2500);
+        if (!b64 || !b64.startsWith('data:image')) {
+          b64 = await toBase64(getFallbackPreschoolImage(i, themeCode), 2000);
+        }
+        return b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(i, themeCode);
+      })
+    );
 
     for (let i = 0; i < slidesData.length; i++) {
       const slideItem = slidesData[i];
@@ -805,12 +813,23 @@ export async function exportToPowerPoint(lesson: AILessonPlan): Promise<void> {
         slide.background = { color: COLOR_LIGHT_BG };
         slide.addText(slideItem.title, { x: 0.8, y: 0.6, w: 11.7, h: 0.8, fontSize: 32, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true });
         const cards = slideItem.cards_data || [];
+        const cardImages = await Promise.all(
+          cards.map(async (c, cIdx) => {
+            const raw = c.image_url || getFallbackPreschoolImage(cIdx, themeCode);
+            let b64 = await toBase64(raw, 2500);
+            if (!b64 || !b64.startsWith('data:image')) {
+              b64 = await toBase64(getFallbackPreschoolImage(cIdx, themeCode), 2000);
+            }
+            return b64.startsWith('data:image') ? b64 : getFallbackPreschoolImage(cIdx, themeCode);
+          })
+        );
         for (let idx = 0; idx < cards.length; idx++) {
           const c = cards[idx];
           const xPos = 0.8 + idx * 4.0;
           slide.addShape(pptx.ShapeType.roundRect, { x: xPos, y: 1.6, w: 3.7, h: 5.0, rectRadius: 0.1, fill: { color: 'FFFFFF' }, line: { color: 'DCFCE7', width: 1.5 } });
-          const cardImg = c.image_url ? await toBase64(c.image_url) : img;
-          const cardImgObj = { [cardImg.startsWith('data:image') ? 'data' : 'path']: cardImg.startsWith('data:image') ? cardImg : img };
+          const cardImg = cardImages[idx] || img;
+          const isB64Card = cardImg.startsWith('data:image');
+          const cardImgObj = { [isB64Card ? 'data' : 'path']: cardImg };
           slide.addImage({ ...cardImgObj, x: xPos + 0.15, y: 1.75, w: 3.4, h: 2.4 });
           slide.addText(c.title, { x: xPos + 0.2, y: 4.3, w: 3.3, h: 0.5, fontSize: 18, fontFace: FONT_TITLE, color: COLOR_PRIMARY, bold: true, align: 'center' });
           slide.addText(c.desc, { x: xPos + 0.2, y: 4.8, w: 3.3, h: 1.6, fontSize: 13, fontFace: FONT_BODY, color: '334155', align: 'center' });
