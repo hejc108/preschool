@@ -75,7 +75,8 @@ export function getPollinationsImageUrl(
 ): string {
   const cleanPrompt = removeVietnameseTones(prompt).slice(0, 100) || 'cheerful kindergarten kids learning';
   const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 80) || 'vibrant cartoon';
-  const fullPrompt = `cute preschool 3D cartoon style, soft clay or papercraft look, vibrant ${cleanKeywords}, cheerful kindergarten kids, no text, no letters, high contrast, clean background, 16:9 ratio, ${cleanPrompt}`;
+  // Enforce primary attention on cleanKeywords & cleanPrompt by putting them at the very start of the AI prompt
+  const fullPrompt = `${cleanKeywords}, ${cleanPrompt}, cute 3D cartoon style, soft clay papercraft look, no text, no letters, high contrast, clean background, 16:9 ratio`;
   const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }
@@ -526,21 +527,44 @@ export function generateRulesCompliantSlideDeck(params: {
   };
 
   // Slide 5: IMAGE_CARDS_3 (Interactive Dialogue & Callout Box) - Dynamic Dialogue
+  const subCat = detectTopicSubCategory(safeTopic, effectiveThemeCode);
+  let card1Concept = `${safeTopic} teacher presentation`;
+  let card2Concept = `${safeTopic} happy kids responding`;
+  let card3Concept = `${safeTopic} vietnamese preschool visual`;
+
+  if (subCat === 'GIAO_THONG_WATERWAY') {
+    card1Concept = `toy boat sailboat ship on blue water river teacher presentation`;
+    card2Concept = `kids wearing life jacket on boat happy responding`;
+    card3Concept = `model boat ship harbor visual`;
+  } else if (subCat === 'GIAO_THONG_AIRWAY') {
+    card1Concept = `toy airplane flying in sky teacher presentation`;
+    card2Concept = `kids wearing seatbelt in airplane happy responding`;
+    card3Concept = `model airplane airport visual`;
+  } else if (subCat === 'GIAO_THONG_RAILWAY') {
+    card1Concept = `toy train railway station teacher presentation`;
+    card2Concept = `kids on train happy responding`;
+    card3Concept = `model train railway visual`;
+  } else if (subCat === 'DONG_VAT_AQUATIC') {
+    card1Concept = `colorful fish swimming underwater teacher presentation`;
+    card2Concept = `kids observing aquarium sea animals happy responding`;
+    card3Concept = `model fish ocean visual`;
+  }
+
   const imageCards = [
     { 
       title: 'Cô Gợi Mở', 
       desc: archetype.calloutDialogue.teacherAsk, 
-      image_url: getPollinationsImageUrl(`${safeTopic} teacher presentation`, 600, 400, 5, keywords) 
+      image_url: getPollinationsImageUrl(card1Concept, 600, 400, 5, keywords) 
     },
     { 
       title: 'Trẻ Phản Xạ', 
       desc: archetype.calloutDialogue.childAnswer, 
-      image_url: getPollinationsImageUrl(`${safeTopic} happy kids responding`, 600, 400, 6, keywords) 
+      image_url: getPollinationsImageUrl(card2Concept, 600, 400, 6, keywords) 
     },
     { 
       title: 'Hình Ảnh Trực Quan', 
       desc: `Hình ảnh thực tế gần gũi sân trường Sương Mai: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, 
-      image_url: getPollinationsImageUrl(`${safeTopic} vietnamese preschool visual`, 600, 400, 7, keywords) 
+      image_url: getPollinationsImageUrl(card3Concept, 600, 400, 7, keywords) 
     }
   ];
 
@@ -973,8 +997,8 @@ Trân trọng cảm ơn sự đồng hành quý báu của Quý Phụ Huynh!
         `Chủ đề: ${THEME_NAME_MAP[themeCode]}`,
         `Sản phẩm đầu ra: ${safeProduct}`
       ],
-      image_prompt: `Preschool STEM project classroom, happy children building toy cars, cartoon watercolor`,
-      image_url: getPollinationsImageUrl(`Preschool STEM project classroom, happy children building toy cars`)
+      image_prompt: `Preschool STEM project classroom, happy children building ${safeProjectName}, cartoon watercolor`,
+      image_url: getPollinationsImageUrl(`Preschool STEM project classroom building ${removeVietnameseTones(safeProjectName)}`, 1024, 768, 1, 'STEM project kids')
     },
     {
       slide_number: 2,
