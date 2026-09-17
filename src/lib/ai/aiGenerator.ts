@@ -143,7 +143,7 @@ export function generateRulesCompliantSlideDeck(params: {
   const effectiveThemeCode = autoDetectThemeCode(safeTopic, theme_code);
   const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
   const themeMatrix = getThemeMatrix(effectiveThemeCode);
-  const archetype = getThemeArchetype(effectiveThemeCode);
+  const archetype = getThemeArchetype(effectiveThemeCode, safeTopic, subject);
   const themeName = THEME_NAME_MAP[effectiveThemeCode] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
   const keywords = themeMatrix.imageStyleKeywords;
@@ -671,7 +671,7 @@ export async function generateAILessonPlan(params: {
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
   // 5-Step Traditional / 5E Pedagogy Structure
-  const archetype = getThemeArchetype(effectiveTheme);
+  const archetype = getThemeArchetype(effectiveTheme, safeTopic, subject);
   const isLaGroup = normGrade === 'LA';
   const fiveSteps = [
     {
