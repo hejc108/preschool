@@ -59,28 +59,13 @@ function PendingApprovalContent() {
         </div>
 
         {/* Dynamic Context Box */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 text-sm leading-relaxed text-slate-700 shadow-inner">
-          {type === 'teacher' ? (
-            <p className="text-slate-700">
-              Tài khoản <span className="font-semibold font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">{email}</span> của thầy/cô chưa được kích hoạt quyền giảng dạy trên hệ thống. Vui lòng báo Ban Giám Hiệu hoặc Quản trị viên để cấp quyền truy cập.
-            </p>
-          ) : type === 'unknown' ? (
-            <p className="text-slate-700">
-              Email <span className="font-semibold font-mono text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">{email}</span> chưa được đăng ký trong danh sách giáo viên hoặc phụ huynh của trường. Vui lòng liên hệ Văn phòng nhà trường để được hỗ trợ cấp quyền.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <p>
-                Email <span className="font-semibold font-mono text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">{email}</span> của quý phụ huynh đã đăng nhập thành công.
-              </p>
-              <p className="text-slate-600">
-                Tuy nhiên, hồ sơ học sinh của bé chưa được Ban Giám Hiệu xác nhận vào danh sách lớp.
-              </p>
-              <p className="font-medium text-amber-800 bg-amber-50/70 border border-amber-200/80 p-3 rounded-xl text-xs">
-                Quý phụ huynh vui lòng liên hệ Văn phòng nhà trường để hoàn tất thủ tục nhập học.
-              </p>
-            </div>
-          )}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 text-sm leading-relaxed text-slate-700 shadow-inner space-y-3">
+          <p>
+            Email Google <span className="font-semibold font-mono text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">{email}</span> đã đăng nhập thành công.
+          </p>
+          <p className="font-medium text-amber-900 bg-amber-50/80 border border-amber-200 p-3.5 rounded-xl text-xs leading-normal shadow-sm">
+            Tài khoản của bạn đang chờ Nhà trường xác nhận thông tin học sinh/giáo viên. Vui lòng liên hệ Văn phòng trường để được kích hoạt.
+          </p>
         </div>
 
         {/* Contact Info & Action Buttons */}

@@ -156,6 +156,11 @@ function AuthContent() {
           {t('auth.google_login')}
         </button>
 
+        {/* Instructional Note */}
+        <p className="text-[12px] text-slate-500 text-center -mt-3 mb-6 px-2 leading-relaxed">
+          Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
+        </p>
+
         <div className="relative my-6 text-center">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-slate-200"></div>
@@ -182,47 +187,57 @@ function AuthContent() {
                 />
               </div>
 
-              {/* Quick Account Selection Chips */}
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="text-slate-400 font-medium">Tài khoản mẫu:</span>
-                <button
-                  type="button"
-                  onClick={() => setEmail('admin')}
-                  className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-md font-mono font-bold transition-all"
-                >
-                  admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmail('so.maria')}
-                  className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-md font-mono font-bold transition-all"
-                >
-                  so.maria
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmail('teacher')}
-                  className="px-2 py-0.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-md font-mono font-bold transition-all"
-                >
-                  teacher
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmail('teacher.pending@suongmai.edu.vn')}
-                  className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-md font-mono font-bold transition-all"
-                  title="Giáo viên chờ duyệt"
-                >
-                  teacher.pending
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmail('parent.pending@gmail.com')}
-                  className="px-2 py-0.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-md font-mono font-bold transition-all"
-                  title="Phụ huynh chờ duyệt"
-                >
-                  parent.pending
-                </button>
-              </div>
+              {/* Quick Account Selection Chips (DEV ONLY - Hidden in Production) */}
+              {process.env.NODE_ENV !== 'production' && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-slate-400 font-medium">Dev Test:</span>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('alanvu755@gmail.com')}
+                    className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-md font-mono font-bold transition-all"
+                    title="Super Admin Auto-Active"
+                  >
+                    alanvu755
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('admin')}
+                    className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-md font-mono font-bold transition-all"
+                  >
+                    admin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('so.maria')}
+                    className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-md font-mono font-bold transition-all"
+                  >
+                    so.maria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('teacher')}
+                    className="px-2 py-0.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-md font-mono font-bold transition-all"
+                  >
+                    teacher
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('teacher.pending@suongmai.edu.vn')}
+                    className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-md font-mono font-bold transition-all"
+                    title="Giáo viên chờ duyệt"
+                  >
+                    teacher.pending
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmail('parent.pending@gmail.com')}
+                    className="px-2 py-0.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-md font-mono font-bold transition-all"
+                    title="Phụ huynh chờ duyệt"
+                  >
+                    parent.pending
+                  </button>
+                </div>
+              )}
             </div>
 
             <button

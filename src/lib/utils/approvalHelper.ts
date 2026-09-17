@@ -6,7 +6,7 @@ export interface PendingUserApproval {
   email: string;
   full_name: string;
   avatar_url?: string;
-  proposed_role: 'TEACHER' | 'PARENT' | 'STAFF' | 'GUEST';
+  proposed_role: 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER' | 'STAFF' | 'PARENT' | 'GUEST';
   approval_status: 'PENDING' | 'ACTIVE' | 'REJECTED';
   created_at: string;
   linked_student_id?: string;
@@ -18,10 +18,18 @@ const STORAGE_KEY_RELATIONS = 'suongmai_parent_relations_v1';
 
 export const INITIAL_MOCK_PROFILES: Profile[] = [
   {
+    id: 'u-super-admin-alan',
+    full_name: 'Alan Vũ (Super Admin)',
+    email: 'alanvu755@gmail.com',
+    role: 'SUPER_ADMIN',
+    approval_status: 'ACTIVE',
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
     id: 'u-admin-1',
     full_name: 'Ban Giám Hiệu Sương Mai',
     email: 'admin@suongmai.edu.vn',
-    role: 'SUPER_ADMIN',
+    role: 'SCHOOL_ADMIN',
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T08:00:00Z',
   },
@@ -31,6 +39,8 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     email: 'so.maria@suongmai.edu.vn',
     role: 'TEACHER',
     approval_status: 'ACTIVE',
+    assigned_class_id: 'c1',
+    assigned_class_name: 'Mầm 1 (Rose)',
     created_at: '2026-01-05T08:00:00Z',
   },
   {
@@ -39,6 +49,8 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     email: 'teacher@suongmai.edu.vn',
     role: 'TEACHER',
     approval_status: 'ACTIVE',
+    assigned_class_id: 'c3',
+    assigned_class_name: 'Lá 3 (Sunflower)',
     created_at: '2026-01-10T08:00:00Z',
   },
   {
@@ -90,7 +102,14 @@ export function getStoredProfiles(): Profile[] {
       localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(INITIAL_MOCK_PROFILES));
       return INITIAL_MOCK_PROFILES;
     }
-    return JSON.parse(raw);
+    const list: Profile[] = JSON.parse(raw);
+    // Guarantee alanvu755@gmail.com always exists and is active SUPER_ADMIN
+    const hasAlan = list.some((p) => p.email.toLowerCase().trim() === 'alanvu755@gmail.com');
+    if (!hasAlan) {
+      list.unshift(INITIAL_MOCK_PROFILES[0]);
+      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(list));
+    }
+    return list;
   } catch (e) {
     return INITIAL_MOCK_PROFILES;
   }
@@ -134,7 +153,8 @@ export function saveStoredRelations(relations: ParentStudentRelation[]): void {
 }
 
 /**
- * Check approval & role authorization status for a specific user email
+ * Check approval & role authorization status for a specific user email.
+ * Includes AUTO-GRANT rule for alanvu755@gmail.com (SUPER_ADMIN + ACTIVE).
  */
 export function checkUserApprovalStatus(email: string): {
   isRegistered: boolean;
@@ -147,6 +167,32 @@ export function checkUserApprovalStatus(email: string): {
   pendingType?: 'teacher' | 'parent' | 'unknown';
 } {
   const cleanEmail = email.toLowerCase().trim();
+
+  // HARDCODED / TRIGGER SUPER_ADMIN AUTO-GRANT FOR alanvu755@gmail.com
+  if (cleanEmail === 'alanvu755@gmail.com') {
+    const profile = registerGoogleUserIfMissing('alanvu755@gmail.com', 'Alan Vũ (Super Admin)');
+    profile.role = 'SUPER_ADMIN';
+    profile.approval_status = 'ACTIVE';
+
+    const profiles = getStoredProfiles();
+    const idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+    if (idx !== -1) {
+      profiles[idx].role = 'SUPER_ADMIN';
+      profiles[idx].approval_status = 'ACTIVE';
+      saveStoredProfiles(profiles);
+    }
+
+    return {
+      isRegistered: true,
+      profile,
+      approvalStatus: 'ACTIVE',
+      isTeacherOrStaff: true,
+      isParentVerified: false,
+      linkedStudents: [],
+      redirectUrl: '/admin/dashboard',
+    };
+  }
+
   const profiles = getStoredProfiles();
   const relations = getStoredRelations();
 
@@ -165,7 +211,7 @@ export function checkUserApprovalStatus(email: string): {
     };
   }
 
-  const isTeacherOrStaff = ['TEACHER', 'STAFF', 'SUPER_ADMIN', 'ADMIN'].includes(profile.role);
+  const isTeacherOrStaff = ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(profile.role);
 
   if (isTeacherOrStaff) {
     const isActive = profile.approval_status === 'ACTIVE';
@@ -212,14 +258,23 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
   const profiles = getStoredProfiles();
   let existing = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
 
-  if (existing) return existing;
+  if (existing) {
+    if (cleanEmail === 'alanvu755@gmail.com') {
+      existing.role = 'SUPER_ADMIN';
+      existing.approval_status = 'ACTIVE';
+      saveStoredProfiles(profiles);
+    }
+    return existing;
+  }
+
+  const isAlan = cleanEmail === 'alanvu755@gmail.com';
 
   const newProfile: Profile = {
     id: `u-gauth-${Date.now()}`,
     email: cleanEmail,
-    full_name: fullName || cleanEmail.split('@')[0],
-    role: cleanEmail.includes('teacher') ? 'TEACHER' : 'PARENT',
-    approval_status: 'PENDING',
+    full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
+    role: isAlan ? 'SUPER_ADMIN' : cleanEmail.includes('teacher') ? 'TEACHER' : 'PARENT',
+    approval_status: isAlan ? 'ACTIVE' : 'PENDING',
     avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     created_at: new Date().toISOString(),
   };
@@ -230,25 +285,34 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
 }
 
 /**
- * Approve user as Teacher
+ * Promote user to SCHOOL_ADMIN (Only permitted if operator is SUPER_ADMIN / alanvu755@gmail.com)
  */
-export function approveTeacherUser(email: string): Profile | null {
-  const cleanEmail = email.toLowerCase().trim();
+export function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string): Profile | null {
+  const cleanEmail = targetEmail.toLowerCase().trim();
+  const cleanOperator = (operatorEmail || '').toLowerCase().trim();
+
+  // Enforce Super Admin authority rule
+  if (cleanOperator && cleanOperator !== 'alanvu755@gmail.com' && cleanOperator !== 'admin@suongmai.edu.vn') {
+    throw new Error('Chỉ tài khoản alanvu755@gmail.com (Super Admin) mới có quyền cấp quyền Quản trị trường!');
+  }
+
   const profiles = getStoredProfiles();
-  const idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
 
-  if (idx === -1) return null;
+  if (idx === -1) {
+    registerGoogleUserIfMissing(targetEmail);
+    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  }
 
-  profiles[idx].role = 'TEACHER';
+  profiles[idx].role = 'SCHOOL_ADMIN';
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
 
-  // Sync to Supabase DB asynchronously if reachable
   (async () => {
     try {
       await supabase
         .from('profiles')
-        .update({ role: 'TEACHER', approval_status: 'ACTIVE' })
+        .update({ role: 'SCHOOL_ADMIN', approval_status: 'ACTIVE' })
         .eq('email', cleanEmail);
     } catch (e) {}
   })();
@@ -257,11 +321,77 @@ export function approveTeacherUser(email: string): Profile | null {
 }
 
 /**
- * Approve user as Parent and link student
+ * Approve user as Teacher with optional assigned class
  */
-export function approveParentUser(email: string, studentId: string, studentName?: string): {
+export function approveTeacherUser(email: string, classId?: string, className?: string): Profile | null {
+  const cleanEmail = email.toLowerCase().trim();
+  const profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+
+  if (idx === -1) {
+    registerGoogleUserIfMissing(email);
+    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  }
+
+  profiles[idx].role = 'TEACHER';
+  profiles[idx].approval_status = 'ACTIVE';
+  if (classId) profiles[idx].assigned_class_id = classId;
+  if (className) profiles[idx].assigned_class_name = className;
+
+  saveStoredProfiles(profiles);
+
+  (async () => {
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          role: 'TEACHER',
+          approval_status: 'ACTIVE',
+          assigned_class_id: classId,
+          assigned_class_name: className,
+        })
+        .eq('email', cleanEmail);
+    } catch (e) {}
+  })();
+
+  return profiles[idx];
+}
+
+/**
+ * Approve user as STAFF (Kitchen / Nurse)
+ */
+export function approveStaffUser(email: string): Profile | null {
+  const cleanEmail = email.toLowerCase().trim();
+  const profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+
+  if (idx === -1) {
+    registerGoogleUserIfMissing(email);
+    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  }
+
+  profiles[idx].role = 'STAFF';
+  profiles[idx].approval_status = 'ACTIVE';
+  saveStoredProfiles(profiles);
+
+  (async () => {
+    try {
+      await supabase
+        .from('profiles')
+        .update({ role: 'STAFF', approval_status: 'ACTIVE' })
+        .eq('email', cleanEmail);
+    } catch (e) {}
+  })();
+
+  return profiles[idx];
+}
+
+/**
+ * Approve user as Parent and link 1 or multiple students
+ */
+export function approveParentUser(email: string, studentIds: string[]): {
   profile: Profile | null;
-  relation: ParentStudentRelation;
+  relations: ParentStudentRelation[];
 } {
   const cleanEmail = email.toLowerCase().trim();
   const profiles = getStoredProfiles();
@@ -279,36 +409,37 @@ export function approveParentUser(email: string, studentId: string, studentName?
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
 
-  // Add/verify relation
   const relations = getStoredRelations();
-  const relIdx = relations.findIndex(
-    (r) => r.parent_email.toLowerCase().trim() === cleanEmail && r.student_id === studentId
-  );
+  const addedRelations: ParentStudentRelation[] = [];
 
-  const targetStudent = INITIAL_STUDENTS.find((s) => s.id === studentId);
-  const resolvedStudentName = studentName || targetStudent?.full_name || 'Học sinh Sương Mai';
+  for (const sId of studentIds) {
+    const targetStudent = INITIAL_STUDENTS.find((s) => s.id === sId);
+    const resolvedName = targetStudent?.full_name || 'Học sinh Sương Mai';
 
-  let relation: ParentStudentRelation;
+    const relIdx = relations.findIndex(
+      (r) => r.parent_email.toLowerCase().trim() === cleanEmail && r.student_id === sId
+    );
 
-  if (relIdx !== -1) {
-    relations[relIdx].is_verified = true;
-    relation = relations[relIdx];
-  } else {
-    relation = {
-      id: `rel-${Date.now()}`,
-      parent_id: profile.id,
-      parent_email: cleanEmail,
-      student_id: studentId,
-      student_name: resolvedStudentName,
-      is_verified: true,
-      created_at: new Date().toISOString(),
-    };
-    relations.push(relation);
+    if (relIdx !== -1) {
+      relations[relIdx].is_verified = true;
+      addedRelations.push(relations[relIdx]);
+    } else {
+      const newRel: ParentStudentRelation = {
+        id: `rel-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        parent_id: profile.id,
+        parent_email: cleanEmail,
+        student_id: sId,
+        student_name: resolvedName,
+        is_verified: true,
+        created_at: new Date().toISOString(),
+      };
+      relations.push(newRel);
+      addedRelations.push(newRel);
+    }
   }
 
   saveStoredRelations(relations);
 
-  // Sync to Supabase DB asynchronously
   (async () => {
     try {
       await supabase
@@ -316,13 +447,15 @@ export function approveParentUser(email: string, studentId: string, studentName?
         .update({ role: 'PARENT', approval_status: 'ACTIVE' })
         .eq('email', cleanEmail);
 
-      await supabase
-        .from('parent_student_relations')
-        .upsert({ parent_id: profile.id, student_id: studentId, is_verified: true });
+      for (const sId of studentIds) {
+        await supabase
+          .from('parent_student_relations')
+          .upsert({ parent_id: profile.id, student_id: sId, is_verified: true });
+      }
     } catch (e) {}
   })();
 
-  return { profile: profiles[idx], relation };
+  return { profile: profiles[idx], relations: addedRelations };
 }
 
 /**

@@ -22,7 +22,7 @@
   "auth": {
     "title": "Mầm Non Sương Mai",
     "subtitle": "Hệ thống quản lý Trường Mầm Non Sương Mai",
-    "google_login": "Đăng nhập bằng Google Workspace",
+    "google_login": "Đăng nhập bằng Google",
     "or_otp": "Hoặc nhận mã OTP qua Tài khoản / Email",
     "email_label": "Tên tài khoản hoặc Email (Ví dụ: admin)",
     "send_otp": "Gửi mã xác thực OTP",

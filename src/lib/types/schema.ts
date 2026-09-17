@@ -1,6 +1,6 @@
 // TypeScript schema definitions matching DATABASE_SCHEMA_SUPABASE_v2.0.sql (Section 2.4 DDL Aligned)
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'TEACHER' | 'STAFF' | 'PARENT' | 'GUEST';
+export type UserRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'ADMIN' | 'TEACHER' | 'STAFF' | 'PARENT' | 'GUEST';
 
 export interface Profile {
   id: string;
@@ -10,6 +10,8 @@ export interface Profile {
   phone?: string;
   avatar_url?: string;
   approval_status?: 'PENDING' | 'ACTIVE' | 'REJECTED';
+  assigned_class_id?: string;
+  assigned_class_name?: string;
   created_at?: string;
 }
 

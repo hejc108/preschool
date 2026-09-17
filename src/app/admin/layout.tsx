@@ -28,6 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   const isStaff = userRole === 'STAFF';
+  const isSchoolAdminOrSuper = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(userRole);
 
   const mainNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = isStaff ? [
     { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
