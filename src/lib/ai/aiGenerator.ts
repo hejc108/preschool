@@ -875,7 +875,54 @@ export async function toBase64(url: string, timeoutMs = 2500): Promise<string> {
 /**
  * Parametric theme-aware preschool fallback images if AI image server is unreachable
  */
-export function getFallbackPreschoolImage(index: number = 0, themeCode?: string): string {
+export function getFallbackPreschoolImage(index: number = 0, themeCode?: string, topic: string = ''): string {
+  const subCat = detectTopicSubCategory(topic, themeCode);
+
+  if (subCat === 'GIAO_THONG_WATERWAY') {
+    const waterwayFallbacks = [
+      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop&q=80', // Sailboat on blue water
+      'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=800&auto=format&fit=crop&q=80', // Ship at harbor
+      'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800&auto=format&fit=crop&q=80'  // Harbor sea water
+    ];
+    return waterwayFallbacks[index % waterwayFallbacks.length];
+  }
+
+  if (subCat === 'GIAO_THONG_AIRWAY') {
+    const airwayFallbacks = [
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&auto=format&fit=crop&q=80', // Airplane in sky
+      'https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=800&auto=format&fit=crop&q=80', // Helicopter
+      'https://images.unsplash.com/photo-1519074069444-1ba4eff56022?w=800&auto=format&fit=crop&q=80'  // Airport sky
+    ];
+    return airwayFallbacks[index % airwayFallbacks.length];
+  }
+
+  if (subCat === 'GIAO_THONG_RAILWAY') {
+    const railwayFallbacks = [
+      'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=800&auto=format&fit=crop&q=80', // Train on track
+      'https://images.unsplash.com/photo-1515165562839-978bbcf18277?w=800&auto=format&fit=crop&q=80', // Railway station
+      'https://images.unsplash.com/photo-1532105956626-9569c03602f6?w=800&auto=format&fit=crop&q=80'  // Train track
+    ];
+    return railwayFallbacks[index % railwayFallbacks.length];
+  }
+
+  if (subCat === 'DONG_VAT_AQUATIC') {
+    const aquaticFallbacks = [
+      'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?w=800&auto=format&fit=crop&q=80', // Fish underwater
+      'https://images.unsplash.com/photo-1535591273668-578e31182c4f?w=800&auto=format&fit=crop&q=80', // Coral reef sea life
+      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop&q=80'  // Sea life
+    ];
+    return aquaticFallbacks[index % aquaticFallbacks.length];
+  }
+
+  if (subCat === 'DONG_VAT_WILD') {
+    const wildFallbacks = [
+      'https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?w=800&auto=format&fit=crop&q=80', // Elephant
+      'https://images.unsplash.com/photo-1534188753412-3e26d0d618d6?w=800&auto=format&fit=crop&q=80', // Lion
+      'https://images.unsplash.com/photo-1540573133985-780688d172e2?w=800&auto=format&fit=crop&q=80'  // Monkey
+    ];
+    return wildFallbacks[index % wildFallbacks.length];
+  }
+
   const themeMatrix = getThemeMatrix(themeCode);
   const fallbacks = themeMatrix.fallbackImages && themeMatrix.fallbackImages.length > 0
     ? themeMatrix.fallbackImages

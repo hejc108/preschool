@@ -870,7 +870,7 @@ export default function TeacherAILessonPlanNewPage() {
                                       <div className="w-full h-40">
                                         <PreschoolSmartImage 
                                           src={card.image_url} 
-                                          fallbackSrc={getFallbackPreschoolImage(cIdx, activeTheme)}
+                                          fallbackSrc={getFallbackPreschoolImage(cIdx, activeTheme, topic)}
                                           alt={card.title}
                                           topic={topic}
                                           className="w-full h-40 object-cover"
@@ -925,7 +925,7 @@ export default function TeacherAILessonPlanNewPage() {
                                   <div className="lg:col-span-5 flex justify-center w-full max-w-xs h-64 mx-auto">
                                     <PreschoolSmartImage 
                                       src={slide.image_url} 
-                                      fallbackSrc={getFallbackPreschoolImage(7, activeTheme)}
+                                      fallbackSrc={getFallbackPreschoolImage(7, activeTheme, topic)}
                                       alt={slide.title}
                                       topic={topic}
                                       className="w-full h-64 object-cover border-4 border-white shadow-lg rounded-2xl"
@@ -976,7 +976,7 @@ export default function TeacherAILessonPlanNewPage() {
                                 <div className="lg:col-span-6 flex justify-center w-full h-72">
                                   <PreschoolSmartImage 
                                     src={slide.image_url} 
-                                    fallbackSrc={getFallbackPreschoolImage(9, activeTheme)}
+                                    fallbackSrc={getFallbackPreschoolImage(9, activeTheme, topic)}
                                     alt={slide.title}
                                     topic={topic}
                                     className="w-full h-72 object-cover border-4 border-white shadow-xl rounded-2xl"
@@ -1017,7 +1017,7 @@ export default function TeacherAILessonPlanNewPage() {
                               <div className="relative rounded-2xl overflow-hidden min-h-[320px] flex items-center justify-center p-6 bg-slate-800">
                                 <PreschoolSmartImage 
                                   src={slide.image_url} 
-                                  fallbackSrc={getFallbackPreschoolImage(11, activeTheme)}
+                                  fallbackSrc={getFallbackPreschoolImage(11, activeTheme, topic)}
                                   alt={slide.title}
                                   topic={topic}
                                   className="absolute inset-0 w-full h-full object-cover opacity-60"
