@@ -2,33 +2,40 @@ import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
-  getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords, detectTopicSubCategory
+  getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords, detectTopicSubCategory,
+  parseCompoundTopic, sanitizeStudentMaterials
 } from '../utils/curriculumHelper';
 
 /**
- * System Instruction Prompt for Gemini / AI Engine
+ * System Instruction Prompt for Gemini / AI Engine with Universal Rules
  */
 export const PRESCHOOL_SYSTEM_INSTRUCTION = `[SYSTEM INSTRUCTION]
 Bạn là Chuyên gia Phương pháp Giáo dục Mầm non tại Trường Mầm Non Sương Mai.
 Nhiệm vụ của bạn là lập kế hoạch bài dạy chi tiết, hấp dẫn, chuẩn mực sư phạm và an toàn tuyệt đối cho trẻ.
 
-[QUY TẮC ĐIỀU HƯỚNG THEO ĐỘ TUỔI]
-1. KHỐI NHÀ TRẺ (24-36 tháng): Thời lượng 12-15 phút. Tiến trình 3 bước (Gắn kết -> Nhận biết tập nói/hoạt động với đồ vật -> Trò chơi phản xạ). Ngôn ngữ cực kỳ đơn giản, từ ngữ lặp lại, hình ảnh trực quan lớn.
-2. KHỐI MẦM (3-4 tuổi): Thời lượng 15-20 phút. Tiến trình 3 bước truyền thống. Nhận biết trong phạm vi 5, so sánh kích thước, hình khối cơ bản. Không dạy viết chữ cái.
-3. KHỐI CHỒI (4-5 tuổi): Thời lượng 20-25 phút. Tiến trình 5E rút gọn. Phạm vi 10, phân tích nguyên nhân - kết quả, kể chuyện đóng vai kịch ngắn.
-4. KHỐI LÁ (5-6 tuổi): Thời lượng 25-30 phút. Bắt buộc áp dụng 5E chuẩn (Engage, Explore, Explain, Elaborate, Evaluate) kết hợp mục tiêu STEAM bóc tách rõ S-T-E-A-M. Bắt buộc có từ mới giải thích và 1 trò chơi hoạt động chiều.
+[BỘ NGUYÊN TẮC CỐT LÕI - UNIVERSAL RULES]
+1. XỬ LÝ ĐỀ TÀI ĐA ĐỐI TƯỢNG (COMPOUND TOPICS):
+   - Nếu tiêu đề chứa liên từ ("và", "hoặc", "phân biệt", "so sánh"), phải tách rõ Entity A và Entity B.
+   - Bố cục trình bày phải chia cột/slide so sánh 50/50 cân bằng, không để 1 đối tượng chiếm toàn bộ.
+2. HỌC LIỆU THEO HÀNH ĐỘNG (ACTION-DRIVEN MATERIALS):
+   - Học liệu của trẻ ("students") phải phục vụ trực tiếp thao tác thực hành (Đất nặn, sáp màu, phách tre, kính lúp, mô hình...).
+   - CẤM TUYỆT ĐỐI liệt kê thiết bị trình chiếu của cô (SmartTV, Máy tính, Màn chiếu, Laptop) vào đồ dùng của trẻ.
+3. LOGIC PROMPT ẢNH ĐỘNG TỪNG SLIDE (PER-SLIDE FOCUS ENTITY):
+   - Prompt ảnh của từng slide phải lấy từ khóa trọng tâm (Focus Entity) của slide đó.
+   - Luôn thêm Global Negative Prompt: "no adult office, no corporate workers, no computers, no desks, no realistic text, no messy background".
+4. VĂN PHONG SƯ PHẠM TỰ NHIÊN:
+   - Câu thoại giáo viên và trẻ gãy gọn, truyền cảm mầm non, tuyệt đối không nhúng chuỗi thô của tiêu đề vào lời thoại.
 
-[QUY TẮC BẮT BUỘC VỀ HỌC LIỆU & ĐỒ DÙNG DẠY HỌC DỘNG]
-1. TUYỆT ĐỐI KHÔNG sử dụng các đồ dùng mặc định cố định (như "hạt đỗ, bông gòn, sỏi, cát, chai nhựa") trừ khi đề tài bài học trực tiếp yêu cầu thí nghiệm đó.
-2. Học liệu trong phần "preparations" PHẢI bám sát 100% vào Đề tài ({topic}) và Phân môn ({subject}):
-   - Nếu môn Âm nhạc: bắt buộc có nhạc cụ (phách tre, xắc xô, đàn, micro, nơ tay).
-   - Nếu môn Toán: bắt buộc có rổ đồ dùng số lượng tương ứng, thẻ chữ số, que tính, que đo.
-   - Nếu môn Chữ cái: bắt buộc có thẻ chữ, các nét rời, hột hạt/dây uốn chữ, bảng con.
-   - Nếu môn Vận động: bắt buộc có dụng cụ thể dục (bóng, thang, túi cát, ghế, vạch kẻ).
-   - Nếu môn Tạo hình: bắt buộc có giấy A4, sáp màu, hồ dán, đất nặn, vật liệu mở tự nhiên.
-3. Phân định rõ ràng:
-   - "teacher": Đồ dùng trực quan của cô (kích thước lớn, video máy tính, tranh mẫu, vật thật).
-   - "students": Đồ dùng thực hành của trẻ (đủ số lượng cho từng trẻ hoặc từng nhóm).
+[QUY TẮC ĐIỀU HƯỚNG THEO ĐỘ TUỔI]
+1. KHỐI NHÀ TRẺ (24-36 tháng): Thời lượng 12-15 phút. Tiến trình 3 bước. Ngôn ngữ đơn giản.
+2. KHỐI MẦM (3-4 tuổi): Thời lượng 15-20 phút. Nhận biết trong phạm vi 5.
+3. KHỐI CHỒI (4-5 tuổi): Thời lượng 20-25 phút. Tiến trình 5E rút gọn.
+4. KHỐI LÁ (5-6 tuổi): Thời lượng 25-30 phút. Bắt buộc áp dụng 5E chuẩn và mục tiêu STEAM S-T-E-A-M.
+
+[QUY TẮC BẮT BUỘC VỀ HỌC LIỆU & ĐỒ DÙNG DẠY HỌC ĐỘNG]
+1. TUYỆT ĐỐI KHÔNG sử dụng đồ dùng mặc định cố định trừ khi đề tài yêu cầu.
+2. Học liệu "students" chỉ chứa đồ dùng trẻ trực tiếp cầm nắm, cấm thiết bị cô (SmartTV, Máy tính).
+3. Phân định rõ "teacher" (đồ dùng cô) và "students" (đồ dùng trẻ).
 
 [QUY TẮC DẠY HỌC THEO DỰ ÁN (PBL)]
 Nếu teaching_type == 'PROJECT_BASED':
@@ -71,12 +78,16 @@ export function getPollinationsImageUrl(
   width = 1024, 
   height = 768, 
   seedIndex = 1,
-  themeStyleKeywords = 'colorful cheerful'
+  themeStyleKeywords = 'colorful cheerful',
+  focusEntity?: string
 ): string {
-  const cleanPrompt = removeVietnameseTones(prompt).slice(0, 100) || 'cheerful kindergarten kids learning';
+  const targetSubject = (focusEntity || prompt || '').trim();
+  const cleanFocus = removeVietnameseTones(targetSubject).slice(0, 100) || 'cheerful kindergarten kids learning';
   const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 80) || 'vibrant cartoon';
-  // Enforce primary attention on cleanKeywords & cleanPrompt by putting them at the very start of the AI prompt
-  const fullPrompt = `${cleanKeywords}, ${cleanPrompt}, cute 3D cartoon style, soft clay papercraft look, no text, no letters, high contrast, clean background, 16:9 ratio`;
+  const globalNegativePrompt = 'no adult office, no corporate workers, no computers, no desks, no realistic text, no messy background';
+
+  // Universal Rule 3: Per-Slide Focus Entity + Global Negative Prompt
+  const fullPrompt = `${cleanFocus}, ${cleanKeywords}, cute 3D cartoon style, soft clay papercraft look, cheerful preschool, bright colors, clean background, no text, no letters, 16:9 ratio, ${globalNegativePrompt}`;
   const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }
@@ -153,9 +164,15 @@ export function generateRulesCompliantSlideDeck(params: {
   framework: any;
   targetObjectives?: string;
 }): AILessonSlide[] {
-  const { topic, subject, grade_level, theme_code, materialsNeededStr, studentMaterials, teacherMaterials, framework, targetObjectives } = params;
+  const { topic, subject, grade_level, theme_code, materialsNeededStr, studentMaterials: rawStudentMaterials, teacherMaterials, framework, targetObjectives } = params;
   const safeTopic = topic.trim() || 'Khám Phá Bài Học Trực Quan';
   
+  // Universal Rule 1: Compound Topic Analysis
+  const compound = parseCompoundTopic(safeTopic);
+
+  // Universal Rule 2: Action-Driven Student Materials (Strictly filter out teacher equipment)
+  const studentMaterials = sanitizeStudentMaterials(rawStudentMaterials);
+
   // Auto-detect theme code matching the topic keywords to avoid theme mismatches
   const effectiveThemeCode = autoDetectThemeCode(safeTopic, theme_code);
   const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
@@ -163,10 +180,10 @@ export function generateRulesCompliantSlideDeck(params: {
   const archetype = getThemeArchetype(effectiveThemeCode, safeTopic, subject);
   const themeName = THEME_NAME_MAP[effectiveThemeCode] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
-  const keywords = getDynamicImageKeywords(subject, safeTopic, effectiveThemeCode);
+  const keywords = getDynamicImageKeywords(subject, safeTopic, effectiveThemeCode, compound.entityA);
 
-  // Clean topic for titles to avoid double phrasing like "Khám phá sự phát triển của Khám phá..."
-  const cleanTopic = safeTopic.replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '');
+  // Clean topic for titles to avoid double phrasing
+  const cleanTopic = compound.cleanTopic;
 
   // Slide 1: COVER
   const s1: AILessonSlide = {
@@ -178,7 +195,7 @@ export function generateRulesCompliantSlideDeck(params: {
     pill_badges: [`🎓 Khối ${gradeInfo.label}`, `⏱ Thời lượng: ${gradeInfo.duration}`, `${themeMatrix.defaultIcon} Chủ đề: ${themeName}`],
     content_points: [`Khối: ${gradeInfo.label}`, `Thời lượng: ${gradeInfo.duration}`, `Chủ đề: ${themeName}`],
     image_prompt: `Preschool children learning about ${safeTopic}, bright classroom`,
-    image_url: getPollinationsImageUrl(`Preschool children learning about ${safeTopic}`, 1024, 768, 1, keywords)
+    image_url: getPollinationsImageUrl(`Preschool children learning about ${safeTopic}`, 1024, 768, 1, keywords, safeTopic)
   };
 
   // Slide 2: DARK_HERO (5E - Engage)
@@ -190,13 +207,18 @@ export function generateRulesCompliantSlideDeck(params: {
     subtitle: `${archetype.openerHeadline}\n${archetype.openerDetail}`,
     content_points: [`Gắn kết và gây hứng thú khám phá đề tài "${safeTopic}" qua trải nghiệm mở đầu`],
     image_prompt: `Magic glowing educational illustration about ${safeTopic}`,
-    image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords)
+    image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords, compound.entityA)
   };
 
   // Slide 3 & Slide 4: Subject Domain Branching for Grid Cards, Timeline, Objectives & Practical Steps
   const normSub = (subject || '').toUpperCase();
 
-  let gridCards = [
+  let gridCards = compound.isCompound ? [
+    { icon: '🌱', title: `Đặc Điểm ${compound.entityA}`, desc: `Trẻ quan sát vóc dáng, cấu tạo và môi trường hoạt động chính của ${compound.entityA}.` },
+    { icon: '🔍', title: `Trải Nghiệm ${compound.entityA}`, desc: `Thực hành thao tác trực quan với mô hình và học liệu quan sát ${compound.entityA}.` },
+    { icon: '⭐', title: `Đặc Điểm ${compound.entityB}`, desc: `Trẻ phân biệt vóc dáng, cấu tạo và môi trường hoạt động của ${compound.entityB}.` },
+    { icon: '💡', title: `So Sánh Khác Biệt`, desc: `Thảo luận nhóm chỉ ra điểm giống và khác nhau giữa ${compound.entityA} và ${compound.entityB}.` }
+  ] : [
     { icon: themeMatrix.defaultIcon, title: `🌱 Đặc Điểm Cốt Lõi`, desc: `Trẻ quan sát trực quan hình dáng, màu sắc và cấu tạo chính của ${cleanTopic}.` },
     { icon: '⭐', title: `🔍 Yếu Tố Tự Nhiên`, desc: `Phân tích môi trường sống, đặc tính và sự phát triển thực tế của ${cleanTopic}.` },
     { icon: '👐', title: `Thao Tác Trải Nghiệm`, desc: `Trẻ tự tay sờ nắn và thực hành với học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng nhóm'}.` },
@@ -532,7 +554,11 @@ export function generateRulesCompliantSlideDeck(params: {
   let card2Concept = `${safeTopic} happy kids responding`;
   let card3Concept = `${safeTopic} vietnamese preschool visual`;
 
-  if (subCat === 'GIAO_THONG_WATERWAY') {
+  if (compound.isCompound) {
+    card1Concept = `toy model ${compound.entityA} visual teacher presentation`;
+    card2Concept = `toy model ${compound.entityB} visual happy kids responding`;
+    card3Concept = `comparison visual model ${compound.entityA} and ${compound.entityB}`;
+  } else if (subCat === 'GIAO_THONG_WATERWAY') {
     card1Concept = `toy boat sailboat ship on blue water river teacher presentation`;
     card2Concept = `kids wearing life jacket on boat happy responding`;
     card3Concept = `model boat ship harbor visual`;
@@ -554,17 +580,17 @@ export function generateRulesCompliantSlideDeck(params: {
     { 
       title: 'Cô Gợi Mở', 
       desc: archetype.calloutDialogue.teacherAsk, 
-      image_url: getPollinationsImageUrl(card1Concept, 600, 400, 5, keywords) 
+      image_url: getPollinationsImageUrl(card1Concept, 600, 400, 5, keywords, compound.entityA) 
     },
     { 
       title: 'Trẻ Phản Xạ', 
       desc: archetype.calloutDialogue.childAnswer, 
-      image_url: getPollinationsImageUrl(card2Concept, 600, 400, 6, keywords) 
+      image_url: getPollinationsImageUrl(card2Concept, 600, 400, 6, keywords, compound.entityB) 
     },
     { 
       title: 'Hình Ảnh Trực Quan', 
       desc: `Hình ảnh thực tế gần gũi sân trường Sương Mai: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, 
-      image_url: getPollinationsImageUrl(card3Concept, 600, 400, 7, keywords) 
+      image_url: getPollinationsImageUrl(card3Concept, 600, 400, 7, keywords, compound.isCompound ? `${compound.entityA} ${compound.entityB}` : cleanTopic) 
     }
   ];
 
@@ -582,13 +608,17 @@ export function generateRulesCompliantSlideDeck(params: {
   const twoColCards = [
     { 
       icon: themeMatrix.defaultIcon, 
-      title: `Trọng Tâm Bài Học: ${cleanTopic}`, 
-      desc: `Cô giới thiệu đồ dùng trực quan (${teacherMaterials.join(', ') || 'học liệu cô'}). Hướng dẫn trẻ quan sát và nắm vững quy trình bài học.` 
+      title: compound.isCompound ? `Đối Tượng 1: ${compound.entityA}` : `Trọng Tâm Bài Học: ${cleanTopic}`, 
+      desc: compound.isCompound
+        ? `Cô giới thiệu mô hình ${compound.entityA} (${teacherMaterials.join(', ') || 'học liệu cô'}). Hướng dẫn trẻ quan sát chi tiết đặc điểm cấu tạo.`
+        : `Cô giới thiệu đồ dùng trực quan (${teacherMaterials.join(', ') || 'học liệu cô'}). Hướng dẫn trẻ quan sát và nắm vững quy trình bài học.` 
     },
     { 
       icon: '✨', 
-      title: 'Hình Ảnh Bản Địa Hóa Gần Gũi', 
-      desc: `Bài học tích hợp các hình ảnh Việt Nam quen thuộc: ${archetype.localizedElements.slice(0, 3).join(', ')}. Giúp trẻ yêu quê hương đất nước.` 
+      title: compound.isCompound ? `Đối Tượng 2: ${compound.entityB}` : 'Hình Ảnh Bản Địa Hóa Gần Gũi', 
+      desc: compound.isCompound
+        ? `Cô giới thiệu mô hình ${compound.entityB} (${teacherMaterials.join(', ') || 'học liệu cô'}). Hướng dẫn trẻ so sánh phân biệt cùng đồng đội.`
+        : `Bài học tích hợp các hình ảnh Việt Nam quen thuộc: ${archetype.localizedElements.slice(0, 3).join(', ')}. Giúp trẻ yêu quê hương đất nước.` 
     }
   ];
 

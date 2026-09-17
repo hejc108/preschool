@@ -214,6 +214,60 @@ export function autoDetectThemeCode(topic: string, fallbackTheme: ThemeCode = 'T
   return fallbackTheme;
 }
 
+export interface CompoundTopicAnalysis {
+  isCompound: boolean;
+  entityA: string;
+  entityB: string;
+  cleanTopic: string;
+}
+
+/**
+ * Universal Rule 1: Parse Compound Topics (e.g. "Phân biệt A và B", "So sánh con trâu và con bò")
+ */
+export function parseCompoundTopic(topic: string = ''): CompoundTopicAnalysis {
+  const raw = (topic || '').trim();
+  const clean = raw.replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm|So sánh|Phân biệt)\s+/i, '').trim();
+
+  // Match patterns like "A và B", "A hoặc B", "A với B", "Phân biệt A và B", "So sánh A và B"
+  const regex = /^(?:phân\s+biệt|so\s+sánh)?\s*(.+?)\s+(?:và|hoặc|với)\s+(.+)$/i;
+  const match = clean.match(regex);
+
+  if (match && match[1] && match[2]) {
+    const rawA = match[1].trim();
+    const rawB = match[2].trim();
+    const cleanA = rawA.replace(/^(phương tiện|giao thông|con|cây|quả|các loại|môn|bài)\s+/i, '').trim();
+    const cleanB = rawB.replace(/^(phương tiện|giao thông|con|cây|quả|các loại|môn|bài)\s+/i, '').trim();
+
+    return {
+      isCompound: true,
+      entityA: cleanA || rawA,
+      entityB: cleanB || rawB,
+      cleanTopic: clean
+    };
+  }
+
+  return {
+    isCompound: false,
+    entityA: clean,
+    entityB: clean,
+    cleanTopic: clean
+  };
+}
+
+/**
+ * Universal Rule 2: Action-Driven Materials Sanitizer (STRICT BAN on teacher equipment in student kits)
+ */
+export function sanitizeStudentMaterials(materials: string[] | string): string[] {
+  const rawList = Array.isArray(materials) ? materials : (materials || '').split(',');
+  const forbiddenTerms = /smarttv|smart\s*tv|máy\s*tính|màn\s*chiếu|tivi|laptop|loa\s*kéo|máy\s*chiếu|tivi\s*smarttv|ti\s*vi/i;
+
+  const filtered = rawList
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !forbiddenTerms.test(s));
+
+  return filtered.length > 0 ? filtered : ['mô hình học tập', 'khay đồ dùng trải nghiệm'];
+}
+
 export type SubCategoryType = 
   | 'GIAO_THONG_WATERWAY' | 'GIAO_THONG_AIRWAY' | 'GIAO_THONG_RAILWAY' | 'GIAO_THONG_ROADWAY'
   | 'DONG_VAT_AQUATIC' | 'DONG_VAT_WILD' | 'DONG_VAT_FARM'
@@ -256,12 +310,13 @@ export function detectTopicSubCategory(topic: string = '', themeCode?: string): 
 }
 
 /**
- * Dynamic Image Keywords Generator based on Subject Domain, Topic and Sub-Category
+ * Dynamic Image Keywords Generator based on Subject Domain, Topic, Sub-Category and Focus Entity
  */
-export function getDynamicImageKeywords(subject: string = '', topic: string = '', themeCode?: string): string {
+export function getDynamicImageKeywords(subject: string = '', topic: string = '', themeCode?: string, focusEntity?: string): string {
   const normSub = (subject || '').toUpperCase();
-  const lowerTopic = (topic || '').toLowerCase();
-  const subCat = detectTopicSubCategory(topic, themeCode);
+  const targetTopic = (focusEntity || topic || '').trim();
+  const lowerTopic = targetTopic.toLowerCase();
+  const subCat = detectTopicSubCategory(targetTopic, themeCode);
 
   // Sub-category specific image keywords overriding generic theme keywords
   if (subCat === 'GIAO_THONG_WATERWAY') {
@@ -338,9 +393,28 @@ export interface ThemeArchetypeInfo {
 
 export function getThemeArchetype(themeCode?: string, topic: string = '', subject: string = ''): ThemeArchetypeInfo {
   const code = themeCode || 'THUC_VAT';
-  let cleanTopic = (topic || '').trim().replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '') || 'Bài Học Trực Quan';
+  const compound = parseCompoundTopic(topic);
+  let cleanTopic = compound.cleanTopic;
   cleanTopic = cleanTopic.replace(/(\&|\và|\,)\s*(đường\s*)?hàng không/gi, '').replace(/\s+/g, ' ').trim();
   const normSub = (subject || '').toUpperCase();
+
+  // Universal Rule 1: Compound Topics Handling
+  if (compound.isCompound) {
+    const { entityA, entityB } = compound;
+    return {
+      archetypeType: 'QUIZ_TRUE_FALSE',
+      archetypeName: `So sánh & Phân biệt: ${entityA} vs ${entityB}`,
+      storyTitle: `🔍 So Sánh & Phân Biệt: ${entityA} & ${entityB}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: `🧩 Câu Đố Phân Biệt ${entityA} & ${entityB}`,
+      openerDetail: `🗣️ Cô gợi mở: "Đố các bạn nhỏ nhận biết điểm khác nhau rạng rỡ giữa ${entityA} và ${entityB} là gì nhỉ?" Trẻ háo hức quan sát mô hình và suy đoán.`,
+      localizedElements: [`Mô hình ${entityA} rực rỡ`, `Mô hình ${entityB} mầm non`, 'Bảng so sánh trực quan Sương Mai', 'Khay đồ dùng phân loại'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các nhà khám phá nhí Sương Mai ơi! Đố bé chỉ ra sự khác biệt nổi bật giữa ${entityA} và ${entityB} nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, con phân biệt rõ ${entityA} và ${entityB} qua môi trường hoạt động và đặc điểm cấu tạo ạ!"`
+      }
+    };
+  }
 
   // 1. SUBJECT DOMAIN OVERRIDES (Take precedence over ThemeCode)
   if (normSub.includes('PTVD') || normSub.includes('PTVĐ') || normSub.includes('VẬN ĐỘNG')) {
