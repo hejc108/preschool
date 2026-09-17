@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   UserCheck,
   Search,
@@ -54,20 +54,7 @@ export default function UserApprovalsPage() {
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedUser = localStorage.getItem('suongmai_auth_user');
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          if (parsed.email) setCurrentUserEmail(parsed.email);
-        } catch (e) {}
-      }
-    }
-    refreshData();
-  }, []);
-
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     const list = getStoredProfiles();
     setProfiles(list);
     setRelations(getStoredRelations());
@@ -81,7 +68,20 @@ export default function UserApprovalsPage() {
     });
     setRowRoles(initialRoles);
     setRowClasses(initialClasses);
-  };
+  }, [classes]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('suongmai_auth_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          if (parsed.email) setCurrentUserEmail(parsed.email);
+        } catch (e) {}
+      }
+    }
+    refreshData();
+  }, [refreshData]);
 
   const isSuperAdmin = currentUserEmail.toLowerCase().trim() === 'alanvu755@gmail.com';
 
