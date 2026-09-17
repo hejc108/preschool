@@ -2,7 +2,7 @@ import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
-  getThemeArchetype, autoDetectThemeCode
+  getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords
 } from '../utils/curriculumHelper';
 
 /**
@@ -146,7 +146,7 @@ export function generateRulesCompliantSlideDeck(params: {
   const archetype = getThemeArchetype(effectiveThemeCode, safeTopic, subject);
   const themeName = THEME_NAME_MAP[effectiveThemeCode] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
-  const keywords = themeMatrix.imageStyleKeywords;
+  const keywords = getDynamicImageKeywords(subject, safeTopic, effectiveThemeCode);
 
   // Clean topic for titles to avoid double phrasing like "Khám phá sự phát triển của Khám phá..."
   const cleanTopic = safeTopic.replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '');

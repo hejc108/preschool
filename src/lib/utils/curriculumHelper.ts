@@ -214,6 +214,43 @@ export function autoDetectThemeCode(topic: string, fallbackTheme: ThemeCode = 'T
   return fallbackTheme;
 }
 
+/**
+ * Dynamic Image Keywords Generator based on Subject Domain and Topic
+ */
+export function getDynamicImageKeywords(subject: string = '', topic: string = '', themeCode?: string): string {
+  const normSub = (subject || '').toUpperCase();
+  const lowerTopic = (topic || '').toLowerCase();
+
+  if (normSub.includes('PTVD') || normSub.includes('PTVĐ') || normSub.includes('VẬN ĐỘNG') || lowerTopic.includes('vận động')) {
+    return 'kindergarten physical sports exercise, happy children running jumping, colorful gym mats, sports field cartoon';
+  }
+  if (normSub.includes('LQVT') || normSub.includes('TOÁN') || lowerTopic.includes('đếm') || lowerTopic.includes('số')) {
+    return 'preschool math counting blocks, colorful numbers 1-10, geometric shapes, cheerful classroom';
+  }
+  if (normSub.includes('LQCC') || normSub.includes('CHỮ CÁI') || lowerTopic.includes('chữ cái')) {
+    return 'alphabet letters blocks for kids, reading storybook, bright preschool literacy classroom';
+  }
+  if (normSub.includes('TAO_HINH') || normSub.includes('TẠO HÌNH') || lowerTopic.includes('vẽ') || lowerTopic.includes('nặn') || lowerTopic.includes('xé dán')) {
+    return 'kids art craft drawing, modeling clay, colorful paper cutout, art easel kindergarten';
+  }
+  if (normSub.includes('LQAN') || normSub.includes('ÂM NHẠC') || lowerTopic.includes('hát') || lowerTopic.includes('múa')) {
+    return 'children singing music instruments, bamboo clapper, xylophone, kids dancing stage performance';
+  }
+  if (normSub.includes('DINH_DUONG') || normSub.includes('DINH DƯỠNG') || normSub.includes('SỨC KHỎE') || lowerTopic.includes('rửa tay') || lowerTopic.includes('thực phẩm')) {
+    return 'healthy food for kids, washing hands 6 steps, healthy eating preschool, clean fruits vegetables';
+  }
+  if (normSub.includes('KNS') || normSub.includes('KỸ NĂNG SỐNG') || lowerTopic.includes('kỹ năng')) {
+    return 'preschool life skills, polite kids interaction, safety rules, friendly classroom watercolor';
+  }
+  if (normSub.includes('KPXH') || normSub.includes('XÃ HỘI') || lowerTopic.includes('quê hương')) {
+    return 'vietnam culture preschool, happy children community, friendly people, watercolor illustration';
+  }
+
+  // Fallback to Theme Matrix image style keywords
+  const themeMatrix = getThemeMatrix(themeCode);
+  return themeMatrix.imageStyleKeywords || 'preschool children learning, bright friendly classroom';
+}
+
 export interface ThemeArchetypeInfo {
   archetypeType: 'SCIENCE_EXPLORATION' | 'ROLEPLAY_SITUATIONS' | 'QUIZ_TRUE_FALSE';
   archetypeName: string;
@@ -231,7 +268,154 @@ export interface ThemeArchetypeInfo {
 export function getThemeArchetype(themeCode?: string, topic: string = '', subject: string = ''): ThemeArchetypeInfo {
   const code = themeCode || 'THUC_VAT';
   const cleanTopic = (topic || '').trim().replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '') || 'Bài Học Trực Quan';
+  const normSub = (subject || '').toUpperCase();
 
+  // 1. SUBJECT DOMAIN OVERRIDES (Take precedence over ThemeCode)
+  if (normSub.includes('PTVD') || normSub.includes('PTVĐ') || normSub.includes('VẬN ĐỘNG')) {
+    return {
+      archetypeType: 'ROLEPLAY_SITUATIONS',
+      archetypeName: 'Vận động thể chất & Thi đua đồng đội',
+      storyTitle: `🏃 Thử Thách Vận Động Thể Chất: ${cleanTopic}`,
+      openerType: 'MOVEMENT_GAME',
+      openerHeadline: '🏃 Khởi Động Thể Lực & Mô Phỏng',
+      openerDetail: `🗣️ Cô gợi mở: "Hôm nay các bạn nhỏ cùng rèn luyện sức khỏe dẻo dai và phản xạ nhanh nhẹn qua bài tập '${cleanTopic}' nhé!" Trẻ hăng hái xoay các khớp và chuẩn bị thể lực.`,
+      localizedElements: ['Sân thể chất cỏ xanh Trường Sương Mai', 'Vạch xuất phát sắc màu', 'Cổng chui vận động đa năng', 'Khu thể thao mầm non Sương Mai'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các vận động viên nhí Sương Mai ơi! Đố bé biết bài tập '${cleanTopic}' giúp cơ thể chúng mình khỏe mạnh thế nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, giúp chúng con cao lớn, dẻo dai, phản xạ nhanh nhẹn và tràn đầy năng lượng mỗi ngày ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('LQVT') || normSub.includes('TOÁN')) {
+    return {
+      archetypeType: 'QUIZ_TRUE_FALSE',
+      archetypeName: 'Thách thức số học & Khái niệm toán',
+      storyTitle: `🔢 Thách Thức Toán Học Vui: ${cleanTopic}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: '🧩 Câu Đố Ngón Tay & Thẻ Số',
+      openerDetail: `🗣️ Cô đố bé: "Bàn tay nhỏ nhắn của bé có bao nhiêu ngón tay xinh? Chúng mình cùng đếm to và tìm bí mật bài toán '${cleanTopic}' nhé!"`,
+      localizedElements: ['Bảng nỉ toán học rực rỡ', 'Rổ thẻ số sắc màu', 'Bộ đồ dùng đếm mầm non', 'Góc toán học thông minh Sương Mai'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các nhà toán học tí hon ơi! Đố bé nhận biết và so sánh chính xác bài toán '${cleanTopic}' nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, chúng con đếm to, xếp tương ứng 1-1 chính xác và trả lời câu hỏi toán học ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('LQCC') || normSub.includes('CHỮ CÁI')) {
+    return {
+      archetypeType: 'QUIZ_TRUE_FALSE',
+      archetypeName: 'Nhận dạng chữ cái & Phát âm chuẩn',
+      storyTitle: `🔤 Khám Phá Bảng Chữ Cái: ${cleanTopic}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: '🧩 Câu Đố Chữ Cái Kỳ Diệu',
+      openerDetail: `🗣️ Cô đố bé: "Chữ gì nét cong nét thẳng - Đứng rực rỡ trong bảng chữ cái vui cùng bé?" Trẻ cùng nghe phát âm và tìm chữ.`,
+      localizedElements: ['Bảng từ khóa góc Tiếng Việt Sương Mai', 'Dây điện uốn chữ cái', 'Thẻ chữ cái rực rỡ', 'Góc đọc sách mầm non'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các bạn nhỏ ơi! Hãy phát âm to rõ ràng và chỉ ra cấu tạo nét chữ của bài học '${cleanTopic}' nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, chúng con phát âm chuẩn khẩu hình, nhận biết mặt chữ và tự tay uốn nét chữ ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('TAO_HINH') || normSub.includes('TẠO HÌNH')) {
+    return {
+      archetypeType: 'ROLEPLAY_SITUATIONS',
+      archetypeName: 'Sáng tạo nghệ thuật & Bàn tay khéo léo',
+      storyTitle: `🎨 Xưởng Sáng Tạo Nghệ Thuật: ${cleanTopic}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: '🖼️ Quan Sát Mẫu & Bàn Tay Khéo Léo',
+      openerDetail: `🗣️ Cô đàm thoại mở đầu: "Chúng mình cùng ngắm nhìn màu sắc và đường nét tuyệt đẹp của sản phẩm mẫu bài học '${cleanTopic}' nhé!"`,
+      localizedElements: ['Giá treo tranh triển lãm Sương Mai', 'Hộp sáp màu sắc rực rỡ', 'Đất nặn nhiều màu', 'Khay đồ dùng thủ công mầm non'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các họa sĩ nhí Sương Mai ơi! Bé sẽ sử dụng đôi bàn tay khéo léo để tạo nên sản phẩm '${cleanTopic}' thế nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, con tự tay phối màu, thao tác khéo léo và tự tin mang sản phẩm lên giá triển lãm ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('LQAN') || normSub.includes('ÂM NHẠC')) {
+    return {
+      archetypeType: 'ROLEPLAY_SITUATIONS',
+      archetypeName: 'Sân khấu âm nhạc & Vận động theo nhạc',
+      storyTitle: `🎶 Sân Khấu Âm Nhạc Rạng Rỡ: ${cleanTopic}`,
+      openerType: 'SOUND_SIMULATION',
+      openerHeadline: '🎵 Lắng Nghe Giai Điệu Rộn Ràng',
+      openerDetail: `🎶 "Đồ rê mi!" Trẻ lắng nghe giai điệu vui tươi của bài hát và bắt nhịp hát hòa giọng cùng cô giáo.`,
+      localizedElements: ['Sân khấu văn nghệ Trường Sương Mai', 'Phách tre & xắc xô', 'Hoa đeo tay biểu diễn', 'Đàn piano lớp học'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Đội ca sĩ nhí Sương Mai ơi! Hãy cùng cô cất cao lời ca bài hát '${cleanTopic}' và gõ đệm nhịp nhàng nào!"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, chúng con hát đúng lời, gõ đệm phách tre và tự tin biểu diễn trên sân khấu ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('LQVH') || normSub.includes('VĂN HỌC') || normSub.includes('THƠ') || normSub.includes('KỂ CHUYỆN')) {
+    return {
+      archetypeType: 'ROLEPLAY_SITUATIONS',
+      archetypeName: 'Thế giới văn học & Đóng kịch',
+      storyTitle: `📖 Thế Giới Tác Phẩm Văn Học: ${cleanTopic}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: '🧩 Câu Đố Văn Học Diễn Cảm',
+      openerDetail: `🗣️ Cô kể chuyện / đọc thơ sa bàn diễn cảm đề tài "${cleanTopic}", thu hút trẻ tập trung lắng nghe.`,
+      localizedElements: ['Sa bàn rối dẹt Trường Sương Mai', 'Mũ hóa trang nhân vật', 'Tranh minh họa tác phẩm', 'Góc văn học ấm cúng'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các bạn nhỏ lắng nghe tác phẩm '${cleanTopic}' và trích dẫn lời thoại nhân vật thế nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, con nhớ tên tác phẩm, hiểu ý nghĩa bài học và tự tin đóng kịch nhập vai ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('DINH_DUONG') || normSub.includes('DINH DƯỠNG') || normSub.includes('SỨC KHỎE')) {
+    return {
+      archetypeType: 'SCIENCE_EXPLORATION',
+      archetypeName: 'Bé khỏe ngoan & Thói quen vệ sinh',
+      storyTitle: `🥗 Bé Khỏe Ngoan & Dinh Dưỡng: ${cleanTopic}`,
+      openerType: 'SOUND_SIMULATION',
+      openerHeadline: '🧼 Quy Trình Vệ Sinh & Dinh Dưỡng',
+      openerDetail: `🗣️ Cô đố bé: "Làm sao để đôi bàn tay luôn sạch sẽ và cơ thể cao lớn khỏe mạnh qua bài học '${cleanTopic}' nhỉ?"`,
+      localizedElements: ['Bảng 4 nhóm thực phẩm Sương Mai', 'Bồn rửa tay 6 bước chuẩn', 'Khay ăn mầm non sạch đẹp', 'Xà phòng & khăn mặt riêng'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Các bé ngoan Sương Mai ơi! Thói quen dinh dưỡng và vệ sinh bài học '${cleanTopic}' giúp gì cho chúng mình?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, giúp chúng con sạch sẽ, phòng chống vi khuẩn và cơ thể luôn khỏe mạnh ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('KNS') || normSub.includes('KỸ NĂNG SỐNG')) {
+    return {
+      archetypeType: 'ROLEPLAY_SITUATIONS',
+      archetypeName: 'Kỹ năng sống & Tình huống an toàn',
+      storyTitle: `🚨 Hiệp Sĩ Kỹ Năng Sống: ${cleanTopic}`,
+      openerType: 'MOVEMENT_GAME',
+      openerHeadline: '🎭 Nhập Vai Xử Lý Tình Huống',
+      openerDetail: `🗣️ Cô đưa ra kịch bản tình huống thực tế liên quan đến "${cleanTopic}", mời trẻ phân tích đúng - sai.`,
+      localizedElements: ['Bảng quy tắc an toàn lớp học', 'Thẻ tình huống kỹ năng sống', 'Góc nhập vai ứng xử Sương Mai', 'Huy hiệu Bé Ngoan'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Đội hiệp sĩ kỹ năng sống ơi! Khi gặp tình huống '${cleanTopic}', bé sẽ xử lý an toàn thế nào?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, con phân tích hành động đúng, nói lời lễ phép và luôn thực hành an toàn ạ!"`
+      }
+    };
+  }
+
+  if (normSub.includes('KPXH') || normSub.includes('XÃ HỘI')) {
+    return {
+      archetypeType: 'QUIZ_TRUE_FALSE',
+      archetypeName: 'Khám phá xã hội & Quê hương đất nước',
+      storyTitle: `🏛️ Hành Trình Khám Phá Xã Hội: ${cleanTopic}`,
+      openerType: 'RHYMING_RIDDLE',
+      openerHeadline: '🧩 Câu Đố Văn Hóa Quê Hương',
+      openerDetail: `🗣️ Trẻ quan sát hình ảnh đời sống xã hội, nét đẹp quê hương con người Việt Nam bài học "${cleanTopic}".`,
+      localizedElements: ['Cờ đỏ sao vàng Việt Nam', 'Góc bản sắc quê hương Sương Mai', 'Bức ảnh Bác Hồ kính yêu', 'Sa bàn cộng đồng mầm non'],
+      calloutDialogue: {
+        teacherAsk: `🗣️ Cô hỏi: "Bài học '${cleanTopic}' giúp các bạn nhỏ hiểu gì về công việc và tình yêu quê hương đất nước?"`,
+        childAnswer: `👦 Trẻ đáp: "Thưa cô, con tự hào về quê hương Việt Nam, biết ơn các cô chú và vâng lời Bác Hồ dặn ạ!"`
+      }
+    };
+  }
+
+  // 2. THEME-BASED FALLBACKS (If Subject is General Science / KPKH)
   if (code === 'THUC_VAT') {
     return {
       archetypeType: 'SCIENCE_EXPLORATION',
