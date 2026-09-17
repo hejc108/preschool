@@ -2,7 +2,7 @@ import { AILessonPlan, AILessonSlide, GradeLevelCode, ThemeCode, LearningProject
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
-  getThemeArchetype 
+  getThemeArchetype, autoDetectThemeCode
 } from '../utils/curriculumHelper';
 
 /**
@@ -123,7 +123,7 @@ export function mapSchemaResponseToLessonPlan(
 
 
 /**
- * Generates full 13-slide Rules.pdf compliant presentation deck
+ * Generates full 13-slide Rules.pdf compliant presentation deck (100% Dynamic & Parametric)
  */
 export function generateRulesCompliantSlideDeck(params: {
   topic: string;
@@ -138,12 +138,18 @@ export function generateRulesCompliantSlideDeck(params: {
 }): AILessonSlide[] {
   const { topic, subject, grade_level, theme_code, materialsNeededStr, studentMaterials, teacherMaterials, framework, targetObjectives } = params;
   const safeTopic = topic.trim() || 'Khám Phá Bài Học Trực Quan';
+  
+  // Auto-detect theme code matching the topic keywords to avoid theme mismatches
+  const effectiveThemeCode = autoDetectThemeCode(safeTopic, theme_code);
   const gradeInfo = GRADE_LEVEL_MAP[grade_level] || GRADE_LEVEL_MAP['LA'];
-  const themeMatrix = getThemeMatrix(theme_code);
-  const archetype = getThemeArchetype(theme_code);
-  const themeName = THEME_NAME_MAP[theme_code] || themeMatrix.themeName;
+  const themeMatrix = getThemeMatrix(effectiveThemeCode);
+  const archetype = getThemeArchetype(effectiveThemeCode);
+  const themeName = THEME_NAME_MAP[effectiveThemeCode] || themeMatrix.themeName;
   const subjectName = SUBJECT_NAME_MAP[subject] || subject;
   const keywords = themeMatrix.imageStyleKeywords;
+
+  // Clean topic for titles to avoid double phrasing like "Khám phá sự phát triển của Khám phá..."
+  const cleanTopic = safeTopic.replace(/^(Khám phá|Tìm hiểu|Nhận biết|Trải nghiệm)\s+/i, '');
 
   // Slide 1: COVER
   const s1: AILessonSlide = {
@@ -163,37 +169,60 @@ export function generateRulesCompliantSlideDeck(params: {
     slide_number: 2,
     layout_type: 'DARK_HERO',
     pill_badges: [`🧭 BƯỚC 1: GẮN KẾT & KHÁM PHÁ (${archetype.archetypeName.toUpperCase()})`],
-    title: archetype.storyTitle,
+    title: `Bí Mật Khám Phá: ${cleanTopic}`,
     subtitle: `${archetype.openerHeadline}\n${archetype.openerDetail}`,
-    content_points: ['Gắn kết và đặt vấn đề gây hứng thú cho trẻ qua tương tác linh hoạt'],
+    content_points: [`Gắn kết và gây hứng thú khám phá đề tài "${safeTopic}" qua trải nghiệm mở đầu`],
     image_prompt: `Magic glowing educational illustration about ${safeTopic}`,
     image_url: getPollinationsImageUrl(`Magic glowing ${safeTopic} illustration`, 1024, 768, 2, keywords)
   };
 
-  // Slide 3: GRID_4_CARDS (5E - Explore)
-  const gridCards = [
-    { icon: themeMatrix.defaultIcon, title: 'Điểm Trực Quan 1', desc: `Trẻ quan sát đặc điểm nổi bật nhất của đề tài ${safeTopic}.` },
-    { icon: '⭐', title: 'Điểm Trực Quan 2', desc: `Phân tích màu sắc, hình dáng và âm thanh thực tế (${archetype.localizedElements[0] || 'đồ dùng mầm non'}).` },
-    { icon: '🔍', title: 'Trải Nghiệm Thao Tác', desc: `Trẻ tự tay thao tác với học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng học tập'}.` },
-    { icon: '💡', title: 'Kết Luận Sáng Tạo', desc: 'Trẻ thảo luận nhóm, phân loại đối tượng và rút ra ghi nhớ bài học.' }
+  // Slide 3: GRID_4_CARDS (5E - Explore) - Dynamic Cards tailored to Topic
+  let gridCards = [
+    { icon: themeMatrix.defaultIcon, title: `🌱 Đặc Điểm Cốt Lõi`, desc: `Trẻ quan sát trực quan hình dáng, màu sắc và cấu tạo chính của ${cleanTopic}.` },
+    { icon: '⭐', title: `🔍 Yếu Tố Tự Nhiên`, desc: `Phân tích môi trường sống, đặc tính và sự phát triển thực tế của ${cleanTopic}.` },
+    { icon: '👐', title: `Thao Tác Trải Nghiệm`, desc: `Trẻ tự tay sờ nắn và thực hành với học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng nhóm'}.` },
+    { icon: '💡', title: `Bài Học Chăm Sóc`, desc: `Trẻ thảo luận nhóm, rút ra bài học tự giác bảo vệ và giữ gìn môi trường.` }
   ];
+
+  if (effectiveThemeCode === 'DONG_VAT') {
+    gridCards = [
+      { icon: '🐾', title: 'Dáng Đi & Tiếng Kêu', desc: `Trẻ nhận biết ngoại hình, tiếng kêu và đặc điểm vận động của ${cleanTopic}.` },
+      { icon: '🌾', title: 'Thức Ăn & Môi Trường', desc: `Tìm hiểu món ăn yêu thích và môi trường sống tự nhiên của con vật.` },
+      { icon: '🎭', title: 'Nhập Vai Mô Phỏng', desc: `Trẻ đóng vai mô phỏng động tác khéo léo và tương tác cùng các bạn.` },
+      { icon: '❤️', title: 'Yêu Thương Động Vật', desc: `Hình thành tình cảm quý mến và thói quen bảo vệ các loài động vật.` }
+    ];
+  } else if (effectiveThemeCode === 'GIAO_THONG') {
+    gridCards = [
+      { icon: '🚗', title: 'Đặc Điểm Phương Tiện', desc: `Trẻ phân biệt cấu tạo bánh xe, còi hiệu và môi trường hoạt động của ${cleanTopic}.` },
+      { icon: '🚦', title: 'Biển Báo & Tín Hiệu', desc: `Nhận biết tín hiệu đèn giao thông và vạch đi bộ sang đường an toàn.` },
+      { icon: '🛠', title: 'Thực Hành Mô Hình', desc: `Trẻ tự tay thao tác lắp ráp: ${studentMaterials.slice(0, 2).join(', ') || 'mô hình xe'}.` },
+      { icon: '🛡', title: 'Văn Hóa An Toàn', desc: `Rèn luyện ý thức chấp hành luật giao thông và bảo vệ bản thân.` }
+    ];
+  } else if (effectiveThemeCode === 'BAN_THAN') {
+    gridCards = [
+      { icon: '🖐️', title: 'Khám Phá Giác Quan', desc: `Trẻ nhận biết các giác quan và bộ phận cơ thể liên quan đến ${cleanTopic}.` },
+      { icon: '😃', title: 'Cảm Xúc Rạng Rỡ', desc: `Thể hiện nụ cười, niềm vui và sự tự tin khi tham gia hoạt động lớp.` },
+      { icon: '🤝', title: 'Tương Tác Bạn Bè', desc: `Trẻ thực hành phối hợp học liệu: ${studentMaterials.slice(0, 2).join(', ') || 'khay đồ dùng'}.` },
+      { icon: '🌟', title: 'Bài Học Tự Lập', desc: `Rèn thói quen tự chăm sóc bản thân và vệ sinh cá nhân sạch sẽ.` }
+    ];
+  }
 
   const s3: AILessonSlide = {
     slide_number: 3,
     layout_type: 'GRID_4_CARDS',
-    title: `⚙ Yếu Tố Khám Phá Của ${safeTopic}`,
+    title: `⚙️ 4 Yếu Tố Khám Phá: ${cleanTopic}`,
     cards_data: gridCards,
     content_points: gridCards.map(c => `${c.title}: ${c.desc}`),
     image_prompt: `Educational 4 icons set layout for kindergarten learning about ${safeTopic}`,
     image_url: getPollinationsImageUrl(`Educational 4 icons set layout for kindergarten learning about ${safeTopic}`, 1024, 768, 3, keywords)
   };
 
-  // Slide 4: TIMELINE_4_STEPS (5E - Explain)
+  // Slide 4: TIMELINE_4_STEPS (5E - Explain) - Dynamic Steps
   const timelineSteps = [
-    { step_num: 1, title: '1. Quan Sát & Ghi Nhận', desc: `Trẻ quan sát mẫu trực quan (${archetype.localizedElements[1] || 'học liệu bài dạy'}) và lắng nghe hướng dẫn.` },
-    { step_num: 2, title: '2. Thao Tác Trực Tiếp', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'đồ dùng'} thực hành trải nghiệm.` },
-    { step_num: 3, title: '3. Phản Xạ Đồng Đội', desc: `Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức bài học.` },
-    { step_num: 4, title: '4. Giới Thiệu Sản Phẩm', desc: 'Trẻ tự tin trình bày sản phẩm trải nghiệm trước cô và các bạn.' }
+    { step_num: 1, title: '1. Khởi Động Quan Sát', desc: `Trẻ tập trung quan sát mẫu trực quan bài học "${cleanTopic}" và lắng nghe gợi mở của cô.` },
+    { step_num: 2, title: '2. Thao Tác Trực Tiếp', desc: `Các nhóm 4-5 trẻ sử dụng ${studentMaterials[0] || 'đồ dùng học tập'} thực hành trải nghiệm.` },
+    { step_num: 3, title: '3. Thảo Luận Đồng Đội', desc: `Tham gia trò chơi tương tác đồng đội khắc sâu kiến thức trọng tâm.` },
+    { step_num: 4, title: '4. Tự Tin Trình Bày', desc: 'Trẻ tự tin giới thiệu sản phẩm trải nghiệm trước cô giáo và các bạn.' }
   ];
 
   const s4: AILessonSlide = {
@@ -206,11 +235,23 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Growth timeline infographic cartoon for ${safeTopic}`, 1024, 768, 4, keywords)
   };
 
-  // Slide 5: IMAGE_CARDS_3 (Interactive Dialogue & Callout Box)
+  // Slide 5: IMAGE_CARDS_3 (Interactive Dialogue & Callout Box) - Dynamic Dialogue
   const imageCards = [
-    { title: 'Thẻ Tương Tác 1', desc: `${archetype.calloutDialogue.teacherAsk}`, image_url: getPollinationsImageUrl(`${safeTopic} teacher presentation`, 600, 400, 5, keywords) },
-    { title: 'Thẻ Tương Tác 2', desc: `${archetype.calloutDialogue.childAnswer}`, image_url: getPollinationsImageUrl(`${safeTopic} happy kids responding`, 600, 400, 6, keywords) },
-    { title: 'Thẻ Trực Quan', desc: `Hình ảnh thực tế gần gũi: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, image_url: getPollinationsImageUrl(`${safeTopic} vietnamese preschool visual`, 600, 400, 7, keywords) }
+    { 
+      title: 'Cô Gợi Mở', 
+      desc: `🗣️ Cô hỏi: "Các nhà khoa học nhí ơi, đố bé biết điều kỳ diệu gì ở ${cleanTopic}?"`, 
+      image_url: getPollinationsImageUrl(`${safeTopic} teacher presentation`, 600, 400, 5, keywords) 
+    },
+    { 
+      title: 'Trẻ Phản Xạ', 
+      desc: `👦 Trẻ đáp: "Thưa cô, bé quan sát thấy ${cleanTopic} rất rực rỡ và thú vị ạ!"`, 
+      image_url: getPollinationsImageUrl(`${safeTopic} happy kids responding`, 600, 400, 6, keywords) 
+    },
+    { 
+      title: 'Hình Ảnh Trực Quan', 
+      desc: `Hình ảnh thực tế gần gũi sân trường Sương Mai: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, 
+      image_url: getPollinationsImageUrl(`${safeTopic} vietnamese preschool visual`, 600, 400, 7, keywords) 
+    }
   ];
 
   const s5: AILessonSlide = {
@@ -223,10 +264,18 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: imageCards[0].image_url
   };
 
-  // Slide 6: TWO_COLUMN_CARDS
+  // Slide 6: TWO_COLUMN_CARDS - Dynamic Columns
   const twoColCards = [
-    { icon: themeMatrix.defaultIcon, title: 'Nội Dung Trọng Tâm Cô Hướng Dẫn', desc: `Cô giới thiệu học liệu trực quan (${teacherMaterials.join(', ') || 'đồ dùng cô'}). Hướng dẫn trẻ quan sát và nắm vững quy trình bài học.` },
-    { icon: '✨', title: 'Hình Ảnh Bản Địa Hóa Gần Gũi', desc: `Bài học tích hợp các hình ảnh Việt Nam quen thuộc: ${archetype.localizedElements.join(', ')}. Giúp trẻ cảm nhận sâu sắc tình yêu quê hương đất nước.` }
+    { 
+      icon: themeMatrix.defaultIcon, 
+      title: `Trọng Tâm Bài Học: ${cleanTopic}`, 
+      desc: `Cô giới thiệu đồ dùng trực quan (${teacherMaterials.join(', ') || 'học liệu cô'}). Hướng dẫn trẻ quan sát và nắm vững quy trình bài học.` 
+    },
+    { 
+      icon: '✨', 
+      title: 'Hình Ảnh Bản Địa Hóa Gần Gũi', 
+      desc: `Bài học tích hợp các hình ảnh Việt Nam quen thuộc: ${archetype.localizedElements.slice(0, 3).join(', ')}. Giúp trẻ yêu quê hương đất nước.` 
+    }
   ];
 
   const s6: AILessonSlide = {
@@ -239,12 +288,12 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Detailed structural breakdown diagram for kids about ${safeTopic}`, 1024, 768, 8, keywords)
   };
 
-  // Slide 7: LIST_ACCENT_IMAGE
+  // Slide 7: LIST_ACCENT_IMAGE - Dynamic Objectives
   const listPoints = [
-    `Phát triển nhận thức: Trẻ bóc tách và phân biệt rõ các đặc trưng của ${safeTopic}.`,
-    `Hình thành kỹ năng: Trẻ tự tay thực hành với học liệu ${studentMaterials.slice(0, 2).join(', ')}.`,
-    `Tương tác tự tin: Luyện phản xạ lời thoại "🗣️ Cô hỏi - 👦 Trẻ đáp" tự nhiên tại lớp.`,
-    `Giáo dục tình cảm: Hình thành thói quen tốt và tình yêu đối với bài học.`
+    `Phát triển nhận thức: Trẻ bóc tách và phân biệt rõ các đặc trưng của ${cleanTopic}.`,
+    `Hình thành kỹ năng: Trẻ tự tay thực hành khéo léo với ${studentMaterials.slice(0, 2).join(', ') || 'đồ dùng nhóm'}.`,
+    `Giao tiếp tự tin: Luyện phản xạ lời thoại "🗣️ Cô hỏi - 👦 Trẻ đáp" rạng rỡ tại lớp.`,
+    `Giáo dục tình cảm: Hình thành thói quen tốt và niềm vui khám phá bài học.`
   ];
 
   const s7: AILessonSlide = {
@@ -256,11 +305,11 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Preschool learning concept illustration about ${safeTopic}`, 800, 800, 9, keywords)
   };
 
-  // Slide 8: NUMBERED_STEPS
+  // Slide 8: NUMBERED_STEPS - Dynamic Practical Steps
   const numSteps = [
-    { step_num: 1, title: 'Bước 1 - Chuẩn bị học liệu', desc: `Trẻ nhận khay đồ dùng: ${studentMaterials.join(', ') || 'đồ dùng học tập'}.` },
-    { step_num: 2, title: 'Bước 2 - Thực hành theo nhóm', desc: `Các nhóm phân công nhau quan sát, trao đổi và thao tác khéo léo.` },
-    { step_num: 3, title: 'Bước 3 - Hoàn thiện & Thu dọn', desc: 'Trẻ hoàn thành sản phẩm trải nghiệm và tự giác cất đồ dùng về đúng nơi quy định.' }
+    { step_num: 1, title: 'Bước 1 - Tiếp nhận khay học liệu', desc: `Trẻ nhận đồ dùng trải nghiệm: ${studentMaterials.join(', ') || 'đồ dùng học tập'}.` },
+    { step_num: 2, title: 'Bước 2 - Phối hợp nhóm thực hành', desc: `Các nhóm phân công nhau quan sát, thao tác và trao đổi rôm rả.` },
+    { step_num: 3, title: 'Bước 3 - Hoàn thiện & Thu dọn', desc: 'Trẻ hoàn thành sản phẩm trải nghiệm và tự giác cất đồ dùng về đúng nơi.' }
   ];
 
   const s8: AILessonSlide = {
@@ -274,7 +323,7 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Preschool children practicing step by step cartoon for ${safeTopic}`, 1024, 768, 10, keywords)
   };
 
-  // Slide 9: SPLIT_STORY_IMAGE
+  // Slide 9: SPLIT_STORY_IMAGE - Dynamic Narrative
   const s9: AILessonSlide = {
     slide_number: 9,
     layout_type: 'SPLIT_STORY_IMAGE',
@@ -285,7 +334,7 @@ export function generateRulesCompliantSlideDeck(params: {
     image_url: getPollinationsImageUrl(`Happy Asian kindergarten children learning about ${safeTopic} in Suong Mai school watercolor cartoon`, 1024, 768, 11, keywords)
   };
 
-  // Slide 10: STAT_CALLOUT
+  // Slide 10: STAT_CALLOUT - Dynamic Stat Highlight
   const s10: AILessonSlide = {
     slide_number: 10,
     layout_type: 'STAT_CALLOUT',
@@ -293,8 +342,8 @@ export function generateRulesCompliantSlideDeck(params: {
     stat_highlight: {
       number: '100%',
       label: 'Bé Tự Tin Học Ngoan',
-      hero_title: archetype.storyTitle,
-      hero_desc: `${archetype.calloutDialogue.teacherAsk}\n${archetype.calloutDialogue.childAnswer}\n\nTất cả các bạn nhỏ Khối ${gradeInfo.label} của Trường Mầm Non Sương Mai đều tích cực tham gia và hào hứng ghi nhớ kiến thức bài học.`
+      hero_title: `Khám Phá Rạng Rỡ: ${cleanTopic}`,
+      hero_desc: `Tất cả các bạn nhỏ Khối ${gradeInfo.label} của Trường Mầm Non Sương Mai đều tích cực tham gia, tự tay thực hành và hào hứng ghi nhớ kiến thức bài học "${safeTopic}".`
     },
     content_points: ['100% Bé tích cực tham gia và ghi nhớ bài học'],
     image_prompt: `Excellence badge emblem shield vector for kindergarten achievement`,
@@ -306,7 +355,7 @@ export function generateRulesCompliantSlideDeck(params: {
     slide_number: 11,
     layout_type: 'HERO_OVERLAY',
     title: `Hành Động Đẹp - Bé Ngoan Sương Mai`,
-    subtitle: `Bé ghi nhớ những hành động đẹp, giữ gìn vệ sinh lớp học, yêu thương bạn bè và chăm sóc cảnh quan môi trường xung quanh!`,
+    subtitle: `Bé ghi nhớ hành động đẹp liên quan đến ${cleanTopic}, giữ gìn vệ sinh lớp học, yêu thương bạn bè và chăm sóc môi trường xung quanh!`,
     content_points: ['Hành động đẹp và bài học đạo đức tích cực'],
     image_prompt: `Beautiful preschool environment landscape with cheerful children cartoon`,
     image_url: getPollinationsImageUrl(`Beautiful preschool environment landscape with cheerful children cartoon`, 1024, 768, 13, keywords)
@@ -362,8 +411,11 @@ export async function generateAILessonPlan(params: {
     grade_level === 'MẦM' || grade_level === 'MAM' ? 'MAM' :
     grade_level === 'CHỒI' || grade_level === 'CHOI' ? 'CHOI' : 'LA';
 
+  // Auto-detect effective theme code from topic to harmonize framework and content
+  const effectiveTheme = autoDetectThemeCode(topic, theme_code);
+
   // Dynamic Injection: Query 1 record from curriculum_frameworks Seed Data
-  const framework = getFrameworkByGradeAndTheme(normGrade, theme_code);
+  const framework = getFrameworkByGradeAndTheme(normGrade, effectiveTheme);
 
   // Simulate AI Processing Latency (1.2s fast response)
   await new Promise((res) => setTimeout(res, 1200));
@@ -401,7 +453,7 @@ export async function generateAILessonPlan(params: {
   Step4 --> S4_Detail["Khen thưởng & Bé thu dọn đồ dùng"]`;
 
   // 5-Step Traditional / 5E Pedagogy Structure
-  const archetype = getThemeArchetype(theme_code);
+  const archetype = getThemeArchetype(effectiveTheme);
   const isLaGroup = normGrade === 'LA';
   const fiveSteps = [
     {
@@ -463,7 +515,7 @@ export async function generateAILessonPlan(params: {
     topic: safeTopic,
     subject,
     grade_level: normGrade,
-    theme_code,
+    theme_code: effectiveTheme,
     materialsNeededStr: resolvedMaterialsStr,
     studentMaterials,
     teacherMaterials,

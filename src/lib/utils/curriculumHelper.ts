@@ -173,6 +173,47 @@ export function getThemeMatrix(themeCode?: string): ThemeColorPalette {
   return THEME_MATRIX[themeCode] || THEME_MATRIX.THUC_VAT;
 }
 
+/**
+ * Auto-detect preschool theme code based on topic text keywords
+ */
+export function autoDetectThemeCode(topic: string, fallbackTheme: ThemeCode = 'THUC_VAT'): ThemeCode {
+  if (!topic || typeof topic !== 'string') return fallbackTheme;
+  const lower = topic.toLowerCase();
+
+  if (/cây|hạt|lá|hoa|quả|rau|củ|mầm|rừng|lúa|tảo|thực vật/.test(lower)) {
+    return 'THUC_VAT';
+  }
+  if (/động vật|thỏ|gà|vịt|chó|mèo|cá|chim|thú|bướm|ong|voi|hổ|trâu|bò|lợn/.test(lower)) {
+    return 'DONG_VAT';
+  }
+  if (/giao thông|xe|tàu|máy bay|bánh xe|đèn đỏ|biển báo|đường|vạch/.test(lower)) {
+    return 'GIAO_THONG';
+  }
+  if (/bản thân|giác quan|cảm xúc|bàn tay|khuôn mặt|mắt|mũi|tai|cơ thể|nụ cười/.test(lower)) {
+    return 'BAN_THAN';
+  }
+  if (/gia đình|nhà|bố|mẹ|ông|bà|anh|chị|em|bữa cơm/.test(lower)) {
+    return 'GIA_DINH';
+  }
+  if (/nghề nghiệp|bác sĩ|bộ đội|cảnh sát|kỹ sư|cô giáo|nông dân|thợ/.test(lower)) {
+    return 'NGHE_NGHIEP';
+  }
+  if (/nước|mưa|nắng|gió|mây|thời tiết|cầu vồng|sông|suối|biển/.test(lower)) {
+    return 'HTTN';
+  }
+  if (/quê hương|bác hồ|lá cờ|việt nam|hà nội|lăng bác|sen/.test(lower)) {
+    return 'QUE_HUONG';
+  }
+  if (/trường|lớp|mầm non|sương mai|bạn bè|đồ chơi/.test(lower)) {
+    return 'TRUONG_MN';
+  }
+  if (/lớp 1|ba lô|bút chì|thước|sách|vở|đồng hồ/.test(lower)) {
+    return 'LOP_MOT';
+  }
+
+  return fallbackTheme;
+}
+
 export interface ThemeArchetypeInfo {
   archetypeType: 'SCIENCE_EXPLORATION' | 'ROLEPLAY_SITUATIONS' | 'QUIZ_TRUE_FALSE';
   archetypeName: string;

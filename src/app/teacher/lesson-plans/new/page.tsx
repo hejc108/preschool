@@ -13,7 +13,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { 
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUB_THEME_MAP, SUBJECT_NAME_MAP, getDynamicMaterialSuggestions,
-  getThemeMatrix
+  getThemeMatrix, autoDetectThemeCode
 } from '@/lib/utils/curriculumHelper';
 
 export default function TeacherAILessonPlanNewPage() {
@@ -756,7 +756,8 @@ export default function TeacherAILessonPlanNewPage() {
                   <div className="space-y-8">
                     {generatedLesson.slides.map((slide) => {
                       const layout = slide.layout_type || 'COVER';
-                      const activeTheme = generatedLesson.schema_response?.theme_code || (generatedLesson as any).theme_code || themeCode || 'THUC_VAT';
+                      const rawTheme = generatedLesson.schema_response?.theme_code || (generatedLesson as any).theme_code || themeCode || 'THUC_VAT';
+                      const activeTheme = autoDetectThemeCode(generatedLesson.topic, rawTheme as any);
                       const tm = getThemeMatrix(activeTheme as any);
 
                       return (
