@@ -309,6 +309,81 @@ export function detectTopicSubCategory(topic: string = '', themeCode?: string): 
   return 'GENERAL';
 }
 
+export function removeVietnameseTones(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Translates Vietnamese topic/focus entities to clear English AI prompts
+ */
+export function translateFocusEntityToEnglish(topic: string = '', focusEntity?: string, themeCode?: string): string {
+  const target = (focusEntity || topic || '').trim();
+  const lower = target.toLowerCase();
+  const subCat = detectTopicSubCategory(target, themeCode);
+
+  if (subCat === 'GIAO_THONG_WATERWAY') {
+    if (lower.includes('thuyền buồm')) return 'toy sailboat on calm blue water river';
+    if (lower.includes('canô') || lower.includes('ca nô')) return 'toy speedboat on blue water';
+    if (lower.includes('tàu thủy') || lower.includes('tàu thuỷ')) return 'toy passenger ship vessel on water';
+    return 'waterway transportation, toy boat sailboat on blue river, ship harbor';
+  }
+  if (subCat === 'GIAO_THONG_AIRWAY') {
+    if (lower.includes('trực thăng')) return 'toy helicopter flying in sky';
+    if (lower.includes('khinh khí cầu')) return 'colorful hot air balloon in sky';
+    return 'air transportation, toy airplane flying in blue sky';
+  }
+  if (subCat === 'GIAO_THONG_RAILWAY') {
+    return 'railway transportation, toy train on wooden track, railway station';
+  }
+  if (subCat === 'GIAO_THONG_ROADWAY') {
+    if (lower.includes('xe đạp')) return 'kids toy bicycle';
+    if (lower.includes('xe máy')) return 'toy scooter motorbike';
+    if (lower.includes('xe buýt') || lower.includes('xe bus')) return 'yellow school bus';
+    return 'road transportation, toy cars on road, school bus';
+  }
+  if (subCat === 'DONG_VAT_AQUATIC') {
+    if (lower.includes('tôm')) return 'cute cartoon shrimp underwater';
+    if (lower.includes('cua')) return 'cute cartoon crab on beach ocean';
+    if (lower.includes('rùa')) return 'cute sea turtle swimming';
+    return 'aquatic sea animals, colorful fish swimming underwater';
+  }
+  if (subCat === 'DONG_VAT_WILD') {
+    if (lower.includes('hổ') || lower.includes('cọp')) return 'cute friendly tiger in green forest';
+    if (lower.includes('voi')) return 'cute friendly elephant in jungle';
+    if (lower.includes('khỉ')) return 'cute playful monkey on tree';
+    return 'wild jungle animals, friendly lion elephant monkey';
+  }
+  if (subCat === 'DONG_VAT_FARM') {
+    if (lower.includes('gà')) return 'cute cartoon rooster hen chicken';
+    if (lower.includes('vịt')) return 'cute yellow duckling swimming in pond';
+    if (lower.includes('mèo')) return 'cute playful kitten cat';
+    if (lower.includes('chó')) return 'cute friendly puppy dog';
+    return 'cute farm animals, puppy kitten duckling';
+  }
+  if (subCat === 'THUC_VAT_FRUITS') {
+    return 'fresh colorful fruits basket, apples oranges bananas';
+  }
+  if (subCat === 'THUC_VAT_FLOWERS') {
+    return 'colorful spring flowers garden, bright floral bouquet';
+  }
+  if (subCat === 'THUC_VAT_TREES') {
+    return 'green trees, nature forest';
+  }
+  if (subCat === 'HTTN_RAIN_WATER') {
+    return 'pure water raindrops, clean water stream';
+  }
+
+  return target ? removeVietnameseTones(target) : 'preschool educational visual';
+}
+
 /**
  * Dynamic Image Keywords Generator based on Subject Domain, Topic, Sub-Category and Focus Entity
  */

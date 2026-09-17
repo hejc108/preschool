@@ -3,7 +3,7 @@ import {
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
   getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords, detectTopicSubCategory,
-  parseCompoundTopic, sanitizeStudentMaterials
+  parseCompoundTopic, sanitizeStudentMaterials, translateFocusEntityToEnglish
 } from '../utils/curriculumHelper';
 
 /**
@@ -79,15 +79,16 @@ export function getPollinationsImageUrl(
   height = 768, 
   seedIndex = 1,
   themeStyleKeywords = 'colorful cheerful',
-  focusEntity?: string
+  focusEntity?: string,
+  themeCode?: string
 ): string {
-  const targetSubject = (focusEntity || prompt || '').trim();
-  const cleanFocus = removeVietnameseTones(targetSubject).slice(0, 100) || 'cheerful kindergarten kids learning';
-  const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 80) || 'vibrant cartoon';
-  const globalNegativePrompt = 'no adult office, no corporate workers, no computers, no desks, no realistic text, no messy background';
+  const rawSubject = (focusEntity || prompt || '').trim();
+  const englishSubject = translateFocusEntityToEnglish(rawSubject, focusEntity, themeCode);
+  const cleanFocus = removeVietnameseTones(englishSubject).slice(0, 100) || 'cheerful kindergarten kids learning';
+  const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 100) || 'vibrant cartoon';
 
-  // Universal Rule 3: Per-Slide Focus Entity + Global Negative Prompt
-  const fullPrompt = `${cleanFocus}, ${cleanKeywords}, cute 3D cartoon style, soft clay papercraft look, cheerful preschool, bright colors, clean background, no text, no letters, 16:9 ratio, ${globalNegativePrompt}`;
+  // Universal Rule 3: Per-Slide Focus Entity + Clean Positive Prompt (No negative terms inside positive prompt string)
+  const fullPrompt = `${cleanFocus}, ${cleanKeywords}, cute 3D cartoon style, soft clay papercraft look, cheerful preschool, bright colors, clean background, 16:9 ratio`;
   const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
 }
@@ -570,27 +571,51 @@ export function generateRulesCompliantSlideDeck(params: {
     card1Concept = `toy train railway station teacher presentation`;
     card2Concept = `kids on train happy responding`;
     card3Concept = `model train railway visual`;
+  } else if (subCat === 'GIAO_THONG_ROADWAY') {
+    card1Concept = `toy cars on road traffic light teacher presentation`;
+    card2Concept = `kids wearing helmet on scooter happy responding`;
+    card3Concept = `model toy cars road visual`;
   } else if (subCat === 'DONG_VAT_AQUATIC') {
     card1Concept = `colorful fish swimming underwater teacher presentation`;
     card2Concept = `kids observing aquarium sea animals happy responding`;
     card3Concept = `model fish ocean visual`;
+  } else if (subCat === 'DONG_VAT_WILD') {
+    card1Concept = `friendly jungle animals lion elephant teacher presentation`;
+    card2Concept = `kids wearing animal headband happy responding`;
+    card3Concept = `model jungle forest visual`;
+  } else if (subCat === 'DONG_VAT_FARM') {
+    card1Concept = `cute farm animals puppy kitten duckling teacher presentation`;
+    card2Concept = `kids feeding farm animals happy responding`;
+    card3Concept = `model farmyard visual`;
+  } else if (subCat === 'THUC_VAT_FRUITS') {
+    card1Concept = `fresh colorful fruits basket teacher presentation`;
+    card2Concept = `kids holding fruit basket happy responding`;
+    card3Concept = `model fruits garden visual`;
+  } else if (subCat === 'THUC_VAT_FLOWERS') {
+    card1Concept = `spring flowers garden teacher presentation`;
+    card2Concept = `kids watering flowers happy responding`;
+    card3Concept = `model flower arrangement visual`;
+  } else if (subCat === 'THUC_VAT_TREES') {
+    card1Concept = `green trees nature forest teacher presentation`;
+    card2Concept = `kids planting small tree happy responding`;
+    card3Concept = `model green forest visual`;
   }
 
   const imageCards = [
     { 
       title: 'Cô Gợi Mở', 
       desc: archetype.calloutDialogue.teacherAsk, 
-      image_url: getPollinationsImageUrl(card1Concept, 600, 400, 5, keywords, compound.entityA) 
+      image_url: getPollinationsImageUrl(card1Concept, 600, 400, 5, keywords, compound.isCompound ? compound.entityA : card1Concept, effectiveThemeCode) 
     },
     { 
       title: 'Trẻ Phản Xạ', 
       desc: archetype.calloutDialogue.childAnswer, 
-      image_url: getPollinationsImageUrl(card2Concept, 600, 400, 6, keywords, compound.entityB) 
+      image_url: getPollinationsImageUrl(card2Concept, 600, 400, 6, keywords, compound.isCompound ? compound.entityB : card2Concept, effectiveThemeCode) 
     },
     { 
       title: 'Hình Ảnh Trực Quan', 
       desc: `Hình ảnh thực tế gần gũi sân trường Sương Mai: ${archetype.localizedElements.slice(0, 2).join(', ')}.`, 
-      image_url: getPollinationsImageUrl(card3Concept, 600, 400, 7, keywords, compound.isCompound ? `${compound.entityA} ${compound.entityB}` : cleanTopic) 
+      image_url: getPollinationsImageUrl(card3Concept, 600, 400, 7, keywords, compound.isCompound ? `${compound.entityA} ${compound.entityB}` : card3Concept, effectiveThemeCode) 
     }
   ];
 
