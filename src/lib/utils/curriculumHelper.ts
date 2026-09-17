@@ -385,6 +385,71 @@ export function translateFocusEntityToEnglish(topic: string = '', focusEntity?: 
 }
 
 /**
+ * Universal Rule 6: Visual-Text Anchoring & Core Action-Noun Extractor
+ * Scans slide title and content text for concrete pedagogical actions and objects,
+ * returning crisp English visual prompts matching the text 100%.
+ */
+export function extractCoreActionNounPrompt(slideTitle: string = '', slideContentText: string = '', topic: string = '', themeCode?: string): string {
+  const combined = `${slideTitle} ${slideContentText}`.toLowerCase();
+
+  // Action-Noun Regex Matchers (Core Noun Extraction)
+  if (/áo phao|mặc áo phao/i.test(combined)) {
+    return 'cute kindergarten child wearing bright orange life jacket on boat';
+  }
+  if (/nảy mầm|hạt đậu|mầm xanh/i.test(combined)) {
+    return 'tiny green bean sprout emerging from seed soil in pot';
+  }
+  if (/cất cánh|máy bay cất cánh/i.test(combined)) {
+    return 'cute toy airplane flying above soft clouds in blue sky';
+  }
+  if (/mũ bảo hiểm|đội mũ/i.test(combined)) {
+    return 'cute child wearing colorful safety helmet riding scooter';
+  }
+  if (/rửa tay|6 bước rửa tay|xà phòng/i.test(combined)) {
+    return 'cute child washing hands with soap bubbles clean water sink';
+  }
+  if (/đất nặn|nặn hình/i.test(combined)) {
+    return 'cute child hands shaping colorful modeling clay art craft';
+  }
+  if (/phách tre|gõ đệm|xắc xô/i.test(combined)) {
+    return 'cute child tapping bamboo clapper musical instrument';
+  }
+  if (/que tính|thẻ số|đếm số|phạm vi/i.test(combined)) {
+    return 'cute child arranging colorful counting math blocks numbers';
+  }
+  if (/xe buýt|sang đường|vạch đi bộ/i.test(combined)) {
+    return 'yellow school bus on road with kids crosswalk sign';
+  }
+  if (/thuyền buồm|bến tàu|neo đậu/i.test(combined)) {
+    return 'toy sailboat on calm blue water river harbor';
+  }
+  if (/tưới cây|trồng cây|chăm sóc cây/i.test(combined)) {
+    return 'cute child watering small green plant in garden with watering can';
+  }
+  if (/hát|âm nhạc|giai điệu/i.test(combined)) {
+    return 'children singing on cute stage with microphone and instruments';
+  }
+  if (/múa|vận động minh họa|đeo hoa/i.test(combined)) {
+    return 'cute children dancing on stage with colorful wrist flowers';
+  }
+  if (/đèn giao thông|tín hiệu/i.test(combined)) {
+    return 'red yellow green traffic light signal on road visual';
+  }
+  if (/kính lúp|thí nghiệm|khám phá/i.test(combined)) {
+    return 'cute child holding magnifying glass observing green leaf science experiment';
+  }
+  if (/kể chuyện|thơ|sa bàn/i.test(combined)) {
+    return 'teacher telling story with colorful puppet board to happy kindergarten kids';
+  }
+  if (/bật qua|nhảy|vận động cơ bản/i.test(combined)) {
+    return 'happy kids jumping running on gym mat physical exercise';
+  }
+
+  // Fallback to topic entity translation if no specific action matches
+  return translateFocusEntityToEnglish(topic, slideTitle, themeCode);
+}
+
+/**
  * Dynamic Image Keywords Generator based on Subject Domain, Topic, Sub-Category and Focus Entity
  */
 export function getDynamicImageKeywords(subject: string = '', topic: string = '', themeCode?: string, focusEntity?: string): string {

@@ -3,7 +3,7 @@ import {
   getFrameworkByGradeAndTheme, THEME_NAME_MAP, GRADE_LEVEL_MAP, 
   SUBJECT_NAME_MAP, getDynamicMaterialSuggestions, getThemeMatrix, THEME_MATRIX,
   getThemeArchetype, autoDetectThemeCode, getDynamicImageKeywords, detectTopicSubCategory,
-  parseCompoundTopic, sanitizeStudentMaterials, translateFocusEntityToEnglish
+  parseCompoundTopic, sanitizeStudentMaterials, translateFocusEntityToEnglish, extractCoreActionNounPrompt
 } from '../utils/curriculumHelper';
 
 /**
@@ -22,9 +22,12 @@ Nhiệm vụ của bạn là lập kế hoạch bài dạy chi tiết, hấp d�
    - CẤM TUYỆT ĐỐI liệt kê thiết bị trình chiếu của cô (SmartTV, Máy tính, Màn chiếu, Laptop) vào đồ dùng của trẻ.
 3. LOGIC PROMPT ẢNH ĐỘNG TỪNG SLIDE (PER-SLIDE FOCUS ENTITY):
    - Prompt ảnh của từng slide phải lấy từ khóa trọng tâm (Focus Entity) của slide đó.
-   - Luôn thêm Global Negative Prompt: "no adult office, no corporate workers, no computers, no desks, no realistic text, no messy background".
+   - Luôn sử dụng Prompt sạch sẽ: không nhúng từ tiêu cực gây kích hoạt ngược.
 4. VĂN PHONG SƯ PHẠM TỰ NHIÊN:
    - Câu thoại giáo viên và trẻ gãy gọn, truyền cảm mầm non, tuyệt đối không nhúng chuỗi thô của tiêu đề vào lời thoại.
+5. QUY CHUẨN ĐỒNG BỘ THỊ GIÁC & HÌNH ẢNH SƯ PHẠM (VISUAL-TEXT ANCHORING):
+   - Trẻ mầm non tiếp nhận bài giảng chủ yếu qua thị giác, hình ảnh minh họa phải phản ánh chính xác 100% đối tượng và hành động được nhắc đến trong text của slide.
+   - Tự động bóc tách danh từ hành động cốt lõi (Core Noun Extraction): "mặc áo phao" -> "cute child wearing orange life jacket", "hạt đậu nảy mầm" -> "tiny green bean sprout emerging from seed", "máy bay cất cánh" -> "cute toy airplane flying above soft clouds".
 
 [QUY TẮC ĐIỀU HƯỚNG THEO ĐỘ TUỔI]
 1. KHỐI NHÀ TRẺ (24-36 tháng): Thời lượng 12-15 phút. Tiến trình 3 bước. Ngôn ngữ đơn giản.
@@ -71,7 +74,7 @@ export function removeVietnameseTones(str: string): string {
 
 /**
  * Generates Pollinations.ai 3D Cartoon Illustration Image URL (Free 0 VNĐ)
- * Enforces strict Rule 4: No text, no letters, 16:9 ratio, parametric colors
+ * Enforces Rule 6: Visual-Text Anchoring & Core Action-Noun Extraction
  */
 export function getPollinationsImageUrl(
   prompt: string, 
@@ -80,14 +83,15 @@ export function getPollinationsImageUrl(
   seedIndex = 1,
   themeStyleKeywords = 'colorful cheerful',
   focusEntity?: string,
-  themeCode?: string
+  themeCode?: string,
+  slideContentText?: string
 ): string {
   const rawSubject = (focusEntity || prompt || '').trim();
-  const englishSubject = translateFocusEntityToEnglish(rawSubject, focusEntity, themeCode);
-  const cleanFocus = removeVietnameseTones(englishSubject).slice(0, 100) || 'cheerful kindergarten kids learning';
+  const extractedPrompt = extractCoreActionNounPrompt(rawSubject, slideContentText || prompt || '', rawSubject, themeCode);
+  const cleanFocus = removeVietnameseTones(extractedPrompt).slice(0, 100) || 'cheerful kindergarten kids learning';
   const cleanKeywords = removeVietnameseTones(themeStyleKeywords).slice(0, 100) || 'vibrant cartoon';
 
-  // Universal Rule 3: Per-Slide Focus Entity + Clean Positive Prompt (No negative terms inside positive prompt string)
+  // Universal Rule 6: Per-Slide Action-Noun Visual Anchoring + Clean Positive Prompt
   const fullPrompt = `${cleanFocus}, ${cleanKeywords}, cute 3D cartoon style, soft clay papercraft look, cheerful preschool, bright colors, clean background, 16:9 ratio`;
   const encodedPrompt = encodeURIComponent(fullPrompt);
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${100 + seedIndex}`;
