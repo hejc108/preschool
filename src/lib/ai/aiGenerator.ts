@@ -239,12 +239,12 @@ export function generateRulesCompliantSlideDeck(params: {
   const imageCards = [
     { 
       title: 'Cô Gợi Mở', 
-      desc: `🗣️ Cô hỏi: "Các nhà khoa học nhí ơi, đố bé biết điều kỳ diệu gì ở ${cleanTopic}?"`, 
+      desc: archetype.calloutDialogue.teacherAsk, 
       image_url: getPollinationsImageUrl(`${safeTopic} teacher presentation`, 600, 400, 5, keywords) 
     },
     { 
       title: 'Trẻ Phản Xạ', 
-      desc: `👦 Trẻ đáp: "Thưa cô, bé quan sát thấy ${cleanTopic} rất rực rỡ và thú vị ạ!"`, 
+      desc: archetype.calloutDialogue.childAnswer, 
       image_url: getPollinationsImageUrl(`${safeTopic} happy kids responding`, 600, 400, 6, keywords) 
     },
     { 
