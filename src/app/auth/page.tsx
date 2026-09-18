@@ -24,13 +24,23 @@ function AuthContent() {
     const clean = userEmail.toLowerCase().trim();
     const checkStatus = checkUserApprovalStatus(clean);
 
-    document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
+    const isAlan = clean === 'alanvu755@gmail.com';
+    const isApproved = isAlan || checkStatus.approvalStatus === 'ACTIVE';
+    const userRole = isAlan ? 'SUPER_ADMIN' : checkStatus.profile?.role || 'GUEST';
+
+    if (isApproved) {
+      document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
+    } else {
+      document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+
     document.cookie = `suongmai_user_email=${encodeURIComponent(clean)}; path=/; max-age=86400; SameSite=Lax`;
+    document.cookie = `suongmai_user_role=${encodeURIComponent(userRole)}; path=/; max-age=86400; SameSite=Lax`;
 
     const authData = { 
       email: clean, 
-      role: checkStatus.profile?.role || (clean.includes('teacher') ? 'TEACHER' : clean.includes('parent') ? 'PARENT' : 'SUPER_ADMIN'),
-      authenticated: true, 
+      role: userRole,
+      authenticated: isApproved, 
       timestamp: Date.now() 
     };
     if (typeof window !== 'undefined') {
@@ -43,7 +53,6 @@ function AuthContent() {
   const handleGoogleLogin = async () => {
     setLoading(true);
 
-    // If email typed or chip selected is alanvu755@gmail.com or super admin, instant login
     const currentEmail = email.toLowerCase().trim();
     if (currentEmail === 'alanvu755@gmail.com' || currentEmail.includes('alanvu755')) {
       const targetUrl = processLoginSession('alanvu755@gmail.com');
@@ -53,10 +62,6 @@ function AuthContent() {
       }, 300);
       return;
     }
-
-    // Set active session cookie immediately for OAuth flow
-    document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
-    document.cookie = "suongmai_user_email=alanvu755@gmail.com; path=/; max-age=86400; SameSite=Lax";
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
@@ -72,13 +77,13 @@ function AuthContent() {
       });
       if (error) {
         console.error('Supabase OAuth error:', error);
-        // Fallback for dev / unconfigured OAuth: auto-login as alanvu755@gmail.com Super Admin
-        const targetUrl = processLoginSession('alanvu755@gmail.com');
+        // Fallback: check status of typed email or default to pending
+        const targetUrl = processLoginSession(currentEmail || 'pending.user@gmail.com');
         window.location.href = targetUrl;
       }
     } catch (err: any) {
       console.error('Supabase OAuth exception:', err?.message || err);
-      const targetUrl = processLoginSession('alanvu755@gmail.com');
+      const targetUrl = processLoginSession(currentEmail || 'pending.user@gmail.com');
       window.location.href = targetUrl;
     } finally {
       setLoading(false);
