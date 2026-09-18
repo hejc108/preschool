@@ -29,6 +29,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, []);
 
+  // If viewing the admin login page, bypass the Admin Sidebar & Header layout
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
+
   const isStaff = userRole === 'STAFF';
   const isSchoolAdminOrSuper = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(userRole);
 
