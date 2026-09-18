@@ -77,6 +77,14 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     approval_status: 'PENDING',
     created_at: '2026-09-17T10:30:00Z',
   },
+  {
+    id: 'u-gauth-luciaxuan178',
+    full_name: 'Lucia Xuân (Google Login - Chưa duyệt)',
+    email: 'luciaxuan178@gmail.com',
+    role: 'GUEST',
+    approval_status: 'PENDING',
+    created_at: '2026-09-18T12:00:00Z',
+  },
 ];
 
 export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [
@@ -107,8 +115,20 @@ export function getStoredProfiles(): Profile[] {
     const hasAlan = list.some((p) => p.email.toLowerCase().trim() === 'alanvu755@gmail.com');
     if (!hasAlan) {
       list.unshift(INITIAL_MOCK_PROFILES[0]);
-      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(list));
     }
+    // Guarantee luciaxuan178@gmail.com is present in list as PENDING user
+    const hasLucia = list.some((p) => p.email.toLowerCase().trim() === 'luciaxuan178@gmail.com');
+    if (!hasLucia) {
+      list.push({
+        id: 'u-gauth-luciaxuan178',
+        full_name: 'Lucia Xuân (Google Login - Chưa duyệt)',
+        email: 'luciaxuan178@gmail.com',
+        role: 'GUEST',
+        approval_status: 'PENDING',
+        created_at: new Date().toISOString(),
+      });
+    }
+    localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(list));
     return list;
   } catch (e) {
     return INITIAL_MOCK_PROFILES;
