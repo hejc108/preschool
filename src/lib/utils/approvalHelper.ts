@@ -267,6 +267,28 @@ export function checkUserApprovalStatus(email: string): {
  */
 export function registerGoogleUserIfMissing(email: string, fullName?: string, avatarUrl?: string): Profile {
   const cleanEmail = email.toLowerCase().trim();
+
+  // Sync to globalThis server memory cache if running on node server
+  if (typeof globalThis !== 'undefined') {
+    if (!globalThis.__SUONGMAI_PROFILES_CACHE__) {
+      globalThis.__SUONGMAI_PROFILES_CACHE__ = [...INITIAL_MOCK_PROFILES];
+    }
+    const existingCache = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
+    if (!existingCache) {
+      const isAlan = cleanEmail === 'alanvu755@gmail.com';
+      const newCacheProfile: Profile = {
+        id: `u-gauth-${Date.now()}`,
+        email: cleanEmail,
+        full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
+        role: isAlan ? 'SUPER_ADMIN' : 'GUEST',
+        approval_status: isAlan ? 'ACTIVE' : 'PENDING',
+        avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        created_at: new Date().toISOString(),
+      };
+      globalThis.__SUONGMAI_PROFILES_CACHE__.push(newCacheProfile);
+    }
+  }
+
   const profiles = getStoredProfiles();
   let existing = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
 
@@ -285,7 +307,7 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
     id: `u-gauth-${Date.now()}`,
     email: cleanEmail,
     full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
-    role: isAlan ? 'SUPER_ADMIN' : cleanEmail.includes('teacher') ? 'TEACHER' : cleanEmail.includes('parent') ? 'PARENT' : 'GUEST',
+    role: isAlan ? 'SUPER_ADMIN' : 'GUEST',
     approval_status: isAlan ? 'ACTIVE' : 'PENDING',
     avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     created_at: new Date().toISOString(),
@@ -294,7 +316,15 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
   profiles.push(newProfile);
   saveStoredProfiles(profiles);
 
-  // Sync to Supabase DB profiles table
+  // Sync to API route & Supabase DB
+  if (typeof window !== 'undefined') {
+    fetch('/api/users/approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, full_name: fullName, avatar_url: avatarUrl }),
+    }).catch(() => {});
+  }
+
   (async () => {
     try {
       await supabase.from('profiles').upsert(
@@ -318,25 +348,41 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
 }
 
 /**
- * Fetch live profiles from Supabase DB, falling back to local storage
+ * Fetch live profiles from central API server & Supabase DB, falling back to local storage
  */
 export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
   try {
+    let apiProfiles: Profile[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/users/approvals');
+        const json = await res.json();
+        if (json.success && Array.isArray(json.profiles)) {
+          apiProfiles = json.profiles;
+        }
+      } catch (e) {}
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
 
     const localProfiles = getStoredProfiles();
-    let merged: Profile[] = [];
+    let merged: Profile[] = apiProfiles.length > 0 ? [...apiProfiles] : [];
 
     if (!error && data && data.length > 0) {
-      merged = [...(data as Profile[])];
-    } else {
-      merged = [...localProfiles];
+      for (const dbProfile of data as Profile[]) {
+        const idx = merged.findIndex((m) => m.email?.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim());
+        if (idx !== -1) {
+          merged[idx] = { ...merged[idx], ...dbProfile };
+        } else {
+          merged.push(dbProfile);
+        }
+      }
     }
 
-    // Preserve local approval status if local profile is ACTIVE / REJECTED and DB is PENDING
+    // Merge local profiles if missing
     for (const lp of localProfiles) {
       const idx = merged.findIndex((m) => m.email?.toLowerCase().trim() === lp.email?.toLowerCase().trim());
       if (idx !== -1) {

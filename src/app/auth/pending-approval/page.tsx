@@ -9,7 +9,17 @@ function PendingApprovalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const type = searchParams?.get('type') || 'parent';
-  const email = searchParams?.get('email') || 'example@gmail.com';
+  const email = searchParams?.get('email') || '';
+
+  React.useEffect(() => {
+    if (email && email !== 'example@gmail.com' && typeof window !== 'undefined') {
+      fetch('/api/users/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
+    }
+  }, [email]);
 
   const handleLogout = () => {
     document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
