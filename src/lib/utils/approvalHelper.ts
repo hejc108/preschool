@@ -19,93 +19,15 @@ const STORAGE_KEY_RELATIONS = 'suongmai_parent_relations_v1';
 export const INITIAL_MOCK_PROFILES: Profile[] = [
   {
     id: 'u-super-admin-sadmin',
-    full_name: 'Super Admin (sadmin)',
+    full_name: 'Quản Trị Tối Cao (Super Admin)',
     email: 'sadmin@suongmai.edu.vn',
     role: 'SUPER_ADMIN',
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
   },
-  {
-    id: 'u-super-admin-alan',
-    full_name: 'Alan Vũ (Super Admin)',
-    email: 'alanvu755@gmail.com',
-    role: 'SUPER_ADMIN',
-    approval_status: 'ACTIVE',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'u-admin-1',
-    full_name: 'Ban Giám Hiệu Sương Mai',
-    email: 'admin@suongmai.edu.vn',
-    role: 'SCHOOL_ADMIN',
-    approval_status: 'ACTIVE',
-    created_at: '2026-01-01T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-1',
-    full_name: 'Sơ Maria Tươi',
-    email: 'so.maria@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'ACTIVE',
-    assigned_class_id: 'c1',
-    assigned_class_name: 'Mầm 1 (Rose)',
-    created_at: '2026-01-05T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-2',
-    full_name: 'Cô Nguyễn Thu Hà',
-    email: 'teacher@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'ACTIVE',
-    assigned_class_id: 'c3',
-    assigned_class_name: 'Lá 3 (Sunflower)',
-    created_at: '2026-01-10T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-pending-1',
-    full_name: 'Thầy Lê Văn Hùng (Chờ duyệt)',
-    email: 'teacher.pending@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'PENDING',
-    created_at: '2026-09-17T09:15:00Z',
-  },
-  {
-    id: 'u-parent-1',
-    full_name: 'Trần Văn Mạnh (Phụ huynh bé Gia Bảo)',
-    email: 'parent@suongmai.edu.vn',
-    role: 'PARENT',
-    approval_status: 'ACTIVE',
-    created_at: '2026-02-01T08:00:00Z',
-  },
-  {
-    id: 'u-parent-pending-1',
-    full_name: 'Phạm Thị Loan (Google Login - Chưa duyệt)',
-    email: 'parent.pending@gmail.com',
-    role: 'PARENT',
-    approval_status: 'PENDING',
-    created_at: '2026-09-17T10:30:00Z',
-  },
-  {
-    id: 'u-gauth-luciaxuan178',
-    full_name: 'Lucia Xuân (Google Login - Chưa duyệt)',
-    email: 'luciaxuan178@gmail.com',
-    role: 'GUEST',
-    approval_status: 'PENDING',
-    created_at: '2026-09-18T12:00:00Z',
-  },
 ];
 
-export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [
-  {
-    id: 'rel-1',
-    parent_id: 'u-parent-1',
-    parent_email: 'parent@suongmai.edu.vn',
-    student_id: 's1',
-    student_name: 'Trần Gia Bảo',
-    is_verified: true,
-    created_at: '2026-02-01T08:00:00Z',
-  },
-];
+export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [];
 
 /**
  * Get all stored profiles (from localStorage or initial defaults)
@@ -119,26 +41,9 @@ export function getStoredProfiles(): Profile[] {
       return INITIAL_MOCK_PROFILES;
     }
     const list: Profile[] = JSON.parse(raw);
-    // Guarantee sadmin@suongmai.edu.vn and alanvu755@gmail.com always exist and are active SUPER_ADMIN
     const hasSadmin = list.some((p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
     if (!hasSadmin) {
       list.unshift(INITIAL_MOCK_PROFILES[0]);
-    }
-    const hasAlan = list.some((p) => p.email.toLowerCase().trim() === 'alanvu755@gmail.com');
-    if (!hasAlan) {
-      list.unshift(INITIAL_MOCK_PROFILES[1]);
-    }
-    // Guarantee luciaxuan178@gmail.com is present in list as PENDING user
-    const hasLucia = list.some((p) => p.email.toLowerCase().trim() === 'luciaxuan178@gmail.com');
-    if (!hasLucia) {
-      list.push({
-        id: 'u-gauth-luciaxuan178',
-        full_name: 'Lucia Xuân (Google Login - Chưa duyệt)',
-        email: 'luciaxuan178@gmail.com',
-        role: 'GUEST',
-        approval_status: 'PENDING',
-        created_at: new Date().toISOString(),
-      });
     }
     localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(list));
     return list;
@@ -186,7 +91,6 @@ export function saveStoredRelations(relations: ParentStudentRelation[]): void {
 
 /**
  * Check approval & role authorization status for a specific user email.
- * Includes AUTO-GRANT rule for alanvu755@gmail.com (SUPER_ADMIN + ACTIVE).
  */
 export function checkUserApprovalStatus(email: string): {
   isRegistered: boolean;
@@ -200,19 +104,11 @@ export function checkUserApprovalStatus(email: string): {
 } {
   const cleanEmail = email.toLowerCase().trim();
 
-  // HARDCODED / TRIGGER SUPER_ADMIN AUTO-GRANT FOR alanvu755@gmail.com
-  if (cleanEmail === 'alanvu755@gmail.com') {
-    const profile = registerGoogleUserIfMissing('alanvu755@gmail.com', 'Alan Vũ (Super Admin)');
+  // sadmin is auto-granted SUPER_ADMIN ACTIVE status
+  if (cleanEmail === 'sadmin@suongmai.edu.vn') {
+    const profile = registerGoogleUserIfMissing('sadmin@suongmai.edu.vn', 'Quản Trị Tối Cao (Super Admin)');
     profile.role = 'SUPER_ADMIN';
     profile.approval_status = 'ACTIVE';
-
-    const profiles = getStoredProfiles();
-    const idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
-    if (idx !== -1) {
-      profiles[idx].role = 'SUPER_ADMIN';
-      profiles[idx].approval_status = 'ACTIVE';
-      saveStoredProfiles(profiles);
-    }
 
     return {
       isRegistered: true,

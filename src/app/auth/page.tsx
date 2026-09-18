@@ -54,14 +54,6 @@ function AuthContent() {
     setLoading(true);
 
     const currentEmail = email.toLowerCase().trim();
-    if (currentEmail === 'alanvu755@gmail.com' || currentEmail.includes('alanvu755')) {
-      const targetUrl = processLoginSession('alanvu755@gmail.com');
-      setTimeout(() => {
-        setLoading(false);
-        window.location.href = targetUrl;
-      }, 300);
-      return;
-    }
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
@@ -77,7 +69,6 @@ function AuthContent() {
       });
       if (error) {
         console.error('Supabase OAuth error:', error);
-        // Fallback: check status of typed email or default to pending
         const targetUrl = processLoginSession(currentEmail || 'pending.user@gmail.com');
         window.location.href = targetUrl;
       }
@@ -219,58 +210,6 @@ function AuthContent() {
                   className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-3 pl-11 pr-4 text-slate-800 placeholder-slate-400 text-sm focus:outline-none transition-colors"
                 />
               </div>
-
-              {/* Quick Account Selection Chips (DEV ONLY - Hidden in Production) */}
-              {process.env.NODE_ENV !== 'production' && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="text-slate-400 font-medium">Dev Test:</span>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('alanvu755@gmail.com')}
-                    className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-md font-mono font-bold transition-all"
-                    title="Super Admin Auto-Active"
-                  >
-                    alanvu755
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('admin')}
-                    className="px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-md font-mono font-bold transition-all"
-                  >
-                    admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('so.maria')}
-                    className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-md font-mono font-bold transition-all"
-                  >
-                    so.maria
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('teacher')}
-                    className="px-2 py-0.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 rounded-md font-mono font-bold transition-all"
-                  >
-                    teacher
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('teacher.pending@suongmai.edu.vn')}
-                    className="px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-md font-mono font-bold transition-all"
-                    title="Giáo viên chờ duyệt"
-                  >
-                    teacher.pending
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail('parent.pending@gmail.com')}
-                    className="px-2 py-0.5 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 rounded-md font-mono font-bold transition-all"
-                    title="Phụ huynh chờ duyệt"
-                  >
-                    parent.pending
-                  </button>
-                </div>
-              )}
             </div>
 
             <button
@@ -330,6 +269,16 @@ function AuthContent() {
             </button>
           </form>
         )}
+
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+          <a
+            href="/admin/login"
+            className="text-xs text-slate-500 hover:text-sky-700 font-semibold transition-colors inline-flex items-center gap-1.5"
+          >
+            <ShieldCheck className="w-4 h-4 text-sky-600" />
+            <span>Đăng nhập Cổng Quản Trị Viên (Super Admin sadmin)</span>
+          </a>
+        </div>
       </div>
 
       <footer className="mt-8 text-center text-xs text-slate-400">

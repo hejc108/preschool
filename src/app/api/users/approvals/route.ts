@@ -4,72 +4,12 @@ import { Profile } from '@/lib/types/schema';
 
 const INITIAL_SERVER_PROFILES: Profile[] = [
   {
-    id: 'u-super-admin-alan',
-    full_name: 'Alan Vũ (Super Admin)',
-    email: 'alanvu755@gmail.com',
+    id: 'u-super-admin-sadmin',
+    full_name: 'Quản Trị Tối Cao (Super Admin)',
+    email: 'sadmin@suongmai.edu.vn',
     role: 'SUPER_ADMIN',
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'u-admin-1',
-    full_name: 'Ban Giám Hiệu Sương Mai',
-    email: 'admin@suongmai.edu.vn',
-    role: 'SCHOOL_ADMIN',
-    approval_status: 'ACTIVE',
-    created_at: '2026-01-01T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-1',
-    full_name: 'Sơ Maria Tươi',
-    email: 'so.maria@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'ACTIVE',
-    assigned_class_id: 'c1',
-    assigned_class_name: 'Mầm 1 (Rose)',
-    created_at: '2026-01-05T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-2',
-    full_name: 'Cô Nguyễn Thu Hà',
-    email: 'teacher@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'ACTIVE',
-    assigned_class_id: 'c3',
-    assigned_class_name: 'Lá 3 (Sunflower)',
-    created_at: '2026-01-10T08:00:00Z',
-  },
-  {
-    id: 'u-teacher-pending-1',
-    full_name: 'Thầy Lê Văn Hùng (Chờ duyệt)',
-    email: 'teacher.pending@suongmai.edu.vn',
-    role: 'TEACHER',
-    approval_status: 'PENDING',
-    created_at: '2026-09-17T09:15:00Z',
-  },
-  {
-    id: 'u-parent-1',
-    full_name: 'Trần Văn Mạnh (Phụ huynh bé Gia Bảo)',
-    email: 'parent@suongmai.edu.vn',
-    role: 'PARENT',
-    approval_status: 'ACTIVE',
-    created_at: '2026-02-01T08:00:00Z',
-  },
-  {
-    id: 'u-parent-pending-1',
-    full_name: 'Phạm Thị Loan (Google Login - Chưa duyệt)',
-    email: 'parent.pending@gmail.com',
-    role: 'PARENT',
-    approval_status: 'PENDING',
-    created_at: '2026-09-17T10:30:00Z',
-  },
-  {
-    id: 'u-gauth-luciaxuan178',
-    full_name: 'Lucia Xuân (Google Login - Chưa duyệt)',
-    email: 'luciaxuan178@gmail.com',
-    role: 'GUEST',
-    approval_status: 'PENDING',
-    created_at: '2026-09-18T12:00:00Z',
   },
 ];
 
@@ -114,20 +54,20 @@ export async function GET() {
     }
   }
 
-  // Guarantee alanvu755@gmail.com is ALWAYS active SUPER_ADMIN
-  let alanIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === 'alanvu755@gmail.com');
-  if (alanIdx === -1) {
+  // Guarantee sadmin@suongmai.edu.vn is ALWAYS active SUPER_ADMIN
+  let sadminIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
+  if (sadminIdx === -1) {
     serverCache.unshift({
-      id: 'u-super-admin-alan',
-      full_name: 'Alan Vũ (Super Admin)',
-      email: 'alanvu755@gmail.com',
+      id: 'u-super-admin-sadmin',
+      full_name: 'Quản Trị Tối Cao (Super Admin)',
+      email: 'sadmin@suongmai.edu.vn',
       role: 'SUPER_ADMIN',
       approval_status: 'ACTIVE',
       created_at: '2026-01-01T00:00:00Z',
     });
   } else {
-    serverCache[alanIdx].role = 'SUPER_ADMIN';
-    serverCache[alanIdx].approval_status = 'ACTIVE';
+    serverCache[sadminIdx].role = 'SUPER_ADMIN';
+    serverCache[sadminIdx].approval_status = 'ACTIVE';
   }
 
   globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
