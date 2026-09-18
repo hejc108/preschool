@@ -10,12 +10,16 @@ export async function GET(request: Request) {
   let userEmail = searchParams.get('email') || '';
 
   if (code) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+    const supabaseUrl = 
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 
+      process.env.SUPABASE_URL || 
+      'https://yrieuamibqjyaslprdeo.supabase.co';
     const supabaseAnonKey = 
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
       process.env.SUPABASE_ANON_KEY || 
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
-      process.env.SUPABASE_PUBLISHABLE_KEY || '';
+      process.env.SUPABASE_PUBLISHABLE_KEY || 
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
 
     if (supabaseUrl && supabaseAnonKey) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -28,9 +32,11 @@ export async function GET(request: Request) {
             data.user.user_metadata?.full_name || data.user.user_metadata?.name, 
             data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture
           );
+        } else if (error) {
+          console.error('OAuth code exchange error from Supabase:', error.message);
         }
       } catch (e) {
-        console.warn('OAuth code exchange error:', e);
+        console.warn('OAuth code exchange exception:', e);
       }
     }
   }
