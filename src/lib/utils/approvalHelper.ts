@@ -273,7 +273,7 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
     id: `u-gauth-${Date.now()}`,
     email: cleanEmail,
     full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
-    role: isAlan ? 'SUPER_ADMIN' : cleanEmail.includes('teacher') ? 'TEACHER' : 'PARENT',
+    role: isAlan ? 'SUPER_ADMIN' : cleanEmail.includes('teacher') ? 'TEACHER' : cleanEmail.includes('parent') ? 'PARENT' : 'GUEST',
     approval_status: isAlan ? 'ACTIVE' : 'PENDING',
     avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     created_at: new Date().toISOString(),
@@ -281,7 +281,77 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
 
   profiles.push(newProfile);
   saveStoredProfiles(profiles);
+
+  // Sync to Supabase DB profiles table
+  (async () => {
+    try {
+      await supabase.from('profiles').upsert(
+        {
+          id: newProfile.id,
+          email: newProfile.email,
+          full_name: newProfile.full_name,
+          role: newProfile.role,
+          approval_status: newProfile.approval_status,
+          avatar_url: newProfile.avatar_url,
+          created_at: newProfile.created_at,
+        },
+        { onConflict: 'email' }
+      );
+    } catch (e) {
+      console.error('Failed to sync google user profile to Supabase:', e);
+    }
+  })();
+
   return newProfile;
+}
+
+/**
+ * Fetch live profiles from Supabase DB, falling back to local storage
+ */
+export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const localProfiles = getStoredProfiles();
+    let merged: Profile[] = [];
+
+    if (!error && data && data.length > 0) {
+      merged = [...(data as Profile[])];
+    } else {
+      merged = [...localProfiles];
+    }
+
+    // Always guarantee alanvu755@gmail.com is SUPER_ADMIN + ACTIVE
+    let alanIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'alanvu755@gmail.com');
+    if (alanIdx === -1) {
+      merged.unshift({
+        id: 'u-super-admin-alan',
+        full_name: 'Alan Vũ (Super Admin)',
+        email: 'alanvu755@gmail.com',
+        role: 'SUPER_ADMIN',
+        approval_status: 'ACTIVE',
+        created_at: '2026-01-01T00:00:00Z',
+      });
+    } else {
+      merged[alanIdx].role = 'SUPER_ADMIN';
+      merged[alanIdx].approval_status = 'ACTIVE';
+    }
+
+    // Merge any local profiles that aren't in remote DB list
+    for (const lp of localProfiles) {
+      if (!merged.some((m) => m.email?.toLowerCase().trim() === lp.email?.toLowerCase().trim())) {
+        merged.push(lp);
+      }
+    }
+
+    saveStoredProfiles(merged);
+    return merged;
+  } catch (e) {
+    return getStoredProfiles();
+  }
 }
 
 /**

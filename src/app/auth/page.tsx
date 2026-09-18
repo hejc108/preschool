@@ -71,9 +71,7 @@ function AuthContent() {
       });
       if (error) {
         console.error('Supabase OAuth error:', error);
-        // Fallback for dev mode if OAuth is unconfigured in Supabase dashboard
-        const targetUrl = processLoginSession(email || 'alanvu755@gmail.com');
-        router.push(targetUrl);
+        alert('Không thể khởi tạo đăng nhập Google OAuth: ' + error.message);
       }
     } catch (err: any) {
       console.error('Supabase OAuth exception:', err?.message || err);

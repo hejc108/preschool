@@ -23,45 +23,48 @@ export async function GET(request: Request) {
         const { data, error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error && data.user?.email) {
           userEmail = data.user.email;
-          registerGoogleUserIfMissing(userEmail, data.user.user_metadata?.full_name, data.user.user_metadata?.avatar_url);
+          registerGoogleUserIfMissing(
+            userEmail, 
+            data.user.user_metadata?.full_name || data.user.user_metadata?.name, 
+            data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture
+          );
         }
       } catch (e) {
-        console.warn('OAuth code exchange fallback:', e);
+        console.warn('OAuth code exchange error:', e);
       }
     }
   }
 
-  // Fallback for local dev/demo testing if OAuth code exchange is unconfigured
-  if (!userEmail && (code || redirectTo.includes('admin'))) {
-    userEmail = 'alanvu755@gmail.com';
-  }
-
+  // If a valid email was verified from Google OAuth
   if (userEmail) {
-    const status = checkUserApprovalStatus(userEmail);
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const status = checkUserApprovalStatus(cleanEmail);
+
     const response = NextResponse.redirect(`${origin}${status.redirectUrl}`);
 
-    // Always set security cookies for active sessions so middleware passes
-    response.cookies.set('suongmai_session', 'active', {
-      path: '/',
-      maxAge: 86400,
-      sameSite: 'lax',
-    });
-    response.cookies.set('suongmai_user_email', userEmail, {
-      path: '/',
-      maxAge: 86400,
-      sameSite: 'lax',
-    });
+    // Set active session cookies ONLY IF approved
+    if (status.approvalStatus === 'ACTIVE' && (status.isTeacherOrStaff || status.isParentVerified || cleanEmail === 'alanvu755@gmail.com')) {
+      response.cookies.set('suongmai_session', 'active', {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      response.cookies.set('suongmai_user_email', cleanEmail, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+    } else {
+      // Clear active session cookie for pending/unapproved accounts
+      response.cookies.delete('suongmai_session');
+    }
 
     return response;
   }
 
-  // Fallback redirect
-  const defaultTarget = redirectTo || '/auth';
-  const response = NextResponse.redirect(`${origin}${defaultTarget}`);
-  response.cookies.set('suongmai_session', 'active', {
-    path: '/',
-    maxAge: 86400,
-    sameSite: 'lax',
-  });
+  // If OAuth failed or email could not be obtained, redirect back to login page without session
+  const loginFailUrl = `${origin}/auth?unauthorized=true&error=oauth_failed`;
+  const response = NextResponse.redirect(loginFailUrl);
+  response.cookies.delete('suongmai_session');
   return response;
 }

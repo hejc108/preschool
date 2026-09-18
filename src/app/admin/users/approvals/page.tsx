@@ -32,6 +32,7 @@ import {
   approveParentUser,
   promoteToSchoolAdmin,
   rejectUser,
+  fetchLiveProfilesFromSupabase,
 } from '@/lib/utils/approvalHelper';
 
 export default function UserApprovalsPage() {
@@ -54,8 +55,8 @@ export default function UserApprovalsPage() {
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const refreshData = useCallback(() => {
-    const list = getStoredProfiles();
+  const refreshData = useCallback(async () => {
+    const list = await fetchLiveProfilesFromSupabase();
     setProfiles(list);
     setRelations(getStoredRelations());
 
@@ -66,8 +67,8 @@ export default function UserApprovalsPage() {
       initialRoles[p.id] = p.role || 'PARENT';
       initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
     });
-    setRowRoles(initialRoles);
-    setRowClasses(initialClasses);
+    setRowRoles((prev) => ({ ...initialRoles, ...prev }));
+    setRowClasses((prev) => ({ ...initialClasses, ...prev }));
   }, [classes]);
 
   useEffect(() => {
