@@ -29,6 +29,24 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
 
 export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [];
 
+const DEPRECATED_MOCK_EMAILS = [
+  'admin@suongmai.edu.vn',
+  'so.maria@suongmai.edu.vn',
+  'teacher@suongmai.edu.vn',
+  'teacher.pending@suongmai.edu.vn',
+  'parent@suongmai.edu.vn',
+  'parent.pending@gmail.com',
+];
+
+export function sanitizeProfiles(list: Profile[]): Profile[] {
+  return list.filter((p) => {
+    const clean = (p.email || '').toLowerCase().trim();
+    if (!clean) return false;
+    if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
+    return true;
+  });
+}
+
 /**
  * Get all stored profiles (from localStorage or initial defaults)
  */
@@ -40,7 +58,8 @@ export function getStoredProfiles(): Profile[] {
       localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(INITIAL_MOCK_PROFILES));
       return INITIAL_MOCK_PROFILES;
     }
-    const list: Profile[] = JSON.parse(raw);
+    let list: Profile[] = JSON.parse(raw);
+    list = sanitizeProfiles(list);
     const hasSadmin = list.some((p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
     if (!hasSadmin) {
       list.unshift(INITIAL_MOCK_PROFILES[0]);
@@ -308,22 +327,23 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       }
     }
 
-    // Always guarantee alanvu755@gmail.com is SUPER_ADMIN + ACTIVE
-    let alanIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'alanvu755@gmail.com');
-    if (alanIdx === -1) {
+    // Always guarantee sadmin@suongmai.edu.vn is SUPER_ADMIN + ACTIVE
+    let sadminIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
+    if (sadminIdx === -1) {
       merged.unshift({
-        id: 'u-super-admin-alan',
-        full_name: 'Alan Vũ (Super Admin)',
-        email: 'alanvu755@gmail.com',
+        id: 'u-super-admin-sadmin',
+        full_name: 'Quản Trị Tối Cao (Super Admin)',
+        email: 'sadmin@suongmai.edu.vn',
         role: 'SUPER_ADMIN',
         approval_status: 'ACTIVE',
         created_at: '2026-01-01T00:00:00Z',
       });
     } else {
-      merged[alanIdx].role = 'SUPER_ADMIN';
-      merged[alanIdx].approval_status = 'ACTIVE';
+      merged[sadminIdx].role = 'SUPER_ADMIN';
+      merged[sadminIdx].approval_status = 'ACTIVE';
     }
 
+    merged = sanitizeProfiles(merged);
     saveStoredProfiles(merged);
     return merged;
   } catch (e) {

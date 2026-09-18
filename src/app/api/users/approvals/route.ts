@@ -70,8 +70,24 @@ export async function GET() {
     serverCache[sadminIdx].approval_status = 'ACTIVE';
   }
 
-  globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
-  return NextResponse.json({ success: true, profiles: serverCache });
+  const DEPRECATED_MOCK_EMAILS = [
+    'admin@suongmai.edu.vn',
+    'so.maria@suongmai.edu.vn',
+    'teacher@suongmai.edu.vn',
+    'teacher.pending@suongmai.edu.vn',
+    'parent@suongmai.edu.vn',
+    'parent.pending@gmail.com',
+  ];
+
+  const sanitized = serverCache.filter((p) => {
+    const clean = (p.email || '').toLowerCase().trim();
+    if (!clean) return false;
+    if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
+    return true;
+  });
+
+  globalThis.__SUONGMAI_PROFILES_CACHE__ = sanitized;
+  return NextResponse.json({ success: true, profiles: sanitized });
 }
 
 export async function POST(request: Request) {
