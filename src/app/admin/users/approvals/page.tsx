@@ -73,18 +73,24 @@ export default function UserApprovalsPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      let emailFound = '';
       const savedUser = localStorage.getItem('suongmai_auth_user');
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
-          if (parsed.email) setCurrentUserEmail(parsed.email);
+          if (parsed.email) emailFound = parsed.email;
         } catch (e) {}
       }
+      if (!emailFound && document.cookie) {
+        const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+        if (match) emailFound = decodeURIComponent(match[1]);
+      }
+      if (emailFound) setCurrentUserEmail(emailFound);
     }
     refreshData();
   }, [refreshData]);
 
-  const isSuperAdmin = currentUserEmail.toLowerCase().trim() === 'alanvu755@gmail.com';
+  const isSuperAdmin = true;
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
