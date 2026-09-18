@@ -92,13 +92,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, profile: existing, message: 'Tài khoản đã tồn tại' });
     }
 
-    const isAlan = email === 'alanvu755@gmail.com';
+    const isSadmin = email === 'sadmin@suongmai.edu.vn';
     const newProfile: Profile = {
       id: `u-gauth-${Date.now()}`,
       email,
-      full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : email.split('@')[0]),
-      role: isAlan ? 'SUPER_ADMIN' : 'GUEST',
-      approval_status: isAlan ? 'ACTIVE' : 'PENDING',
+      full_name: fullName || (isSadmin ? 'Quản Trị Tối Cao (Super Admin)' : email.split('@')[0]),
+      role: isSadmin ? 'SUPER_ADMIN' : 'GUEST',
+      approval_status: isSadmin ? 'ACTIVE' : 'PENDING',
       avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString(),
     };
