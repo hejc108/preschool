@@ -336,6 +336,24 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       merged = [...localProfiles];
     }
 
+    // Preserve local approval status if local profile is ACTIVE / REJECTED and DB is PENDING
+    for (const lp of localProfiles) {
+      const idx = merged.findIndex((m) => m.email?.toLowerCase().trim() === lp.email?.toLowerCase().trim());
+      if (idx !== -1) {
+        if (lp.approval_status === 'ACTIVE' && merged[idx].approval_status === 'PENDING') {
+          merged[idx].approval_status = 'ACTIVE';
+          merged[idx].role = lp.role;
+          if (lp.assigned_class_id) merged[idx].assigned_class_id = lp.assigned_class_id;
+          if (lp.assigned_class_name) merged[idx].assigned_class_name = lp.assigned_class_name;
+        }
+        if (lp.approval_status === 'REJECTED' && merged[idx].approval_status === 'PENDING') {
+          merged[idx].approval_status = 'REJECTED';
+        }
+      } else {
+        merged.push(lp);
+      }
+    }
+
     // Always guarantee alanvu755@gmail.com is SUPER_ADMIN + ACTIVE
     let alanIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'alanvu755@gmail.com');
     if (alanIdx === -1) {
@@ -352,13 +370,6 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       merged[alanIdx].approval_status = 'ACTIVE';
     }
 
-    // Merge any local profiles that aren't in remote DB list
-    for (const lp of localProfiles) {
-      if (!merged.some((m) => m.email?.toLowerCase().trim() === lp.email?.toLowerCase().trim())) {
-        merged.push(lp);
-      }
-    }
-
     saveStoredProfiles(merged);
     return merged;
   } catch (e) {
@@ -369,7 +380,7 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
 /**
  * Promote user to SCHOOL_ADMIN (Only permitted if operator is SUPER_ADMIN / alanvu755@gmail.com)
  */
-export function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string): Profile | null {
+export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string): Promise<Profile | null> {
   const cleanEmail = targetEmail.toLowerCase().trim();
   const cleanOperator = (operatorEmail || '').toLowerCase().trim();
 
@@ -390,14 +401,12 @@ export function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
 
-  (async () => {
-    try {
-      await supabase
-        .from('profiles')
-        .update({ role: 'SCHOOL_ADMIN', approval_status: 'ACTIVE' })
-        .eq('email', cleanEmail);
-    } catch (e) {}
-  })();
+  try {
+    await supabase
+      .from('profiles')
+      .update({ role: 'SCHOOL_ADMIN', approval_status: 'ACTIVE' })
+      .eq('email', cleanEmail);
+  } catch (e) {}
 
   return profiles[idx];
 }
@@ -405,7 +414,7 @@ export function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string
 /**
  * Approve user as Teacher with optional assigned class
  */
-export function approveTeacherUser(email: string, classId?: string, className?: string): Profile | null {
+export async function approveTeacherUser(email: string, classId?: string, className?: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
   const profiles = getStoredProfiles();
   let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
@@ -422,19 +431,17 @@ export function approveTeacherUser(email: string, classId?: string, className?: 
 
   saveStoredProfiles(profiles);
 
-  (async () => {
-    try {
-      await supabase
-        .from('profiles')
-        .update({
-          role: 'TEACHER',
-          approval_status: 'ACTIVE',
-          assigned_class_id: classId,
-          assigned_class_name: className,
-        })
-        .eq('email', cleanEmail);
-    } catch (e) {}
-  })();
+  try {
+    await supabase
+      .from('profiles')
+      .update({
+        role: 'TEACHER',
+        approval_status: 'ACTIVE',
+        assigned_class_id: classId,
+        assigned_class_name: className,
+      })
+      .eq('email', cleanEmail);
+  } catch (e) {}
 
   return profiles[idx];
 }
@@ -442,7 +449,7 @@ export function approveTeacherUser(email: string, classId?: string, className?: 
 /**
  * Approve user as STAFF (Kitchen / Nurse)
  */
-export function approveStaffUser(email: string): Profile | null {
+export async function approveStaffUser(email: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
   const profiles = getStoredProfiles();
   let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
@@ -456,14 +463,12 @@ export function approveStaffUser(email: string): Profile | null {
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
 
-  (async () => {
-    try {
-      await supabase
-        .from('profiles')
-        .update({ role: 'STAFF', approval_status: 'ACTIVE' })
-        .eq('email', cleanEmail);
-    } catch (e) {}
-  })();
+  try {
+    await supabase
+      .from('profiles')
+      .update({ role: 'STAFF', approval_status: 'ACTIVE' })
+      .eq('email', cleanEmail);
+  } catch (e) {}
 
   return profiles[idx];
 }
@@ -471,10 +476,10 @@ export function approveStaffUser(email: string): Profile | null {
 /**
  * Approve user as Parent and link 1 or multiple students
  */
-export function approveParentUser(email: string, studentIds: string[]): {
+export async function approveParentUser(email: string, studentIds: string[]): Promise<{
   profile: Profile | null;
   relations: ParentStudentRelation[];
-} {
+}> {
   const cleanEmail = email.toLowerCase().trim();
   const profiles = getStoredProfiles();
   let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
@@ -522,20 +527,18 @@ export function approveParentUser(email: string, studentIds: string[]): {
 
   saveStoredRelations(relations);
 
-  (async () => {
-    try {
-      await supabase
-        .from('profiles')
-        .update({ role: 'PARENT', approval_status: 'ACTIVE' })
-        .eq('email', cleanEmail);
+  try {
+    await supabase
+      .from('profiles')
+      .update({ role: 'PARENT', approval_status: 'ACTIVE' })
+      .eq('email', cleanEmail);
 
-      for (const sId of studentIds) {
-        await supabase
-          .from('parent_student_relations')
-          .upsert({ parent_id: profile.id, student_id: sId, is_verified: true });
-      }
-    } catch (e) {}
-  })();
+    for (const sId of studentIds) {
+      await supabase
+        .from('parent_student_relations')
+        .upsert({ parent_id: profile.id, student_id: sId, is_verified: true });
+    }
+  } catch (e) {}
 
   return { profile: profiles[idx], relations: addedRelations };
 }
@@ -543,7 +546,7 @@ export function approveParentUser(email: string, studentIds: string[]): {
 /**
  * Reject user access
  */
-export function rejectUser(email: string): Profile | null {
+export async function rejectUser(email: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
   const profiles = getStoredProfiles();
   const idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
@@ -552,5 +555,13 @@ export function rejectUser(email: string): Profile | null {
 
   profiles[idx].approval_status = 'REJECTED';
   saveStoredProfiles(profiles);
+
+  try {
+    await supabase
+      .from('profiles')
+      .update({ approval_status: 'REJECTED' })
+      .eq('email', cleanEmail);
+  } catch (e) {}
+
   return profiles[idx];
 }

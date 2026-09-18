@@ -92,24 +92,24 @@ export default function UserApprovalsPage() {
   };
 
   // --- ACTIONS ---
-  const handleApproveTeacher = (user: Profile) => {
+  const handleApproveTeacher = async (user: Profile) => {
     const targetClassId = rowClasses[user.id] || classes[0]?.id || 'c1';
     const targetClass = classes.find((c) => c.id === targetClassId);
-    approveTeacherUser(user.email, targetClassId, targetClass?.name);
-    refreshData();
+    await approveTeacherUser(user.email, targetClassId, targetClass?.name);
+    await refreshData();
     showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (Lớp ${targetClass?.name || ''})!`);
   };
 
-  const handleApproveStaff = (user: Profile) => {
-    approveStaffUser(user.email);
-    refreshData();
+  const handleApproveStaff = async (user: Profile) => {
+    await approveStaffUser(user.email);
+    await refreshData();
     showToast(`Đã kích hoạt quyền Cán bộ Bếp / Y tế cho ${user.full_name}!`);
   };
 
-  const handlePromoteSchoolAdmin = (user: Profile) => {
+  const handlePromoteSchoolAdmin = async (user: Profile) => {
     try {
-      promoteToSchoolAdmin(user.email, currentUserEmail);
-      refreshData();
+      await promoteToSchoolAdmin(user.email, currentUserEmail);
+      await refreshData();
       showToast(`Đã nâng quyền Quản trị trường (School Admin) cho ${user.full_name}!`);
     } catch (err: any) {
       showToast(err.message || 'Chỉ Super Admin mới được cấp quyền!', 'error');
@@ -132,22 +132,22 @@ export default function UserApprovalsPage() {
     );
   };
 
-  const handleConfirmParentApproval = () => {
+  const handleConfirmParentApproval = async () => {
     if (!parentModalUser) return;
     if (selectedStudentIds.length === 0) {
       showToast('Vui lòng chọn ít nhất 1 học sinh để gán cho phụ huynh!', 'error');
       return;
     }
 
-    approveParentUser(parentModalUser.email, selectedStudentIds);
-    refreshData();
+    await approveParentUser(parentModalUser.email, selectedStudentIds);
+    await refreshData();
     setParentModalUser(null);
     showToast(`Đã duyệt phụ huynh ${parentModalUser.full_name} và liên kết ${selectedStudentIds.length} bé thành công!`);
   };
 
-  const handleReject = (user: Profile) => {
-    rejectUser(user.email);
-    refreshData();
+  const handleReject = async (user: Profile) => {
+    await rejectUser(user.email);
+    await refreshData();
     showToast(`Đã từ chối / chặn truy cập của ${user.full_name} (${user.email})`, 'error');
   };
 
