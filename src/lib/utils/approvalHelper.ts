@@ -196,19 +196,11 @@ export function checkUserApprovalStatus(email: string): {
   const profiles = getStoredProfiles();
   const relations = getStoredRelations();
 
-  const profile = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let profile = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
 
   if (!profile) {
-    // Brand new / unregistered email
-    return {
-      isRegistered: false,
-      approvalStatus: 'PENDING',
-      isTeacherOrStaff: false,
-      isParentVerified: false,
-      linkedStudents: [],
-      redirectUrl: `/auth/pending-approval?type=unknown&email=${encodeURIComponent(cleanEmail)}`,
-      pendingType: 'unknown',
-    };
+    // Brand new / unregistered email -> AUTO REGISTER AS PENDING PROFILE IN DB AND LOCAL STORAGE
+    profile = registerGoogleUserIfMissing(cleanEmail);
   }
 
   const isTeacherOrStaff = ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(profile.role);
