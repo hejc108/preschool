@@ -18,6 +18,14 @@ const STORAGE_KEY_RELATIONS = 'suongmai_parent_relations_v1';
 
 export const INITIAL_MOCK_PROFILES: Profile[] = [
   {
+    id: 'u-super-admin-sadmin',
+    full_name: 'Super Admin (sadmin)',
+    email: 'sadmin@suongmai.edu.vn',
+    role: 'SUPER_ADMIN',
+    approval_status: 'ACTIVE',
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
     id: 'u-super-admin-alan',
     full_name: 'Alan Vũ (Super Admin)',
     email: 'alanvu755@gmail.com',
@@ -111,10 +119,14 @@ export function getStoredProfiles(): Profile[] {
       return INITIAL_MOCK_PROFILES;
     }
     const list: Profile[] = JSON.parse(raw);
-    // Guarantee alanvu755@gmail.com always exists and is active SUPER_ADMIN
+    // Guarantee sadmin@suongmai.edu.vn and alanvu755@gmail.com always exist and are active SUPER_ADMIN
+    const hasSadmin = list.some((p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
+    if (!hasSadmin) {
+      list.unshift(INITIAL_MOCK_PROFILES[0]);
+    }
     const hasAlan = list.some((p) => p.email.toLowerCase().trim() === 'alanvu755@gmail.com');
     if (!hasAlan) {
-      list.unshift(INITIAL_MOCK_PROFILES[0]);
+      list.unshift(INITIAL_MOCK_PROFILES[1]);
     }
     // Guarantee luciaxuan178@gmail.com is present in list as PENDING user
     const hasLucia = list.some((p) => p.email.toLowerCase().trim() === 'luciaxuan178@gmail.com');

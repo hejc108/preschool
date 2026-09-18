@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
-  Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck 
+  Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck, KeyRound, ShieldCheck 
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -14,6 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const { t } = useLanguage();
   const [userRole, setUserRole] = useState<string>('SUPER_ADMIN');
+  const [username, setUsername] = useState<string>('sadmin');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -22,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         try {
           const parsed = JSON.parse(savedUser);
           if (parsed.role) setUserRole(parsed.role);
+          if (parsed.username) setUsername(parsed.username);
         } catch (e) {}
       }
     }
@@ -48,11 +50,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const settingsNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
     { label: 'Duyệt tài khoản', href: '/admin/users/approvals', icon: UserCheck, badge: 'Mới' },
+    { label: 'Quản lý người dùng', href: '/admin/users', icon: Users },
+    { label: 'Đổi mật khẩu / Bảo mật', href: '/admin/settings/security', icon: KeyRound },
     { label: 'Cấu hình email', href: '/admin/settings/email', icon: Mail },
   ];
 
   const handleLogout = () => {
     document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "suongmai_user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "suongmai_username=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     if (typeof window !== 'undefined') {
       localStorage.removeItem('suongmai_auth_user');
     }
@@ -188,7 +195,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
           <Link 
-            href="/auth" 
+            href="/admin/login" 
             onClick={handleLogout}
             title={t('admin.sidebar.logout')} 
             className="text-slate-400 hover:text-sky-700 transition-colors p-1.5"
