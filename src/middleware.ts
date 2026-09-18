@@ -9,10 +9,12 @@ export function middleware(request: NextRequest) {
 
   if (isProtected) {
     const sessionCookie = request.cookies.get('suongmai_session');
-    const supabaseToken = request.cookies.get('sb-yrieuamibqjyaslprdeo-auth-token');
+    const hasSupabaseToken = Array.from(request.cookies.getAll()).some(
+      (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
+    );
 
     // If no valid auth session cookie exists, block access and redirect to /auth
-    if (!sessionCookie && !supabaseToken) {
+    if (!sessionCookie && !hasSupabaseToken) {
       const loginUrl = new URL('/auth', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
       loginUrl.searchParams.set('unauthorized', 'true');
