@@ -49,8 +49,8 @@ function AuthContent() {
       const targetUrl = processLoginSession('alanvu755@gmail.com');
       setTimeout(() => {
         setLoading(false);
-        router.push(targetUrl);
-      }, 500);
+        window.location.href = targetUrl;
+      }, 300);
       return;
     }
 
@@ -74,12 +74,12 @@ function AuthContent() {
         console.error('Supabase OAuth error:', error);
         // Fallback for dev / unconfigured OAuth: auto-login as alanvu755@gmail.com Super Admin
         const targetUrl = processLoginSession('alanvu755@gmail.com');
-        router.push(targetUrl);
+        window.location.href = targetUrl;
       }
     } catch (err: any) {
       console.error('Supabase OAuth exception:', err?.message || err);
       const targetUrl = processLoginSession('alanvu755@gmail.com');
-      router.push(targetUrl);
+      window.location.href = targetUrl;
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ function AuthContent() {
 
     setTimeout(() => {
       setLoading(false);
-      router.push(targetUrl);
+      window.location.href = targetUrl;
     }, 800);
   };
 
