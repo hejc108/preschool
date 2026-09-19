@@ -2,6 +2,32 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { checkUserApprovalStatus, registerGoogleUserIfMissing } from '@/lib/utils/approvalHelper';
 
+function getSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    console.error('[AUTH CALLBACK ERROR] Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Check .env file!');
+    throw new Error('[AUTH CALLBACK ERROR] Missing SUPABASE_SERVICE_ROLE_KEY in environment variables.');
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}
+
+function getSupabasePublicClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+  const pubKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
+
+  return createClient(url, pubKey);
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
@@ -9,6 +35,7 @@ export async function GET(request: Request) {
   let userEmail = searchParams.get('email') || '';
   let fullName = '';
   let avatarUrl = '';
+  let userId = '';
 
   if (!userEmail) {
     const cookieHeader = request.headers.get('cookie') || '';
@@ -19,42 +46,56 @@ export async function GET(request: Request) {
   }
 
   if (code) {
-    const supabaseUrl = 
-      process.env.NEXT_PUBLIC_SUPABASE_URL || 
-      process.env.SUPABASE_URL || 
-      'https://yrieuamibqjyaslprdeo.supabase.co';
-    const supabaseAnonKey = 
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-      process.env.SUPABASE_ANON_KEY || 
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
-      process.env.SUPABASE_PUBLISHABLE_KEY || 
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
-
-    if (supabaseUrl && supabaseAnonKey) {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      try {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!error && data.user?.email) {
-          userEmail = data.user.email;
-          fullName = data.user.user_metadata?.full_name || data.user.user_metadata?.name || '';
-          avatarUrl = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || '';
-        } else if (error) {
-          console.error('OAuth code exchange error from Supabase:', error.message);
-        }
-      } catch (e) {
-        console.warn('OAuth code exchange exception:', e);
+    const supabasePublic = getSupabasePublicClient();
+    try {
+      const { data, error } = await supabasePublic.auth.exchangeCodeForSession(code);
+      if (!error && data.user?.email) {
+        userEmail = data.user.email;
+        userId = data.user.id;
+        fullName = data.user.user_metadata?.full_name || data.user.user_metadata?.name || '';
+        avatarUrl = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || '';
+      } else if (error) {
+        console.error('[AUTH CALLBACK OAUTH ERROR] exchangeCodeForSession failed:', error.message);
       }
+    } catch (e) {
+      console.warn('[AUTH CALLBACK OAUTH EXCEPTION]:', e);
     }
   }
 
-  // Process extracted email or redirect to login failure
   if (userEmail) {
     const cleanEmail = userEmail.toLowerCase().trim();
+    const resolvedName = fullName || cleanEmail.split('@')[0];
+    const resolvedAvatar = avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
 
-    // Register or upsert profile directly into Supabase PostgreSQL DB
-    registerGoogleUserIfMissing(cleanEmail, fullName, avatarUrl);
+    // 1. Mandatory requirement: Upsert into profiles DB using SUPABASE_SERVICE_ROLE_KEY (NO fallback to anon key)
+    try {
+      const supabaseAdmin = getSupabaseAdminClient();
+      const { error: upsertErr } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          {
+            id: userId || `u-gauth-${Date.now()}`,
+            email: cleanEmail,
+            full_name: resolvedName,
+            avatar_url: resolvedAvatar,
+            role: 'GUEST',
+            approval_status: 'PENDING',
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'email' }
+        );
 
-    // Fetch live profile status from global cache or Supabase DB
+      if (upsertErr) {
+        console.error('[AUTH CALLBACK ERROR] Không ghi được profile vào Supabase DB:', upsertErr.message);
+      }
+    } catch (adminErr: any) {
+      console.error('[AUTH CALLBACK ERROR] Supabase Admin Client Exception:', adminErr.message || adminErr);
+    }
+
+    // 2. Also register in local server memory cache
+    registerGoogleUserIfMissing(cleanEmail, resolvedName, resolvedAvatar);
+
+    // 3. Fetch live profile status to determine redirect
     let liveProfile: any = null;
     if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
       liveProfile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
@@ -69,7 +110,7 @@ export async function GET(request: Request) {
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
         targetUrl = '/admin/dashboard';
       } else if (resolvedRole === 'TEACHER') {
-        targetUrl = '/teacher';
+        targetUrl = '/teacher/lesson-plans/new';
       } else if (resolvedRole === 'PARENT') {
         targetUrl = '/parent';
       } else if (resolvedRole === 'KITCHEN_STAFF') {
@@ -96,7 +137,7 @@ export async function GET(request: Request) {
       });
       return response;
     } else {
-      // Pending or new user: Register profile as PENDING DB record, delete active session, redirect to pending page
+      // Pending user: Redirect to /auth/pending-approval
       const pendingRedirect = `${origin}/auth/pending-approval?type=${status.pendingType || 'unknown'}&email=${encodeURIComponent(cleanEmail)}`;
       const response = NextResponse.redirect(pendingRedirect);
       response.cookies.delete('suongmai_session');
