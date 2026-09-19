@@ -9,17 +9,30 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const sessionCookie = request.cookies.get('suongmai_session')?.value;
+  const emailCookie = request.cookies.get('suongmai_user_email')?.value?.toLowerCase().trim() || '';
+  const roleCookie = request.cookies.get('suongmai_user_role')?.value || '';
+  const usernameCookie = request.cookies.get('suongmai_username')?.value || '';
+
+  // If approved user accesses /auth/pending-approval, redirect out to active workspace
+  if (pathname === '/auth/pending-approval' && sessionCookie === 'active' && roleCookie && roleCookie !== 'GUEST') {
+    if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie)) {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
+    if (roleCookie === 'TEACHER') {
+      return NextResponse.redirect(new URL('/teacher', request.url));
+    }
+    if (roleCookie === 'PARENT') {
+      return NextResponse.redirect(new URL('/parent', request.url));
+    }
+  }
+
   const isAdminRoute = pathname.startsWith('/admin');
   const isTeacherRoute = pathname.startsWith('/teacher');
   const isParentRoute = pathname.startsWith('/parent');
   const isProtected = isAdminRoute || isTeacherRoute || isParentRoute;
 
   if (isProtected) {
-    const sessionCookie = request.cookies.get('suongmai_session')?.value;
-    const emailCookie = request.cookies.get('suongmai_user_email')?.value?.toLowerCase().trim() || '';
-    const roleCookie = request.cookies.get('suongmai_user_role')?.value || '';
-    const usernameCookie = request.cookies.get('suongmai_username')?.value || '';
-
     // Rule 1: sadmin (Super Admin) & approved SUPER_ADMIN are granted full access
     const isSadmin =
       roleCookie === 'SUPER_ADMIN' ||
@@ -72,7 +85,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/teacher/:path*', '/parent/:path*'],
+  matcher: ['/admin/:path*', '/teacher/:path*', '/parent/:path*', '/auth/pending-approval'],
 };
-
-

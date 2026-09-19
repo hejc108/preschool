@@ -71,12 +71,12 @@ export default function ParentPwaPage() {
 
   // Test Mode Toggle for Parent P1 (1 child) vs P2 (2 children)
   const [activeParentIndex, setActiveParentIndex] = useState<number>(1); // Defaults to P2 for testing multi-child
-  const currentParent = MOCK_PARENT_PROFILES[activeParentIndex];
-  const parentChildren = currentParent.children;
+  const currentParent = MOCK_PARENT_PROFILES[activeParentIndex] || MOCK_PARENT_PROFILES[0];
+  const parentChildren = currentParent?.children || [];
 
   // Selected Child State
-  const [selectedChildId, setSelectedChildId] = useState<string>(parentChildren[0].id);
-  const selectedChild = parentChildren.find((c) => c.id === selectedChildId) || parentChildren[0];
+  const [selectedChildId, setSelectedChildId] = useState<string>(parentChildren[0]?.id || '');
+  const selectedChild = parentChildren.find((c) => c.id === selectedChildId) || parentChildren[0] || null;
 
   // Active Main View Tab
   const [activeNav, setActiveNav] = useState<'TIMELINE' | 'ABSENCE' | 'RECONCILIATION' | 'PICKUPS'>('TIMELINE');
@@ -168,7 +168,31 @@ export default function ParentPwaPage() {
     (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
   ).slice(-1)[0] || INITIAL_HEALTH_RECORDS[0];
 
-  const healthDisplay = getGrowthStatusDisplay(latestHealth.growth_status);
+  if (!selectedChild || parentChildren.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 font-sans">
+        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-convent p-6 text-center shadow-xl relative">
+          <div className="w-16 h-16 bg-sky-50 border border-sky-200 rounded-convent inline-flex items-center justify-center text-sky-600 mb-4 shadow-sm animate-pulse">
+            <Clock className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Hồ sơ đang chờ xếp lớp học sinh 🏫</h2>
+          <p className="text-slate-500 text-sm leading-relaxed mb-6">
+            Tài khoản Phụ huynh của bạn đã được phê duyệt thành công! Ban Giám Hiệu đang tiến hành xếp lớp và gán thông tin con. Vui lòng quay lại sau ít phút hoặc liên hệ Văn phòng trường.
+          </p>
+          <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 font-semibold mb-6 flex items-center justify-center gap-2">
+            <Phone className="w-4 h-4 text-sky-600 shrink-0" />
+            <span>Hotline Văn phòng: <strong>028.3896.1234</strong></span>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer"
+          >
+            🔄 Tải lại thông tin
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
