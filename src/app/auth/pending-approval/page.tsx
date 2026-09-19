@@ -212,15 +212,14 @@ function PendingApprovalContent() {
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          {/* Refresh / Check Approval Button */}
-          <button
-            onClick={handleCheckApproval}
-            disabled={checking}
-            className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 px-4 rounded-pill transition-all shadow-md shadow-sky-600/20 active:scale-[0.98] text-sm cursor-pointer disabled:opacity-60"
-          >
-            <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
-            <span>{checking ? 'Đang kiểm tra...' : 'Kiểm tra trạng thái phê duyệt'}</span>
-          </button>
+          {/* Subtle Live Auto-Sync Status Indicator */}
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-500 font-medium py-1">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>Đang tự động kết nối và chờ phê duyệt từ Nhà trường...</span>
+          </div>
 
           <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 shadow-sm">
             <Phone className="w-4 h-4 text-sky-600 shrink-0" />
