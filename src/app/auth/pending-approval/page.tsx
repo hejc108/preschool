@@ -44,6 +44,35 @@ function PendingApprovalContent() {
     }
   }, [email]);
 
+  const [loadingCheck, setLoadingCheck] = useState(false);
+
+  const handleCheckMyStatus = async () => {
+    setLoadingCheck(true);
+    try {
+      const res = await fetch(`/api/auth/check-my-status?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+
+      if (data.isApproved && data.status === 'ACTIVE') {
+        const role = data.role || 'PARENT';
+        let targetUrl = data.redirectUrl || '/parent';
+        if (role === 'TEACHER') {
+          targetUrl = '/teacher/lesson-plans/new';
+        } else if (role === 'PARENT') {
+          targetUrl = '/parent';
+        } else if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(role)) {
+          targetUrl = '/admin/dashboard';
+        }
+        window.location.replace(targetUrl);
+      } else {
+        alert('Nhà trường chưa duyệt, vui lòng đợi thêm');
+      }
+    } catch (e) {
+      alert('Nhà trường chưa duyệt, vui lòng đợi thêm');
+    } finally {
+      setLoadingCheck(false);
+    }
+  };
+
   const handleReLogin = () => {
     router.push('/auth');
   };
@@ -90,6 +119,14 @@ function PendingApprovalContent() {
 
         {/* Action Buttons */}
         <div className="space-y-3 pt-2">
+          <button
+            onClick={handleCheckMyStatus}
+            disabled={loadingCheck}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-pill transition-all shadow-md active:scale-[0.98] text-sm cursor-pointer"
+          >
+            <span>{loadingCheck ? 'Đang kiểm tra...' : '🚀 Tôi đã được duyệt - Vào ứng dụng'}</span>
+          </button>
+
           <button
             onClick={handleReLogin}
             className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 px-4 rounded-pill transition-all shadow-sm active:scale-[0.98] text-sm cursor-pointer"

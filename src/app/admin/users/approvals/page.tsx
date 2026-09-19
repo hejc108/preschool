@@ -56,6 +56,25 @@ export default function UserApprovalsPage() {
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const refreshData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/pending-users');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.profiles)) {
+        setProfiles(json.profiles);
+        setRelations(getStoredRelations());
+
+        const initialRoles: Record<string, UserRole> = {};
+        const initialClasses: Record<string, string> = {};
+        json.profiles.forEach((p: Profile) => {
+          initialRoles[p.id] = p.role || 'PARENT';
+          initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
+        });
+        setRowRoles((prev) => ({ ...initialRoles, ...prev }));
+        setRowClasses((prev) => ({ ...initialClasses, ...prev }));
+        return;
+      }
+    } catch (e) {}
+
     const list = await fetchLiveProfilesFromSupabase();
     setProfiles(list);
     setRelations(getStoredRelations());
@@ -88,29 +107,6 @@ export default function UserApprovalsPage() {
       if (emailFound) setCurrentUserEmail(emailFound);
     }
     refreshData();
-
-    // Supabase Realtime subscription for instant new user row arrival without F5
-    let channel: any = null;
-    try {
-      channel = supabase
-        .channel('admin-approval-realtime')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'profiles' },
-          () => {
-            refreshData();
-          }
-        )
-        .subscribe();
-    } catch (e) {
-      console.warn('Realtime subscription warning:', e);
-    }
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
   }, [refreshData]);
 
   const isSuperAdmin = true;
@@ -240,9 +236,9 @@ export default function UserApprovalsPage() {
           )}
           <button
             onClick={refreshData}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all border border-slate-200"
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
           >
-            Làm mới
+            <span>🔄 Tải lại danh sách</span>
           </button>
         </div>
       </div>
