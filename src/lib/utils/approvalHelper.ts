@@ -181,19 +181,19 @@ export function checkUserApprovalStatus(email: string): {
     (r) => (r.parent_email.toLowerCase().trim() === cleanEmail || r.parent_id === profile.id) && r.is_verified
   );
 
-  const isParentVerified = profile.approval_status === 'ACTIVE' && userRelations.length > 0;
+  const isActiveParent = (profile.approval_status as string) === 'ACTIVE';
 
   return {
     isRegistered: true,
     profile,
     approvalStatus: profile.approval_status || 'PENDING',
     isTeacherOrStaff: false,
-    isParentVerified,
+    isParentVerified: isActiveParent,
     linkedStudents: userRelations,
-    redirectUrl: isParentVerified
+    redirectUrl: isActiveParent
       ? '/parent'
       : `/auth/pending-approval?type=parent&email=${encodeURIComponent(cleanEmail)}`,
-    pendingType: isParentVerified ? undefined : 'parent',
+    pendingType: isActiveParent ? undefined : 'parent',
   };
 }
 
