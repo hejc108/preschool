@@ -123,9 +123,13 @@ export function checkUserApprovalStatus(email: string): {
 } {
   const cleanEmail = email.toLowerCase().trim();
 
-  // sadmin is auto-granted SUPER_ADMIN ACTIVE status
-  if (cleanEmail === 'sadmin@suongmai.edu.vn') {
-    const profile = registerGoogleUserIfMissing('sadmin@suongmai.edu.vn', 'Quản Trị Tối Cao (Super Admin)');
+  // sadmin & alanvu755@gmail.com are auto-granted SUPER_ADMIN ACTIVE status
+  if (cleanEmail === 'sadmin@suongmai.edu.vn' || cleanEmail === 'alanvu755@gmail.com') {
+    const isAlan = cleanEmail === 'alanvu755@gmail.com';
+    const profile = registerGoogleUserIfMissing(
+      cleanEmail,
+      isAlan ? 'Alan Vũ (Super Admin)' : 'Quản Trị Tối Cao (Super Admin)'
+    );
     profile.role = 'SUPER_ADMIN';
     profile.approval_status = 'ACTIVE';
 

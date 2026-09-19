@@ -51,7 +51,8 @@ export async function GET(request: Request) {
 
     if (isApproved) {
       const targetRole = isAlan ? 'SUPER_ADMIN' : status.profile?.role || 'SCHOOL_ADMIN';
-      const response = NextResponse.redirect(`${origin}${status.redirectUrl}`);
+      const targetUrl = isAlan ? '/admin/dashboard' : (status.redirectUrl || '/admin/dashboard');
+      const response = NextResponse.redirect(`${origin}${targetUrl}`);
       response.cookies.set('suongmai_session', 'active', {
         path: '/',
         maxAge: 86400,
