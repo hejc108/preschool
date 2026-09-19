@@ -33,13 +33,14 @@ export function middleware(request: NextRequest) {
   const isProtected = isAdminRoute || isTeacherRoute || isParentRoute;
 
   if (isProtected) {
-    // Rule 1: sadmin (Super Admin) & approved SUPER_ADMIN are granted full access
+    const isSuperOrSchoolAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie);
     const isSadmin =
-      roleCookie === 'SUPER_ADMIN' ||
+      isSuperOrSchoolAdmin ||
       usernameCookie === 'sadmin' ||
       emailCookie === 'sadmin@suongmai.edu.vn';
 
-    if (isSadmin && sessionCookie === 'active') {
+    // Rule 1: Active admins (SUPER_ADMIN, SCHOOL_ADMIN, ADMIN) & sadmin are granted full access to /admin
+    if (isAdminRoute && isSadmin && sessionCookie === 'active') {
       return NextResponse.next();
     }
 
@@ -56,7 +57,6 @@ export function middleware(request: NextRequest) {
     }
 
     // Rule 3: Enforce strict role-based route boundaries for approved active users
-    const isSuperOrSchoolAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie);
     const isStaff = roleCookie === 'STAFF';
     const isTeacher = roleCookie === 'TEACHER';
     const isParent = roleCookie === 'PARENT';
