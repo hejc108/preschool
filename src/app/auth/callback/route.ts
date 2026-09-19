@@ -18,10 +18,6 @@ export async function GET(request: Request) {
     }
   }
 
-  if (!userEmail && !code) {
-    userEmail = 'alanvu755@gmail.com';
-  }
-
   if (code) {
     const supabaseUrl = 
       process.env.NEXT_PUBLIC_SUPABASE_URL || 

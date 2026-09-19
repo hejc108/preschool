@@ -314,20 +314,10 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       }
     }
 
-    // Merge local profiles if missing
+    // Merge local profiles if missing from DB/API cache
     for (const lp of localProfiles) {
       const idx = merged.findIndex((m) => m.email?.toLowerCase().trim() === lp.email?.toLowerCase().trim());
-      if (idx !== -1) {
-        if (lp.approval_status === 'ACTIVE' && merged[idx].approval_status === 'PENDING') {
-          merged[idx].approval_status = 'ACTIVE';
-          merged[idx].role = lp.role;
-          if (lp.assigned_class_id) merged[idx].assigned_class_id = lp.assigned_class_id;
-          if (lp.assigned_class_name) merged[idx].assigned_class_name = lp.assigned_class_name;
-        }
-        if (lp.approval_status === 'REJECTED' && merged[idx].approval_status === 'PENDING') {
-          merged[idx].approval_status = 'REJECTED';
-        }
-      } else {
+      if (idx === -1) {
         merged.push(lp);
       }
     }

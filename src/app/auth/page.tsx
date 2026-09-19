@@ -69,16 +69,14 @@ function AuthContent() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const targetEmail = 'alanvu755@gmail.com';
 
     try {
-      document.cookie = `suongmai_user_email=${encodeURIComponent(targetEmail)}; path=/; max-age=86400; SameSite=Lax`;
       const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback?email=${encodeURIComponent(targetEmail)}&redirectTo=${encodeURIComponent(redirectTo)}`,
+          redirectTo: `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account',
@@ -87,10 +85,12 @@ function AuthContent() {
       });
 
       if (error) {
-        await processGoogleLogin(targetEmail);
+        console.error('OAuth error:', error.message);
+        await processGoogleLogin();
       }
     } catch (err: any) {
-      await processGoogleLogin(targetEmail);
+      console.error('OAuth exception:', err);
+      await processGoogleLogin();
     } finally {
       setLoading(false);
     }
