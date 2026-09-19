@@ -9,7 +9,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 export default function AdminLoginPage() {
   const router = useRouter();
   const { t } = useLanguage();
-  const [username, setUsername] = useState('sadmin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -105,7 +105,7 @@ export default function AdminLoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Nhập sadmin"
+                placeholder="Tên đăng nhập"
                 className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 transition-all font-mono"
               />
             </div>

@@ -61,9 +61,13 @@ export async function GET(request: Request) {
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
         targetUrl = '/admin/dashboard';
       } else if (resolvedRole === 'TEACHER') {
-        targetUrl = '/teacher/lesson-plans/new';
+        targetUrl = '/teacher';
       } else if (resolvedRole === 'PARENT') {
         targetUrl = '/parent';
+      } else if (resolvedRole === 'KITCHEN_STAFF') {
+        targetUrl = '/admin/menu';
+      } else if (resolvedRole === 'NURSE_STAFF') {
+        targetUrl = '/admin/health';
       }
 
       const response = NextResponse.redirect(`${origin}${targetUrl}`);

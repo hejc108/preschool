@@ -23,7 +23,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Profile, Student, ParentStudentRelation, UserRole } from '@/lib/types/schema';
-import { INITIAL_STUDENTS, INITIAL_CLASSES } from '@/lib/supabase/client';
+import { INITIAL_STUDENTS, INITIAL_CLASSES, supabase } from '@/lib/supabase/client';
 import {
   getStoredProfiles,
   getStoredRelations,
@@ -88,6 +88,29 @@ export default function UserApprovalsPage() {
       if (emailFound) setCurrentUserEmail(emailFound);
     }
     refreshData();
+
+    // Supabase Realtime subscription for instant new user row arrival without F5
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel('admin-approval-realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'profiles' },
+          () => {
+            refreshData();
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn('Realtime subscription warning:', e);
+    }
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [refreshData]);
 
   const isSuperAdmin = true;

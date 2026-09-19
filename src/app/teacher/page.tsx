@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, HeartPulse, Utensils, Lock, 
   ChevronLeft, Plus, Sparkles, Check, AlertCircle, LogOut, 
-  UserCheck, ShieldAlert
+  UserCheck, ShieldAlert, Phone, RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -16,10 +16,67 @@ import {
 import { MedicationRequest, MealException, AbsenceRequest } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { fetchLiveProfilesFromSupabase, getStoredProfiles } from '@/lib/utils/approvalHelper';
 
 export default function TeacherPwaPage() {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'ATTENDANCE' | 'MEDICATION' | 'MEALS' | 'CHECKOUT'>('ATTENDANCE');
+
+  // Teacher class assignment state (T1 = assigned, T0 = unassigned empty state)
+  const [isClassAssigned, setIsClassAssigned] = useState<boolean>(true);
+  const [assignedClassName, setAssignedClassName] = useState<string>('Mầm 1 (Rose)');
+  const [refreshingClass, setRefreshingClass] = useState<boolean>(false);
+  const [teacherEmail, setTeacherEmail] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let emailFound = '';
+      const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (match) emailFound = decodeURIComponent(match[1]);
+      if (!emailFound) {
+        const saved = localStorage.getItem('suongmai_auth_user');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.email) emailFound = parsed.email;
+          } catch (e) {}
+        }
+      }
+      if (emailFound) {
+        setTeacherEmail(emailFound);
+        const profiles = getStoredProfiles();
+        const profile = profiles.find((p) => p.email.toLowerCase().trim() === emailFound.toLowerCase().trim());
+        if (profile && profile.role === 'TEACHER') {
+          if (!profile.assigned_class_id && !profile.assigned_class_name) {
+            setIsClassAssigned(false);
+          } else {
+            setIsClassAssigned(true);
+            setAssignedClassName(profile.assigned_class_name || 'Mầm 1 (Rose)');
+          }
+        }
+      }
+    }
+  }, []);
+
+  const handleRefreshClassAssignment = async () => {
+    setRefreshingClass(true);
+    try {
+      const profiles = await fetchLiveProfilesFromSupabase();
+      if (teacherEmail) {
+        const profile = profiles.find((p) => p.email.toLowerCase().trim() === teacherEmail.toLowerCase().trim());
+        if (profile) {
+          if (profile.assigned_class_id || profile.assigned_class_name) {
+            setIsClassAssigned(true);
+            setAssignedClassName(profile.assigned_class_name || 'Mầm 1 (Rose)');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error checking teacher class assignment:', e);
+    } finally {
+      setTimeout(() => setRefreshingClass(false), 500);
+    }
+  };
 
   // Attendance State
   const [students, setStudents] = useState(
@@ -52,6 +109,68 @@ export default function TeacherPwaPage() {
   const [showLateCheckoutModal, setShowLateCheckoutModal] = useState(false);
   const [lateStudentId, setLateStudentId] = useState<string | null>(null);
   const [lateReason, setLateReason] = useState('Phụ huynh bận công việc đột xuất');
+
+  // --- TEACHER EMPTY STATE (Section III.2 Technical Directive) ---
+  if (!isClassAssigned) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-4 right-4 z-20">
+          <LanguageSwitcher />
+        </div>
+
+        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 text-center shadow-xl relative z-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-50 border border-amber-200 rounded-2xl mb-4 text-amber-600 shadow-sm">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+
+          <h2 className="text-xl font-bold text-amber-900 tracking-tight mb-3">
+            Tài khoản Giáo viên chưa phân công lớp 🏫
+          </h2>
+
+          <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-6 px-2">
+            Tài khoản Giáo viên của bạn chưa được phân công lớp phụ trách. Vui lòng liên hệ Ban Giám Hiệu để được xếp lớp giảng dạy.
+          </p>
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium mb-6 flex items-center justify-center gap-2">
+            <Phone className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Hotline Ban Giám Hiệu: <strong>028.3896.1234</strong></span>
+          </div>
+
+          <button
+            onClick={handleRefreshClassAssignment}
+            disabled={refreshingClass}
+            className="w-full py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshingClass ? 'animate-spin' : ''}`} />
+            <span>[ 🔄 Kiểm tra lại ]</span>
+          </button>
+
+          {/* QC Mode Selector Bar */}
+          <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500">
+            <span className="font-semibold block mb-1">Chế độ kiểm thử (QC Selector):</span>
+            <div className="flex items-center justify-center gap-1.5">
+              <button
+                onClick={() => setIsClassAssigned(false)}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  !isClassAssigned ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                T0 (Chưa gán lớp)
+              </button>
+              <button
+                onClick={() => setIsClassAssigned(true)}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  isClassAssigned ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                T1 (Đã gán lớp Mầm 1)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // --- ACTIONS & HANDLERS ---
 

@@ -4,18 +4,24 @@ import React, { useState } from 'react';
 import { 
   Heart, Calendar, Clock, CheckCircle2, ChevronLeft, Plus, 
   Shield, Sparkles, FileText, Phone, Check, UserCheck, AlertCircle, X,
-  Utensils, Activity, ArrowRight
+  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS } from '@/lib/supabase/client';
-import { AbsenceRequest, AuthorizedPickup, Student } from '@/lib/types/schema';
+import { AbsenceRequest, AuthorizedPickup, Student, ParentStudentRelation } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAllergen } from '@/lib/utils/menuHelper';
 import { INITIAL_HEALTH_RECORDS, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
+import { getStoredRelations, fetchLiveProfilesFromSupabase } from '@/lib/utils/approvalHelper';
 
 // Demo Parent Profiles for Testing Data Isolation & Selector Logic
 const MOCK_PARENT_PROFILES = [
+  {
+    id: 'p0',
+    name: 'Phụ huynh P0 (Chưa gán con - Empty State)',
+    children: [],
+  },
   {
     id: 'p1',
     name: 'Phụ huynh P1 (1 con duy nhất - TC-AUTH-01)',
@@ -69,13 +75,74 @@ const MOCK_PARENT_PROFILES = [
 export default function ParentPwaPage() {
   const { t, language } = useLanguage();
 
-  // Test Mode Toggle for Parent P1 (1 child) vs P2 (2 children)
-  const [activeParentIndex, setActiveParentIndex] = useState<number>(1); // Defaults to P2 for testing multi-child
+  // Test Mode Toggle for Parent P0 (0 child), P1 (1 child) vs P2 (2 children)
+  const [activeParentIndex, setActiveParentIndex] = useState<number>(2); // Defaults to P2
+  const [parentEmail, setParentEmail] = useState<string>('');
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Read logged in parent email and relations
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let emailFound = '';
+      const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (match) emailFound = decodeURIComponent(match[1]);
+      if (!emailFound) {
+        const saved = localStorage.getItem('suongmai_auth_user');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.email) emailFound = parsed.email;
+          } catch (e) {}
+        }
+      }
+      if (emailFound) {
+        setParentEmail(emailFound);
+        const rels = getStoredRelations().filter(
+          (r) => (r.parent_email.toLowerCase().trim() === emailFound.toLowerCase().trim()) && r.is_verified
+        );
+        if (rels.length === 0) {
+          setActiveParentIndex(0); // Show empty state if user has 0 linked kids
+        } else if (rels.length === 1) {
+          setActiveParentIndex(1);
+        } else {
+          setActiveParentIndex(2);
+        }
+      }
+    }
+  }, []);
+
+  const handleRefreshParentRelations = async () => {
+    setRefreshing(true);
+    try {
+      await fetchLiveProfilesFromSupabase();
+      if (typeof window !== 'undefined') {
+        const email = parentEmail || 'parent@gmail.com';
+        const rels = getStoredRelations().filter(
+          (r) => (r.parent_email.toLowerCase().trim() === email.toLowerCase().trim()) && r.is_verified
+        );
+        if (rels.length > 0) {
+          setActiveParentIndex(rels.length >= 2 ? 2 : 1);
+        }
+      }
+    } catch (e) {
+      console.warn('Error refreshing parent relations:', e);
+    } finally {
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   const currentParent = MOCK_PARENT_PROFILES[activeParentIndex] || MOCK_PARENT_PROFILES[0];
   const parentChildren = currentParent?.children || [];
 
   // Selected Child State
   const [selectedChildId, setSelectedChildId] = useState<string>(parentChildren[0]?.id || '');
+
+  React.useEffect(() => {
+    if (parentChildren.length > 0 && !parentChildren.some((c) => c.id === selectedChildId)) {
+      setSelectedChildId(parentChildren[0].id);
+    }
+  }, [parentChildren, selectedChildId]);
+
   const selectedChild = parentChildren.find((c) => c.id === selectedChildId) || parentChildren[0] || null;
 
   // Active Main View Tab
@@ -93,7 +160,7 @@ export default function ParentPwaPage() {
   // Handle Parent Submitting New Authorized Pickup (Defaults to PENDING)
   const handleParentAddPickup = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPickupName || !newPickupPhone) return;
+    if (!newPickupName || !newPickupPhone || !selectedChild) return;
 
     const newPickup: AuthorizedPickup = {
       id: `p-${Date.now()}`,
@@ -131,6 +198,7 @@ export default function ParentPwaPage() {
   // Submit Absence Request
   const handleSubmitAbsence = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedChild) return;
     const isFeeCredited = !simulateLateSubmission;
     const newStatus = isFeeCredited ? 'SUBMITTED_VALID' : 'SUBMITTED_LATE';
     const reasonText = customReason ? `${selectedReasonTag}: ${customReason}` : selectedReasonTag;
@@ -154,7 +222,9 @@ export default function ParentPwaPage() {
   };
 
   // Filtered Absences for Selected Child
-  const childAbsences = absences.filter((a) => a.student_id === selectedChild.id || a.student_name === selectedChild.full_name);
+  const childAbsences = selectedChild
+    ? absences.filter((a) => a.student_id === selectedChild.id || a.student_name === selectedChild.full_name)
+    : [];
 
   // 4-Week Rotating Menu Logic for Today
   const currentWeekNum = getCurrentMenuWeek();
@@ -164,33 +234,79 @@ export default function ParentPwaPage() {
   );
 
   // Latest Health Record for Selected Child
-  const latestHealth = INITIAL_HEALTH_RECORDS.filter(
-    (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
-  ).slice(-1)[0] || INITIAL_HEALTH_RECORDS[0];
+  const latestHealth = selectedChild
+    ? INITIAL_HEALTH_RECORDS.filter(
+        (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
+      ).slice(-1)[0] || INITIAL_HEALTH_RECORDS[0]
+    : INITIAL_HEALTH_RECORDS[0];
 
   const healthDisplay = getGrowthStatusDisplay(latestHealth.growth_status);
 
+  // --- EMPTY STATE FOR UNLINKED PARENTS (Section III.2 Technical Directive) ---
   if (!selectedChild || parentChildren.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 font-sans">
-        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-convent p-6 text-center shadow-xl relative">
-          <div className="w-16 h-16 bg-sky-50 border border-sky-200 rounded-convent inline-flex items-center justify-center text-sky-600 mb-4 shadow-sm animate-pulse">
-            <Clock className="w-8 h-8" />
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-4 right-4 z-20">
+          <LanguageSwitcher />
+        </div>
+
+        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 text-center shadow-xl relative z-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-50 border border-amber-200 rounded-2xl mb-4 text-amber-600 shadow-sm">
+            <ShieldAlert className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Hồ sơ đang chờ xếp lớp học sinh 🏫</h2>
-          <p className="text-slate-500 text-sm leading-relaxed mb-6">
-            Tài khoản Phụ huynh của bạn đã được phê duyệt thành công! Ban Giám Hiệu đang tiến hành xếp lớp và gán thông tin con. Vui lòng quay lại sau ít phút hoặc liên hệ Văn phòng trường.
+
+          <h2 className="text-xl font-bold text-amber-900 tracking-tight mb-3">
+            Tài khoản chưa được liên kết với hồ sơ của bé 👨‍👩‍👧
+          </h2>
+
+          <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-6 px-2">
+            Tài khoản của bạn đã được xác nhận là Phụ huynh, nhưng hiện chưa được liên kết với hồ sơ của bé. Vui lòng liên hệ Nhà trường để hoàn tất liên kết thông tin cho con.
           </p>
-          <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 font-semibold mb-6 flex items-center justify-center gap-2">
-            <Phone className="w-4 h-4 text-sky-600 shrink-0" />
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium mb-6 flex items-center justify-center gap-2">
+            <Phone className="w-4 h-4 text-amber-600 shrink-0" />
             <span>Hotline Văn phòng: <strong>028.3896.1234</strong></span>
           </div>
+
           <button
-            onClick={() => window.location.reload()}
-            className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer"
+            onClick={handleRefreshParentRelations}
+            disabled={refreshing}
+            className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            🔄 Tải lại thông tin
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>[ 🔄 Kiểm tra lại ]</span>
           </button>
+
+          {/* QC Mode Selector Bar */}
+          <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500">
+            <span className="font-semibold block mb-1">Chế độ kiểm thử (QC Selector):</span>
+            <div className="flex items-center justify-center gap-1.5">
+              <button
+                onClick={() => setActiveParentIndex(0)}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  activeParentIndex === 0 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                P0 (Chưa gán bé)
+              </button>
+              <button
+                onClick={() => setActiveParentIndex(1)}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  activeParentIndex === 1 ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                P1 (1 bé)
+              </button>
+              <button
+                onClick={() => setActiveParentIndex(2)}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  activeParentIndex === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                P2 (2 bé)
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -198,20 +314,17 @@ export default function ParentPwaPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
-      {/* Test Scenario Switcher Bar (For QC Verification of TC-AUTH-01 vs TC-AUTH-02) */}
+      {/* Test Scenario Switcher Bar (For QC Verification of TC-AUTH-01 vs TC-AUTH-02 vs P0) */}
       <div className="p-2 bg-slate-800 text-white text-[11px] flex items-center justify-between">
         <span className="font-semibold text-slate-300">QC Test Account Mode:</span>
         <div className="flex gap-1">
           <button
-            onClick={() => {
-              setActiveParentIndex(0);
-              setSelectedChildId(MOCK_PARENT_PROFILES[0].children[0].id);
-            }}
+            onClick={() => setActiveParentIndex(0)}
             className={`px-2 py-0.5 rounded font-bold transition-all ${
-              activeParentIndex === 0 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
+              activeParentIndex === 0 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
             }`}
           >
-            P1 (1 bé)
+            P0 (0 bé)
           </button>
           <button
             onClick={() => {
@@ -220,6 +333,17 @@ export default function ParentPwaPage() {
             }}
             className={`px-2 py-0.5 rounded font-bold transition-all ${
               activeParentIndex === 1 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
+            }`}
+          >
+            P1 (1 bé)
+          </button>
+          <button
+            onClick={() => {
+              setActiveParentIndex(2);
+              setSelectedChildId(MOCK_PARENT_PROFILES[2].children[0].id);
+            }}
+            className={`px-2 py-0.5 rounded font-bold transition-all ${
+              activeParentIndex === 2 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
             }`}
           >
             P2 (2 bé)

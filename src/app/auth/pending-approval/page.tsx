@@ -75,9 +75,12 @@ function PendingApprovalContent() {
         </div>
 
         {/* User Directive Exact Required Notification */}
-        <h1 className="text-xl sm:text-2xl font-bold text-amber-900 tracking-tight mb-4">
-          Bạn cần được nhà trường xác nhận để được đăng nhập.
+        <h1 className="text-xl sm:text-2xl font-bold text-amber-900 tracking-tight mb-3">
+          Tài khoản đang chờ kích hoạt ⏳
         </h1>
+        <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-4 px-2">
+          Tài khoản của bạn đã được ghi nhận và đang chờ Nhà trường xác nhận quyền truy cập. Vui lòng liên hệ Ban Giám Hiệu để được kích hoạt.
+        </p>
 
         {email && (
           <div className="mb-6 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-600 inline-block">
