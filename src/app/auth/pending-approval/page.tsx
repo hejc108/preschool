@@ -198,7 +198,7 @@ function PendingApprovalContent() {
             </p>
           ) : (
             <p className="font-medium text-amber-900 bg-amber-50/80 border border-amber-200 p-3.5 rounded-xl text-xs leading-normal shadow-sm">
-              Tài khoản của bạn đang chờ Ban Giám Hiệu phê duyệt. Hệ thống sẽ **tự động chuyển hướng ngay lập tức** (Zero-Friction UX) trong 2-3 giây khi Admin bấm Duyệt.
+              Tài khoản của bạn đang chờ Ban Giám Hiệu phê duyệt. Ngay khi được duyệt, hệ thống sẽ tự động chuyển hướng vào trang ứng dụng.
             </p>
           )}
 
@@ -219,7 +219,7 @@ function PendingApprovalContent() {
             className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 px-4 rounded-pill transition-all shadow-md shadow-sky-600/20 active:scale-[0.98] text-sm cursor-pointer disabled:opacity-60"
           >
             <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
-            <span>{checking ? 'Đang kiểm tra dữ liệu DB...' : '🔄 Kiểm tra ngay (Real-time active)'}</span>
+            <span>{checking ? 'Đang kiểm tra...' : 'Kiểm tra trạng thái phê duyệt'}</span>
           </button>
 
           <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 shadow-sm">
