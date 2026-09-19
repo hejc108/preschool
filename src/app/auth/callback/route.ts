@@ -46,12 +46,11 @@ export async function GET(request: Request) {
     const cleanEmail = userEmail.toLowerCase().trim();
     const status = checkUserApprovalStatus(cleanEmail);
 
-    const isAlan = cleanEmail === 'alanvu755@gmail.com';
-    const isApproved = isAlan || status.approvalStatus === 'ACTIVE';
+    const isApproved = status.approvalStatus === 'ACTIVE';
 
     if (isApproved) {
-      const targetRole = isAlan ? 'SUPER_ADMIN' : status.profile?.role || 'SCHOOL_ADMIN';
-      const targetUrl = isAlan ? '/admin/dashboard' : (status.redirectUrl || '/admin/dashboard');
+      const targetRole = status.profile?.role || 'SCHOOL_ADMIN';
+      const targetUrl = status.redirectUrl || '/admin/dashboard';
       const response = NextResponse.redirect(`${origin}${targetUrl}`);
       response.cookies.set('suongmai_session', 'active', {
         path: '/',

@@ -20,12 +20,11 @@ export function middleware(request: NextRequest) {
     const roleCookie = request.cookies.get('suongmai_user_role')?.value || '';
     const usernameCookie = request.cookies.get('suongmai_username')?.value || '';
 
-    // Rule 1: sadmin (Super Admin) & alanvu755@gmail.com are granted full SUPER_ADMIN access
+    // Rule 1: sadmin (Super Admin) & approved SUPER_ADMIN are granted full access
     const isSadmin =
       roleCookie === 'SUPER_ADMIN' ||
       usernameCookie === 'sadmin' ||
-      emailCookie === 'sadmin@suongmai.edu.vn' ||
-      emailCookie === 'alanvu755@gmail.com';
+      emailCookie === 'sadmin@suongmai.edu.vn';
 
     if (isSadmin && sessionCookie === 'active') {
       return NextResponse.next();

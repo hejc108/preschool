@@ -123,13 +123,9 @@ export function checkUserApprovalStatus(email: string): {
 } {
   const cleanEmail = email.toLowerCase().trim();
 
-  // sadmin & alanvu755@gmail.com are auto-granted SUPER_ADMIN ACTIVE status
-  if (cleanEmail === 'sadmin@suongmai.edu.vn' || cleanEmail === 'alanvu755@gmail.com') {
-    const isAlan = cleanEmail === 'alanvu755@gmail.com';
-    const profile = registerGoogleUserIfMissing(
-      cleanEmail,
-      isAlan ? 'Alan Vũ (Super Admin)' : 'Quản Trị Tối Cao (Super Admin)'
-    );
+  // sadmin is auto-granted SUPER_ADMIN ACTIVE status
+  if (cleanEmail === 'sadmin@suongmai.edu.vn') {
+    const profile = registerGoogleUserIfMissing('sadmin@suongmai.edu.vn', 'Quản Trị Tối Cao (Super Admin)');
     profile.role = 'SUPER_ADMIN';
     profile.approval_status = 'ACTIVE';
 
@@ -206,13 +202,12 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
     }
     const existingCache = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
     if (!existingCache) {
-      const isAlan = cleanEmail === 'alanvu755@gmail.com';
       const newCacheProfile: Profile = {
         id: `u-gauth-${Date.now()}`,
         email: cleanEmail,
-        full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
-        role: isAlan ? 'SUPER_ADMIN' : 'GUEST',
-        approval_status: isAlan ? 'ACTIVE' : 'PENDING',
+        full_name: fullName || cleanEmail.split('@')[0],
+        role: 'GUEST',
+        approval_status: 'PENDING',
         avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         created_at: new Date().toISOString(),
       };
@@ -224,22 +219,15 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
   let existing = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
 
   if (existing) {
-    if (cleanEmail === 'alanvu755@gmail.com') {
-      existing.role = 'SUPER_ADMIN';
-      existing.approval_status = 'ACTIVE';
-      saveStoredProfiles(profiles);
-    }
     return existing;
   }
-
-  const isAlan = cleanEmail === 'alanvu755@gmail.com';
 
   const newProfile: Profile = {
     id: `u-gauth-${Date.now()}`,
     email: cleanEmail,
-    full_name: fullName || (isAlan ? 'Alan Vũ (Super Admin)' : cleanEmail.split('@')[0]),
-    role: isAlan ? 'SUPER_ADMIN' : 'GUEST',
-    approval_status: isAlan ? 'ACTIVE' : 'PENDING',
+    full_name: fullName || cleanEmail.split('@')[0],
+    role: 'GUEST',
+    approval_status: 'PENDING',
     avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     created_at: new Date().toISOString(),
   };

@@ -30,11 +30,9 @@ function AuthContent() {
       });
       if (error) {
         console.error('Supabase OAuth error:', error);
-        window.location.href = `/auth/callback?email=alanvu755@gmail.com&redirectTo=${encodeURIComponent(redirectTo)}`;
       }
     } catch (err: any) {
       console.error('Supabase OAuth exception:', err?.message || err);
-      window.location.href = `/auth/callback?email=alanvu755@gmail.com&redirectTo=${encodeURIComponent(redirectTo)}`;
     } finally {
       setLoading(false);
     }
