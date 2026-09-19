@@ -167,16 +167,29 @@ export async function PUT(request: Request) {
     }
 
     const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
-    const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
+    let idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
+
+    let targetProfile: any;
 
     if (idx === -1) {
-      return NextResponse.json({ success: false, message: 'Không tìm thấy tài khoản' }, { status: 404 });
+      targetProfile = {
+        id: `u-${Date.now()}`,
+        full_name: body.full_name || email.split('@')[0],
+        email,
+        role: body.role || 'PARENT',
+        approval_status: body.approval_status || 'ACTIVE',
+        assigned_class_id: body.assigned_class_id,
+        assigned_class_name: body.assigned_class_name,
+        created_at: new Date().toISOString(),
+      };
+      serverCache.push(targetProfile);
+    } else {
+      if (body.approval_status) serverCache[idx].approval_status = body.approval_status;
+      if (body.role) serverCache[idx].role = body.role;
+      if (body.assigned_class_id) serverCache[idx].assigned_class_id = body.assigned_class_id;
+      if (body.assigned_class_name) serverCache[idx].assigned_class_name = body.assigned_class_name;
+      targetProfile = serverCache[idx];
     }
-
-    if (body.approval_status) serverCache[idx].approval_status = body.approval_status;
-    if (body.role) serverCache[idx].role = body.role;
-    if (body.assigned_class_id) serverCache[idx].assigned_class_id = body.assigned_class_id;
-    if (body.assigned_class_name) serverCache[idx].assigned_class_name = body.assigned_class_name;
 
     globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
@@ -186,17 +199,19 @@ export async function PUT(request: Request) {
       try {
         await supabase
           .from('profiles')
-          .update({
-            role: serverCache[idx].role,
-            approval_status: serverCache[idx].approval_status,
-            assigned_class_id: serverCache[idx].assigned_class_id,
-            assigned_class_name: serverCache[idx].assigned_class_name,
-          })
-          .eq('email', email);
+          .upsert({
+            id: targetProfile.id,
+            email: targetProfile.email,
+            full_name: targetProfile.full_name,
+            role: targetProfile.role,
+            approval_status: targetProfile.approval_status,
+            assigned_class_id: targetProfile.assigned_class_id,
+            assigned_class_name: targetProfile.assigned_class_name,
+          });
       } catch (e) {}
     }
 
-    return NextResponse.json({ success: true, profile: serverCache[idx] });
+    return NextResponse.json({ success: true, profile: targetProfile });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }

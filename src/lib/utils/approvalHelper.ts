@@ -375,6 +375,20 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
 
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/users/approvals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          role: 'SCHOOL_ADMIN',
+          approval_status: 'ACTIVE',
+        }),
+      });
+    } catch (e) {}
+  }
+
   try {
     await supabase
       .from('profiles')
@@ -404,6 +418,22 @@ export async function approveTeacherUser(email: string, classId?: string, classN
   if (className) profiles[idx].assigned_class_name = className;
 
   saveStoredProfiles(profiles);
+
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/users/approvals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          role: 'TEACHER',
+          approval_status: 'ACTIVE',
+          assigned_class_id: classId,
+          assigned_class_name: className,
+        }),
+      });
+    } catch (e) {}
+  }
 
   try {
     await supabase
@@ -436,6 +466,20 @@ export async function approveStaffUser(email: string): Promise<Profile | null> {
   profiles[idx].role = 'STAFF';
   profiles[idx].approval_status = 'ACTIVE';
   saveStoredProfiles(profiles);
+
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/users/approvals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          role: 'STAFF',
+          approval_status: 'ACTIVE',
+        }),
+      });
+    } catch (e) {}
+  }
 
   try {
     await supabase
@@ -501,6 +545,20 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
 
   saveStoredRelations(relations);
 
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/users/approvals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          role: 'PARENT',
+          approval_status: 'ACTIVE',
+        }),
+      });
+    } catch (e) {}
+  }
+
   try {
     await supabase
       .from('profiles')
@@ -529,6 +587,19 @@ export async function rejectUser(email: string): Promise<Profile | null> {
 
   profiles[idx].approval_status = 'REJECTED';
   saveStoredProfiles(profiles);
+
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/users/approvals', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          approval_status: 'REJECTED',
+        }),
+      });
+    } catch (e) {}
+  }
 
   try {
     await supabase
