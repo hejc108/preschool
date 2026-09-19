@@ -344,15 +344,15 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
 }
 
 /**
- * Promote user to SCHOOL_ADMIN (Only permitted if operator is SUPER_ADMIN / alanvu755@gmail.com)
+ * Promote user to SCHOOL_ADMIN (Only permitted if operator is SUPER_ADMIN / sadmin@suongmai.edu.vn)
  */
 export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: string): Promise<Profile | null> {
   const cleanEmail = targetEmail.toLowerCase().trim();
   const cleanOperator = (operatorEmail || '').toLowerCase().trim();
 
   // Enforce Super Admin authority rule
-  if (cleanOperator && cleanOperator !== 'alanvu755@gmail.com' && cleanOperator !== 'admin@suongmai.edu.vn') {
-    throw new Error('Chỉ tài khoản alanvu755@gmail.com (Super Admin) mới có quyền cấp quyền Quản trị trường!');
+  if (cleanOperator && cleanOperator !== 'sadmin@suongmai.edu.vn' && cleanOperator !== 'admin@suongmai.edu.vn') {
+    throw new Error('Chỉ tài khoản sadmin (Super Admin) mới có quyền cấp quyền Quản trị trường!');
   }
 
   const profiles = getStoredProfiles();

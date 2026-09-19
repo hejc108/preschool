@@ -301,7 +301,7 @@ export default function UserApprovalsPage() {
                   const selectedRole = rowRoles[p.id] || p.role || 'PARENT';
                   const selectedClassId = rowClasses[p.id] || p.assigned_class_id || 'c1';
 
-                  const isSuperAdminAccount = p.email.toLowerCase().trim() === 'alanvu755@gmail.com';
+                  const isSuperAdminAccount = p.role === 'SUPER_ADMIN' || p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn';
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
