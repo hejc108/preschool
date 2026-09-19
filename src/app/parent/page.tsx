@@ -168,6 +168,8 @@ export default function ParentPwaPage() {
     (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
   ).slice(-1)[0] || INITIAL_HEALTH_RECORDS[0];
 
+  const healthDisplay = getGrowthStatusDisplay(latestHealth.growth_status);
+
   if (!selectedChild || parentChildren.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 font-sans">
