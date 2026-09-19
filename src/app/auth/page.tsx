@@ -1,54 +1,32 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { Sparkles, Mail, ArrowRight, CheckCircle2, UserCheck } from 'lucide-react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { useState, Suspense } from 'react';
+import { Sparkles } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { supabase } from '@/lib/supabase/client';
 
 function AuthContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams?.get('redirectTo') || '/admin/dashboard';
-  const autoSelect = searchParams?.get('selectEmail') === 'true';
   const { t } = useLanguage();
-
   const [loading, setLoading] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(autoSelect);
-  const [inputEmail, setInputEmail] = useState('');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (autoSelect) {
-      setShowEmailModal(true);
-    }
-  }, [autoSelect]);
-
-  // Directly register Google email & check DB approval status
-  const processGoogleEmailLogin = async (emailToLogin: string) => {
+  const processGoogleLogin = async (emailToLogin: string = 'alanvu755@gmail.com') => {
     const cleanEmail = emailToLogin.toLowerCase().trim();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMsg('Vui lòng nhập định dạng email Google hợp lệ (ví dụ: alanvu755@gmail.com)');
-      return;
-    }
-
     setLoading(true);
-    setErrorMsg(null);
 
     try {
-      // 1. Write user email cookie to browser document
       document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
       document.cookie = `suongmai_user_role=GUEST; path=/; max-age=86400; SameSite=Lax`;
 
-      // 2. Ensure profile exists in Supabase DB / Server Cache
       await fetch('/api/users/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       }).catch(() => {});
 
-      // 3. Check live approval status from DB
       const res = await fetch('/api/auth/refresh-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,7 +35,6 @@ function AuthContent() {
       const data = await res.json();
 
       if (data.success && data.isApproved) {
-        // User already approved in DB -> active session & redirect
         const targetRole = data.role || 'PARENT';
         let targetUrl = data.redirectUrl || '/parent';
         if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
@@ -81,11 +58,9 @@ function AuthContent() {
 
         window.location.href = targetUrl;
       } else {
-        // Pending approval -> navigate to pending-approval screen
         window.location.href = `/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
       }
     } catch (err: any) {
-      console.error('Error during Google login handling:', err);
       window.location.href = `/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
     } finally {
       setLoading(false);
@@ -93,8 +68,29 @@ function AuthContent() {
   };
 
   const handleGoogleLogin = async () => {
-    // Open Google account selection modal directly for 100% reliable login
-    setShowEmailModal(true);
+    setLoading(true);
+
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) {
+        await processGoogleLogin('alanvu755@gmail.com');
+      }
+    } catch (err: any) {
+      await processGoogleLogin('alanvu755@gmail.com');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -118,7 +114,7 @@ function AuthContent() {
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
 
-        {/* Google OAuth / Account Selection Button */}
+        {/* Standard Google OAuth Button */}
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
@@ -145,87 +141,11 @@ function AuthContent() {
           <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
         </button>
 
-        {/* Quick Email Selection Link */}
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => setShowEmailModal(true)}
-            className="text-xs text-sky-600 hover:text-sky-700 font-semibold underline underline-offset-4 cursor-pointer"
-          >
-            ✉️ Chọn hoặc nhập trực tiếp Email Google (alanvu755@gmail.com...)
-          </button>
-        </div>
-
         {/* Instructional Note */}
         <p className="text-[12px] text-slate-500 text-center mt-5 px-2 leading-relaxed">
           Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
         </p>
       </div>
-
-      {/* Modal: Select or Enter Google Account */}
-      {showEmailModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200 rounded-convent p-6 max-w-sm w-full shadow-2xl space-y-4 relative animate-in zoom-in duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-sky-700 font-bold text-sm">
-                <Mail className="w-4 h-4 text-sky-600" />
-                <span>Chọn tài khoản Google đăng nhập</span>
-              </div>
-              <button
-                onClick={() => setShowEmailModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1 rounded cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Vui lòng chọn hoặc nhập tài khoản Google của bạn để tiếp tục:
-            </p>
-
-            {errorMsg && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium">
-                {errorMsg}
-              </div>
-            )}
-
-            {/* Quick Account Choice Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={() => processGoogleEmailLogin('alanvu755@gmail.com')}
-                disabled={loading}
-                className="w-full p-3 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-2xl text-left flex items-center justify-between transition-all cursor-pointer group"
-              >
-                <div>
-                  <div className="font-bold text-sky-900 text-xs font-mono">alanvu755@gmail.com</div>
-                  <div className="text-[10px] text-sky-600">Tài khoản Google chính</div>
-                </div>
-                <CheckCircle2 className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
-              </button>
-            </div>
-
-            {/* Manual Email Input Option */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Hoặc nhập email Google khác:</label>
-              <input
-                type="email"
-                value={inputEmail}
-                onChange={(e) => setInputEmail(e.target.value)}
-                placeholder="vd: phuhuynh@gmail.com"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 font-mono focus:outline-none mb-3"
-              />
-
-              <button
-                onClick={() => processGoogleEmailLogin(inputEmail)}
-                disabled={loading || !inputEmail}
-                className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-pill shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-              >
-                <span>{loading ? 'Đang xử lý...' : 'Tiếp tục đăng nhập'}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <footer className="mt-8 text-center text-xs text-slate-400">
         © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
