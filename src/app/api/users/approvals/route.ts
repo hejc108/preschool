@@ -12,11 +12,11 @@ const INITIAL_SERVER_PROFILES: Profile[] = [
     created_at: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'u-active-alanvu755',
+    id: 'u-pending-alanvu755',
     full_name: 'Alan Vũ',
     email: 'alanvu755@gmail.com',
-    role: 'PARENT',
-    approval_status: 'ACTIVE',
+    role: 'GUEST',
+    approval_status: 'PENDING',
     created_at: '2026-09-19T00:00:00Z',
   },
 ];

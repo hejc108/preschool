@@ -26,26 +26,16 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     created_at: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'u-active-alanvu755',
+    id: 'u-pending-alanvu755',
     full_name: 'Alan Vũ',
     email: 'alanvu755@gmail.com',
-    role: 'PARENT',
-    approval_status: 'ACTIVE',
+    role: 'GUEST',
+    approval_status: 'PENDING',
     created_at: '2026-09-19T00:00:00Z',
   },
 ];
 
-export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [
-  {
-    id: 'rel-alanvu755-s1',
-    parent_id: 'u-active-alanvu755',
-    parent_email: 'alanvu755@gmail.com',
-    student_id: 's1',
-    student_name: 'Vũ Hoàng An',
-    is_verified: true,
-    created_at: '2026-09-19T00:00:00Z',
-  },
-];
+export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [];
 
 const DEPRECATED_MOCK_EMAILS = [
   'admin@suongmai.edu.vn',
