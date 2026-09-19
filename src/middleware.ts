@@ -52,7 +52,6 @@ export function middleware(request: NextRequest) {
       }
       const loginUrl = new URL(isAdminRoute ? '/admin/login' : '/auth', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
-      loginUrl.searchParams.set('unauthorized', 'true');
       return NextResponse.redirect(loginUrl);
     }
 
