@@ -5,9 +5,10 @@ import { checkUserApprovalStatus, registerGoogleUserIfMissing } from '@/lib/util
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const redirectTo = searchParams.get('redirectTo') || '/admin/dashboard';
 
   let userEmail = searchParams.get('email') || '';
+  let fullName = '';
+  let avatarUrl = '';
 
   if (code) {
     const supabaseUrl = 
@@ -27,11 +28,8 @@ export async function GET(request: Request) {
         const { data, error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error && data.user?.email) {
           userEmail = data.user.email;
-          registerGoogleUserIfMissing(
-            userEmail, 
-            data.user.user_metadata?.full_name || data.user.user_metadata?.name, 
-            data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture
-          );
+          fullName = data.user.user_metadata?.full_name || data.user.user_metadata?.name || '';
+          avatarUrl = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || '';
         } else if (error) {
           console.error('OAuth code exchange error from Supabase:', error.message);
         }
@@ -44,8 +42,11 @@ export async function GET(request: Request) {
   // Process extracted email or redirect to login failure
   if (userEmail) {
     const cleanEmail = userEmail.toLowerCase().trim();
-    const status = checkUserApprovalStatus(cleanEmail);
 
+    // Register or upsert profile directly into Supabase PostgreSQL DB (defaults to GUEST & PENDING for 100% of Google accounts)
+    registerGoogleUserIfMissing(cleanEmail, fullName, avatarUrl);
+
+    const status = checkUserApprovalStatus(cleanEmail);
     const isApproved = status.approvalStatus === 'ACTIVE';
 
     if (isApproved) {
@@ -69,8 +70,7 @@ export async function GET(request: Request) {
       });
       return response;
     } else {
-      // Pending or new user: Register profile as PENDING, delete active session, redirect to pending page
-      registerGoogleUserIfMissing(cleanEmail);
+      // Pending or new user: Register profile as PENDING DB record, delete active session, redirect to pending page
       const pendingRedirect = `${origin}/auth/pending-approval?type=${status.pendingType || 'unknown'}&email=${encodeURIComponent(cleanEmail)}`;
       const response = NextResponse.redirect(pendingRedirect);
       response.cookies.delete('suongmai_session');
