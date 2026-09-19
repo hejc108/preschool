@@ -1,59 +1,20 @@
 'use client';
 
 import React, { useState, Suspense } from 'react';
-import { Mail, ShieldCheck, ArrowRight, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Sparkles, AlertCircle } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { supabase } from '@/lib/supabase/client';
 
-import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
-
 function AuthContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams?.get('redirectTo') || '/admin/dashboard';
   const { t } = useLanguage();
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'EMAIL' | 'OTP'>('EMAIL');
   const [loading, setLoading] = useState(false);
-
-  // Sync session cookie for middleware
-  const processLoginSession = (userEmail: string) => {
-    const clean = userEmail.toLowerCase().trim();
-    const checkStatus = checkUserApprovalStatus(clean);
-
-    const isAlan = clean === 'alanvu755@gmail.com';
-    const isApproved = isAlan || checkStatus.approvalStatus === 'ACTIVE';
-    const userRole = isAlan ? 'SUPER_ADMIN' : checkStatus.profile?.role || 'GUEST';
-
-    if (isApproved) {
-      document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
-    } else {
-      document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }
-
-    document.cookie = `suongmai_user_email=${encodeURIComponent(clean)}; path=/; max-age=86400; SameSite=Lax`;
-    document.cookie = `suongmai_user_role=${encodeURIComponent(userRole)}; path=/; max-age=86400; SameSite=Lax`;
-
-    const authData = { 
-      email: clean, 
-      role: userRole,
-      authenticated: isApproved, 
-      timestamp: Date.now() 
-    };
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('suongmai_auth_user', JSON.stringify(authData));
-    }
-
-    return checkStatus.redirectUrl;
-  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-
-    const currentEmail = email.toLowerCase().trim();
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
@@ -69,41 +30,12 @@ function AuthContent() {
       });
       if (error) {
         console.error('Supabase OAuth error:', error);
-        const targetUrl = processLoginSession(currentEmail || 'pending.user@gmail.com');
-        window.location.href = targetUrl;
       }
     } catch (err: any) {
       console.error('Supabase OAuth exception:', err?.message || err);
-      const targetUrl = processLoginSession(currentEmail || 'pending.user@gmail.com');
-      window.location.href = targetUrl;
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSendOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    setLoading(true);
-    const identifier = email.trim();
-    const formattedEmail = identifier.includes('@') ? identifier : `${identifier}@suongmai.edu.vn`;
-    setEmail(formattedEmail);
-    setTimeout(() => {
-      setLoading(false);
-      setStep('OTP');
-    }, 800);
-  };
-
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const targetUrl = processLoginSession(email);
-
-    setTimeout(() => {
-      setLoading(false);
-      window.location.href = targetUrl;
-    }, 800);
   };
 
   const isUnauthorized = searchParams?.get('unauthorized') === 'true';
@@ -131,7 +63,7 @@ function AuthContent() {
 
         {/* Security Alert: Unauthorized Access Attempt Blocked */}
         {isUnauthorized && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 font-bold flex items-start gap-2.5 shadow-sm animate-pulse">
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 font-bold flex items-start gap-2.5 shadow-sm">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div>
               <span className="font-extrabold block text-rose-950 text-sm mb-0.5">🔒 Yêu cầu xác thực đăng nhập</span>
@@ -140,24 +72,11 @@ function AuthContent() {
           </div>
         )}
 
-        {/* Local Inbucket Testing Banner (Hiển thị cho môi trường Dev cục bộ) */}
-        {process.env.NODE_ENV !== 'production' && (
-          <div className="mb-6 p-3.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-800 flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold text-sky-900">Local Dev Inbucket OTP:</span> {t('auth.inbucket_notice')}{' '}
-              <a href="http://localhost:54324" target="_blank" rel="noreferrer" className="underline font-mono text-sky-700 hover:text-sky-800">
-                http://localhost:54324
-              </a>.
-            </div>
-          </div>
-        )}
-
         {/* Google OAuth Button */}
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-800 font-semibold py-3 px-4 rounded-pill hover:bg-slate-50 transition-all shadow-sm mb-6 active:scale-[0.98] disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-800 font-semibold py-3.5 px-4 rounded-pill hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -181,104 +100,9 @@ function AuthContent() {
         </button>
 
         {/* Instructional Note */}
-        <p className="text-[12px] text-slate-500 text-center -mt-3 mb-6 px-2 leading-relaxed">
+        <p className="text-[12px] text-slate-500 text-center mt-4 px-2 leading-relaxed">
           Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
         </p>
-
-        <div className="relative my-6 text-center">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200"></div>
-          </div>
-          <span className="relative bg-white px-3 text-xs text-slate-400 font-medium">{t('auth.or_otp')}</span>
-        </div>
-
-        {/* Username / Email Form */}
-        {step === 'EMAIL' ? (
-          <form onSubmit={handleSendOtp} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                {t('auth.email_label')}
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin (hoặc admin@suongmai.edu.vn)"
-                  required
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-3 pl-11 pr-4 text-slate-800 placeholder-slate-400 text-sm focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 px-4 rounded-pill transition-all shadow-md shadow-sky-600/20 active:scale-[0.98]"
-            >
-              {loading ? (
-                <span className="text-sm">{t('auth.sending_otp')}</span>
-              ) : (
-                <>
-                  <span>{t('auth.send_otp')}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Đã gửi mã OTP 6 chữ số đến {email}</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                {t('auth.enter_otp')}
-              </label>
-              <div className="relative">
-                <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
-                  required
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-3 pl-11 pr-4 text-slate-800 placeholder-slate-400 text-base tracking-widest font-mono focus:outline-none transition-colors text-center"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-pill transition-all shadow-md active:scale-[0.98]"
-            >
-              {loading ? t('auth.verifying') : t('auth.verify_login')}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStep('EMAIL')}
-              className="w-full text-xs text-slate-400 hover:text-slate-800 transition-colors pt-2"
-            >
-              {t('auth.change_email')}
-            </button>
-          </form>
-        )}
-
-        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-          <a
-            href="/admin/login"
-            className="text-xs text-slate-500 hover:text-sky-700 font-semibold transition-colors inline-flex items-center gap-1.5"
-          >
-            <ShieldCheck className="w-4 h-4 text-sky-600" />
-            <span>Đăng nhập Cổng Quản Trị Viên (Super Admin sadmin)</span>
-          </a>
-        </div>
       </div>
 
       <footer className="mt-8 text-center text-xs text-slate-400">
