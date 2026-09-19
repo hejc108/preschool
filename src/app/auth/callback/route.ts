@@ -88,8 +88,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // If OAuth failed or email could not be obtained, redirect back to login page without session
-  const loginFailUrl = `${origin}/auth?unauthorized=true&error=oauth_failed`;
+  // If OAuth code exchange is unavailable or email is missing, redirect to Google Email selector
+  const loginFailUrl = `${origin}/auth?selectEmail=true`;
   const response = NextResponse.redirect(loginFailUrl);
   response.cookies.delete('suongmai_session');
   return response;

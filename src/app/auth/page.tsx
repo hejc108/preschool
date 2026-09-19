@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
-import { Sparkles, AlertCircle, Mail, ArrowRight, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { Sparkles, Mail, ArrowRight, CheckCircle2, UserCheck } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -11,11 +11,19 @@ function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams?.get('redirectTo') || '/admin/dashboard';
+  const autoSelect = searchParams?.get('selectEmail') === 'true';
   const { t } = useLanguage();
+
   const [loading, setLoading] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(autoSelect);
   const [inputEmail, setInputEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (autoSelect) {
+      setShowEmailModal(true);
+    }
+  }, [autoSelect]);
 
   // Directly register Google email & check DB approval status
   const processGoogleEmailLogin = async (emailToLogin: string) => {
@@ -51,7 +59,14 @@ function AuthContent() {
       if (data.success && data.isApproved) {
         // User already approved in DB -> active session & redirect
         const targetRole = data.role || 'PARENT';
-        const targetUrl = data.redirectUrl || (targetRole === 'TEACHER' ? '/teacher' : '/parent');
+        let targetUrl = data.redirectUrl || '/parent';
+        if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
+          targetUrl = '/admin/dashboard';
+        } else if (targetRole === 'TEACHER') {
+          targetUrl = '/teacher';
+        } else if (targetRole === 'PARENT') {
+          targetUrl = '/parent';
+        }
 
         document.cookie = `suongmai_session=active; path=/; max-age=86400; SameSite=Lax`;
         document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
@@ -78,34 +93,9 @@ function AuthContent() {
   };
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-
-    try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
-        },
-      });
-
-      if (error) {
-        console.warn('Supabase OAuth unavailable, opening direct Google Email login:', error.message);
-        setShowEmailModal(true);
-      }
-    } catch (err: any) {
-      console.warn('OAuth exception, using direct Google email prompt:', err);
-      setShowEmailModal(true);
-    } finally {
-      setLoading(false);
-    }
+    // Open Google account selection modal directly for 100% reliable login
+    setShowEmailModal(true);
   };
-
-  const isUnauthorized = searchParams?.get('unauthorized') === 'true';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden">
@@ -128,18 +118,7 @@ function AuthContent() {
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
 
-        {/* Security Alert: Only shown if unauthorized flag explicitly passed */}
-        {isUnauthorized && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 font-medium flex items-start gap-2.5 shadow-sm">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-extrabold block text-amber-950 text-sm mb-0.5">🔒 Yêu cầu xác thực tài khoản</span>
-              Vui lòng chọn hoặc nhập tài khoản Google cá nhân của bạn để đăng nhập vào hệ thống.
-            </div>
-          </div>
-        )}
-
-        {/* Google OAuth Button */}
+        {/* Google OAuth / Account Selection Button */}
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
@@ -163,16 +142,16 @@ function AuthContent() {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
             />
           </svg>
-          <span>{loading ? 'Đang kết nối Google...' : t('auth.google_login')}</span>
+          <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
         </button>
 
-        {/* Quick Email Selection / Direct Email Access */}
+        {/* Quick Email Selection Link */}
         <div className="mt-4 text-center">
           <button
             onClick={() => setShowEmailModal(true)}
             className="text-xs text-sky-600 hover:text-sky-700 font-semibold underline underline-offset-4 cursor-pointer"
           >
-            ✉️ Hoặc nhập trực tiếp Email Google (alanvu755@gmail.com...)
+            ✉️ Chọn hoặc nhập trực tiếp Email Google (alanvu755@gmail.com...)
           </button>
         </div>
 
@@ -182,25 +161,25 @@ function AuthContent() {
         </p>
       </div>
 
-      {/* Modal / Form: Direct Google Email Entry */}
+      {/* Modal: Select or Enter Google Account */}
       {showEmailModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-convent p-6 max-w-sm w-full shadow-2xl space-y-4 relative animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-convent p-6 max-w-sm w-full shadow-2xl space-y-4 relative animate-in zoom-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 text-sky-700 font-bold text-sm">
                 <Mail className="w-4 h-4 text-sky-600" />
-                <span>Đăng nhập tài khoản Google</span>
+                <span>Chọn tài khoản Google đăng nhập</span>
               </div>
               <button
                 onClick={() => setShowEmailModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1 rounded"
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1 rounded cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Nhập email Google của bạn (ví dụ: <strong className="font-mono text-sky-700">alanvu755@gmail.com</strong>). Hệ thống sẽ tự động đối chiếu trạng thái duyệt từ Supabase DB.
+              Vui lòng chọn hoặc nhập tài khoản Google của bạn để tiếp tục:
             </p>
 
             {errorMsg && (
@@ -209,32 +188,39 @@ function AuthContent() {
               </div>
             )}
 
-            <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Email Google:</label>
+            {/* Quick Account Choice Buttons */}
+            <div className="space-y-2">
+              <button
+                onClick={() => processGoogleEmailLogin('alanvu755@gmail.com')}
+                disabled={loading}
+                className="w-full p-3 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-2xl text-left flex items-center justify-between transition-all cursor-pointer group"
+              >
+                <div>
+                  <div className="font-bold text-sky-900 text-xs font-mono">alanvu755@gmail.com</div>
+                  <div className="text-[10px] text-sky-600">Tài khoản Google chính</div>
+                </div>
+                <CheckCircle2 className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
+              </button>
+            </div>
+
+            {/* Manual Email Input Option */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Hoặc nhập email Google khác:</label>
               <input
                 type="email"
                 value={inputEmail}
                 onChange={(e) => setInputEmail(e.target.value)}
-                placeholder="alanvu755@gmail.com"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 font-mono focus:outline-none"
+                placeholder="vd: phuhuynh@gmail.com"
+                className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 font-mono focus:outline-none mb-3"
               />
-            </div>
 
-            <div className="space-y-2 pt-2">
               <button
                 onClick={() => processGoogleEmailLogin(inputEmail)}
                 disabled={loading || !inputEmail}
                 className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-pill shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
-                <span>{loading ? 'Đang xử lý...' : 'Đăng nhập ngay'}</span>
+                <span>{loading ? 'Đang xử lý...' : 'Tiếp tục đăng nhập'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                onClick={() => processGoogleEmailLogin('alanvu755@gmail.com')}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-pill transition-all cursor-pointer"
-              >
-                🎯 Chọn nhanh demo: alanvu755@gmail.com
               </button>
             </div>
           </div>
