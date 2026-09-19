@@ -43,15 +43,29 @@ export async function GET(request: Request) {
   if (userEmail) {
     const cleanEmail = userEmail.toLowerCase().trim();
 
-    // Register or upsert profile directly into Supabase PostgreSQL DB (defaults to GUEST & PENDING for 100% of Google accounts)
+    // Register or upsert profile directly into Supabase PostgreSQL DB
     registerGoogleUserIfMissing(cleanEmail, fullName, avatarUrl);
 
+    // Fetch live profile status from global cache or Supabase DB
+    let liveProfile: any = null;
+    if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
+      liveProfile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
+    }
+
     const status = checkUserApprovalStatus(cleanEmail);
-    const isApproved = status.approvalStatus === 'ACTIVE';
+    const isApproved = liveProfile?.approval_status === 'ACTIVE' || status.approvalStatus === 'ACTIVE';
+    const resolvedRole = liveProfile?.role || status.profile?.role || 'PARENT';
 
     if (isApproved) {
-      const targetRole = status.profile?.role || 'SCHOOL_ADMIN';
-      const targetUrl = status.redirectUrl || '/admin/dashboard';
+      let targetUrl = '/parent';
+      if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
+        targetUrl = '/admin/dashboard';
+      } else if (resolvedRole === 'TEACHER') {
+        targetUrl = '/teacher/lesson-plans/new';
+      } else if (resolvedRole === 'PARENT') {
+        targetUrl = '/parent';
+      }
+
       const response = NextResponse.redirect(`${origin}${targetUrl}`);
       response.cookies.set('suongmai_session', 'active', {
         path: '/',
@@ -63,7 +77,7 @@ export async function GET(request: Request) {
         maxAge: 86400,
         sameSite: 'lax',
       });
-      response.cookies.set('suongmai_user_role', targetRole, {
+      response.cookies.set('suongmai_user_role', resolvedRole, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',

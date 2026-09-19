@@ -59,7 +59,12 @@ export function sanitizeProfiles(list: Profile[]): Profile[] {
  * Get all stored profiles (from localStorage or initial defaults)
  */
 export function getStoredProfiles(): Profile[] {
-  if (typeof window === 'undefined') return INITIAL_MOCK_PROFILES;
+  if (typeof window === 'undefined') {
+    if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
+      return globalThis.__SUONGMAI_PROFILES_CACHE__;
+    }
+    return INITIAL_MOCK_PROFILES;
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PROFILES);
     if (!raw) {
