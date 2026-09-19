@@ -33,7 +33,6 @@ import {
   promoteToSchoolAdmin,
   rejectUser,
   fetchLiveProfilesFromSupabase,
-  registerGoogleUserIfMissing,
 } from '@/lib/utils/approvalHelper';
 
 export default function UserApprovalsPage() {
@@ -72,11 +71,6 @@ export default function UserApprovalsPage() {
     setRowClasses((prev) => ({ ...initialClasses, ...prev }));
   }, [classes]);
 
-  // Manual email add modal state
-  const [showAddEmailModal, setShowAddEmailModal] = useState(false);
-  const [manualEmail, setManualEmail] = useState('');
-  const [manualName, setManualName] = useState('');
-
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let emailFound = '';
@@ -112,16 +106,10 @@ export default function UserApprovalsPage() {
       console.warn('Realtime subscription warning:', e);
     }
 
-    // High frequency interval (every 3s) fallback to catch newly registered emails from other devices
-    const interval = setInterval(() => {
-      refreshData();
-    }, 3000);
-
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
       }
-      clearInterval(interval);
     };
   }, [refreshData]);
 
@@ -192,20 +180,6 @@ export default function UserApprovalsPage() {
     showToast(`Đã từ chối / chặn truy cập của ${user.full_name} (${user.email})`, 'error');
   };
 
-  const handleAddManualEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualEmail || !manualEmail.trim()) {
-      showToast('Vui lòng nhập địa chỉ email!', 'error');
-      return;
-    }
-    registerGoogleUserIfMissing(manualEmail.trim(), manualName.trim() || undefined);
-    await refreshData();
-    setShowAddEmailModal(false);
-    setManualEmail('');
-    setManualName('');
-    showToast(`Đã thêm email ${manualEmail.trim()} vào danh sách chờ duyệt!`);
-  };
-
   // --- FILTERING ---
   const filteredProfiles = profiles.filter((p) => {
     const matchesSearch =
@@ -264,13 +238,6 @@ export default function UserApprovalsPage() {
               <span>Alan Vũ (Super Admin)</span>
             </div>
           )}
-          <button
-            onClick={() => setShowAddEmailModal(true)}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Thêm Email Thủ Công</span>
-          </button>
           <button
             onClick={refreshData}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all border border-slate-200"
@@ -641,77 +608,6 @@ export default function UserApprovalsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Thêm Email Duyệt Thủ Công */}
-      {showAddEmailModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-sky-50 text-sky-600 rounded-xl">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">Thêm Email Duyệt Thủ Công</h3>
-                  <p className="text-xs text-slate-500">Đăng ký sẵn email Google vào danh sách chờ duyệt</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAddEmailModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddManualEmail} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Địa chỉ Email Google (*):
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={manualEmail}
-                  onChange={(e) => setManualEmail(e.target.value)}
-                  placeholder="Ví dụ: phuhuynh@gmail.com"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-900 font-mono focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Họ và tên (Tùy chọn):
-                </label>
-                <input
-                  type="text"
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="Ví dụ: Nguyễn Văn A"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-900 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddEmailModal(false)}
-                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Xác nhận thêm</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
