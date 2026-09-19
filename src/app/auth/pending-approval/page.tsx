@@ -18,13 +18,23 @@ function PendingApprovalContent() {
   const [rejectedMsg, setRejectedMsg] = useState<string | null>(null);
   const isRedirectingRef = useRef(false);
 
-  // Sync cookie email if parameter missing
+  // Sync cookie email if parameter missing or save email to cookie if present
   useEffect(() => {
-    if (!email && typeof window !== 'undefined') {
+    if (email && typeof window !== 'undefined') {
+      document.cookie = `suongmai_user_email=${encodeURIComponent(email)}; path=/; max-age=86400; SameSite=Lax`;
+    } else if (!email && typeof window !== 'undefined') {
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
       if (match) {
         const clean = decodeURIComponent(match[1]);
         setEmail(clean);
+      } else {
+        const saved = localStorage.getItem('suongmai_auth_user');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.email) setEmail(parsed.email);
+          } catch (e) {}
+        }
       }
     }
   }, [email]);
@@ -56,15 +66,32 @@ function PendingApprovalContent() {
       if (data.success && data.isApproved && !isRedirectingRef.current) {
         isRedirectingRef.current = true;
         setStatusMsg('🎉 Đã phê duyệt! Đang chuyển hướng vào hệ thống...');
+        
         if (typeof window !== 'undefined') {
+          const targetRole = data.role || 'PARENT';
+          let targetUrl = data.redirectUrl || '/parent';
+          if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
+            targetUrl = '/admin/dashboard';
+          } else if (targetRole === 'TEACHER') {
+            targetUrl = '/teacher';
+          } else if (targetRole === 'PARENT') {
+            targetUrl = '/parent';
+          }
+
+          // Write session cookies to document synchronously before navigating
+          document.cookie = `suongmai_session=active; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `suongmai_user_email=${encodeURIComponent(email)}; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `suongmai_user_role=${targetRole}; path=/; max-age=86400; SameSite=Lax`;
+
           localStorage.setItem(
             'suongmai_auth_user',
-            JSON.stringify({ email, role: data.role, authenticated: true, timestamp: Date.now() })
+            JSON.stringify({ email, role: targetRole, authenticated: true, timestamp: Date.now() })
           );
+
+          setTimeout(() => {
+            window.location.href = targetUrl;
+          }, 300);
         }
-        setTimeout(() => {
-          window.location.href = data.redirectUrl || '/admin/dashboard';
-        }, 400);
       } else if (data.status === 'REJECTED') {
         setRejectedMsg('Yêu cầu truy cập của bạn đã bị Từ chối bởi Ban Giám Hiệu.');
       }
