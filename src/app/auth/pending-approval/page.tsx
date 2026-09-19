@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Clock, ShieldAlert, Phone, LogOut, RefreshCw, UserX, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Clock, ShieldAlert, Phone, LogOut, RefreshCw, UserX, CheckCircle2 } from 'lucide-react';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { supabase } from '@/lib/supabase/client';
 
 function PendingApprovalContent() {
   const router = useRouter();
@@ -15,6 +16,7 @@ function PendingApprovalContent() {
   const [checking, setChecking] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [rejectedMsg, setRejectedMsg] = useState<string | null>(null);
+  const isRedirectingRef = useRef(false);
 
   // Sync cookie email if parameter missing
   useEffect(() => {
@@ -38,12 +40,10 @@ function PendingApprovalContent() {
     }
   }, [email]);
 
-  // Check live approval status from DB
+  // Check live approval status from DB & update session cookies
   const handleCheckApproval = useCallback(async () => {
-    if (!email || checking) return;
+    if (!email || isRedirectingRef.current) return;
     setChecking(true);
-    setStatusMsg(null);
-    setRejectedMsg(null);
 
     try {
       const res = await fetch('/api/auth/refresh-session', {
@@ -53,8 +53,9 @@ function PendingApprovalContent() {
       });
       const data = await res.json();
 
-      if (data.success && data.isApproved) {
-        setStatusMsg(`Đã phê duyệt! Đang chuyển hướng vào hệ thống...`);
+      if (data.success && data.isApproved && !isRedirectingRef.current) {
+        isRedirectingRef.current = true;
+        setStatusMsg('🎉 Đã phê duyệt! Đang chuyển hướng vào hệ thống...');
         if (typeof window !== 'undefined') {
           localStorage.setItem(
             'suongmai_auth_user',
@@ -63,34 +64,67 @@ function PendingApprovalContent() {
         }
         setTimeout(() => {
           window.location.href = data.redirectUrl || '/admin/dashboard';
-        }, 800);
+        }, 400);
       } else if (data.status === 'REJECTED') {
         setRejectedMsg('Yêu cầu truy cập của bạn đã bị Từ chối bởi Ban Giám Hiệu.');
-      } else {
-        setStatusMsg('Tài khoản vẫn đang ở trạng thái chờ duyệt. Vui lòng thử lại sau.');
       }
     } catch (err) {
       console.error('Error refreshing session:', err);
     } finally {
       setChecking(false);
     }
-  }, [email, checking]);
+  }, [email]);
 
-  // Auto-polling interval every 5 seconds
+  // Real-time Supabase Subscription + Fast Polling (2.5s)
   useEffect(() => {
-    if (!email) return;
+    if (!email || isRedirectingRef.current) return;
+
+    // Initial check
     handleCheckApproval();
 
-    const timer = setInterval(() => {
-      handleCheckApproval();
-    }, 5000);
+    // 1. Supabase Realtime Listener on profiles table
+    let channel: any = null;
+    try {
+      const channelName = `profile-approval-${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+            filter: `email=eq.${email}`,
+          },
+          (payload) => {
+            if (payload?.new?.approval_status === 'ACTIVE' && !isRedirectingRef.current) {
+              handleCheckApproval();
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Realtime channel subscription error:', err);
+    }
 
-    return () => clearInterval(timer);
+    // 2. High-frequency Polling fallback (every 2.5 seconds)
+    const interval = setInterval(() => {
+      if (!isRedirectingRef.current) {
+        handleCheckApproval();
+      }
+    }, 2500);
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      clearInterval(interval);
+    };
   }, [email, handleCheckApproval]);
 
   const handleLogout = () => {
-    document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = 'suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     if (typeof window !== 'undefined') {
       localStorage.removeItem('suongmai_auth_user');
     }
@@ -137,7 +171,7 @@ function PendingApprovalContent() {
             </p>
           ) : (
             <p className="font-medium text-amber-900 bg-amber-50/80 border border-amber-200 p-3.5 rounded-xl text-xs leading-normal shadow-sm">
-              Tài khoản của bạn đang chờ Ban Giám Hiệu phê duyệt và cấp quyền. Ngay khi được duyệt, hệ thống sẽ tự động chuyển hướng.
+              Tài khoản của bạn đang chờ Ban Giám Hiệu phê duyệt. Hệ thống sẽ **tự động chuyển hướng ngay lập tức** (Zero-Friction UX) trong 2-3 giây khi Admin bấm Duyệt.
             </p>
           )}
 
@@ -158,7 +192,7 @@ function PendingApprovalContent() {
             className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 px-4 rounded-pill transition-all shadow-md shadow-sky-600/20 active:scale-[0.98] text-sm cursor-pointer disabled:opacity-60"
           >
             <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
-            <span>{checking ? 'Đang kiểm tra dữ liệu DB...' : '🔄 Kiểm tra trạng thái phê duyệt'}</span>
+            <span>{checking ? 'Đang kiểm tra dữ liệu DB...' : '🔄 Kiểm tra ngay (Real-time active)'}</span>
           </button>
 
           <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 shadow-sm">
