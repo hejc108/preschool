@@ -11,6 +11,14 @@ const INITIAL_SERVER_PROFILES: Profile[] = [
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
   },
+  {
+    id: 'u-pending-alanvu755',
+    full_name: 'Alan Vũ',
+    email: 'alanvu755@gmail.com',
+    role: 'GUEST',
+    approval_status: 'PENDING',
+    created_at: '2026-09-19T00:00:00Z',
+  },
 ];
 
 // Global in-memory storage on node server to persist profiles across sessions
