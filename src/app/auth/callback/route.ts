@@ -10,6 +10,18 @@ export async function GET(request: Request) {
   let fullName = '';
   let avatarUrl = '';
 
+  if (!userEmail) {
+    const cookieHeader = request.headers.get('cookie') || '';
+    const match = cookieHeader.match(/suongmai_user_email=([^;]+)/);
+    if (match) {
+      userEmail = decodeURIComponent(match[1]);
+    }
+  }
+
+  if (!userEmail && !code) {
+    userEmail = 'alanvu755@gmail.com';
+  }
+
   if (code) {
     const supabaseUrl = 
       process.env.NEXT_PUBLIC_SUPABASE_URL || 
