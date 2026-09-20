@@ -30,15 +30,32 @@ if (!globalThis.__SUONGMAI_PROFILES_CACHE__) {
   globalThis.__SUONGMAI_PROFILES_CACHE__ = [...INITIAL_SERVER_PROFILES];
 }
 
+function getSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    console.error('[APPROVE ERROR] Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Check .env file!');
+    throw new Error('[APPROVE ERROR] Missing SUPABASE_SERVICE_ROLE_KEY in environment variables.');
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
   const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (url && key && !key.includes('mock-key')) {
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
+
+  if (url && key) {
     return createClient(url, key);
   }
   return null;
@@ -135,25 +152,23 @@ export async function POST(request: Request) {
     serverCache.push(newProfile);
     globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
-    // Try Supabase sync
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('profiles').upsert(
-          {
-            id: newProfile.id,
-            email: newProfile.email,
-            full_name: newProfile.full_name,
-            role: newProfile.role,
-            approval_status: newProfile.approval_status,
-            avatar_url: newProfile.avatar_url,
-            created_at: newProfile.created_at,
-          },
-          { onConflict: 'email' }
-        );
-      } catch (e) {
-        console.error('Failed to sync new profile to Supabase DB:', e);
-      }
+    // Strict Admin Client DB Sync with SUPABASE_SERVICE_ROLE_KEY
+    try {
+      const supabaseAdmin = getSupabaseAdminClient();
+      await supabaseAdmin.from('profiles').upsert(
+        {
+          id: newProfile.id,
+          email: newProfile.email,
+          full_name: newProfile.full_name,
+          role: newProfile.role,
+          approval_status: newProfile.approval_status,
+          avatar_url: newProfile.avatar_url,
+          created_at: newProfile.created_at,
+        },
+        { onConflict: 'email' }
+      );
+    } catch (e: any) {
+      console.error('[APPROVE POST ERROR] Failed to sync new profile to Supabase DB:', e.message || e);
     }
 
     return NextResponse.json({ success: true, profile: newProfile });
@@ -198,13 +213,28 @@ export async function PUT(request: Request) {
 
     globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
-    // Sync to Supabase
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase
-          .from('profiles')
-          .upsert({
+    // MANDATORY REQUIREMENT: Strict SUPABASE_SERVICE_ROLE_KEY client with .select() verification
+    const supabaseAdmin = getSupabaseAdminClient();
+    const updatePayload: any = {
+      role: targetProfile.role,
+      approval_status: targetProfile.approval_status,
+      updated_at: new Date().toISOString(),
+    };
+    if (targetProfile.assigned_class_id) updatePayload.assigned_class_id = targetProfile.assigned_class_id;
+    if (targetProfile.assigned_class_name) updatePayload.assigned_class_name = targetProfile.assigned_class_name;
+
+    const { data: updateData, error: updateErr } = await supabaseAdmin
+      .from('profiles')
+      .update(updatePayload)
+      .eq('email', email)
+      .select();
+
+    if (updateErr || !updateData || updateData.length === 0) {
+      // Fallback: If row does not exist by email yet, perform upsert with .select()
+      const { data: upsertData, error: upsertErr } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          {
             id: targetProfile.id,
             email: targetProfile.email,
             full_name: targetProfile.full_name,
@@ -212,12 +242,24 @@ export async function PUT(request: Request) {
             approval_status: targetProfile.approval_status,
             assigned_class_id: targetProfile.assigned_class_id,
             assigned_class_name: targetProfile.assigned_class_name,
-          });
-      } catch (e) {}
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'email' }
+        )
+        .select();
+
+      if (upsertErr || !upsertData || upsertData.length === 0) {
+        console.error('[APPROVE ERROR] Cập nhật CSDL Postgres thất bại:', upsertErr || updateErr);
+        return NextResponse.json(
+          { success: false, error: 'Cập nhật CSDL Postgres thất bại', details: upsertErr || updateErr },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({ success: true, profile: targetProfile });
   } catch (error: any) {
+    console.error('[APPROVE EXCEPTION] PUT handler error:', error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
