@@ -40,7 +40,6 @@ const DEPRECATED_MOCK_EMAILS = [
 
 export function sanitizeProfiles(list: Profile[]): Profile[] {
   return list.filter((p) => {
-    if (p.id === 'u-pending-alanvu755') return false;
     const clean = (p.email || '').toLowerCase().trim();
     if (!clean) return false;
     if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
@@ -49,28 +48,30 @@ export function sanitizeProfiles(list: Profile[]): Profile[] {
 }
 
 /**
- * Purge a specific user profile from server cache, API, and local storage
+ * Purge/Delete a specific user profile from server cache, DB API, and local storage
  */
-export async function purgeUserProfile(email: string = 'alanvu755@gmail.com'): Promise<void> {
+export async function purgeUserProfile(email: string): Promise<void> {
   const cleanEmail = email.toLowerCase().trim();
+  if (!cleanEmail) return;
+
   if (typeof window !== 'undefined') {
-    try {
-      await fetch(`/api/users/approvals?email=${encodeURIComponent(cleanEmail)}`, {
-        method: 'DELETE',
-      });
-    } catch (e) {}
+    const res = await fetch(`/api/users/approvals?email=${encodeURIComponent(cleanEmail)}`, {
+      method: 'DELETE',
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || 'Xóa tài khoản trên CSDL thất bại');
+    }
 
     try {
-      const profiles = getStoredProfiles().filter(
-        (p) => p.email.toLowerCase().trim() !== cleanEmail && p.id !== 'u-pending-alanvu755'
-      );
+      const profiles = getStoredProfiles().filter((p) => p.email.toLowerCase().trim() !== cleanEmail);
       saveStoredProfiles(profiles);
     } catch (e) {}
   }
 
   if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
     globalThis.__SUONGMAI_PROFILES_CACHE__ = globalThis.__SUONGMAI_PROFILES_CACHE__.filter(
-      (p) => p.email.toLowerCase().trim() !== cleanEmail && p.id !== 'u-pending-alanvu755'
+      (p) => p.email.toLowerCase().trim() !== cleanEmail
     );
   }
 }

@@ -262,11 +262,15 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const email = (searchParams.get('email') || 'alanvu755@gmail.com').toLowerCase().trim();
+    const email = (searchParams.get('email') || '').toLowerCase().trim();
+
+    if (!email) {
+      return NextResponse.json({ success: false, message: 'Email là bắt buộc' }, { status: 400 });
+    }
 
     if (globalThis.__SUONGMAI_PROFILES_CACHE__) {
       globalThis.__SUONGMAI_PROFILES_CACHE__ = globalThis.__SUONGMAI_PROFILES_CACHE__.filter(
-        (p) => p.email.toLowerCase().trim() !== email && p.id !== 'u-pending-alanvu755'
+        (p) => p.email.toLowerCase().trim() !== email
       );
     }
 
@@ -277,7 +281,7 @@ export async function DELETE(request: Request) {
       }
     } catch (e) {}
 
-    return NextResponse.json({ success: true, message: `Đã xóa sạch dữ liệu của ${email}` });
+    return NextResponse.json({ success: true, message: `Đã xóa tài khoản ${email}` });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
