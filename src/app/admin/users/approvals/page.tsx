@@ -118,17 +118,25 @@ export default function UserApprovalsPage() {
 
   // --- ACTIONS ---
   const handleApproveTeacher = async (user: Profile) => {
-    const targetClassId = rowClasses[user.id] || classes[0]?.id || 'c1';
-    const targetClass = classes.find((c) => c.id === targetClassId);
-    await approveTeacherUser(user.email, targetClassId, targetClass?.name);
-    await refreshData();
-    showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (Lớp ${targetClass?.name || ''})!`);
+    try {
+      const targetClassId = rowClasses[user.id] || classes[0]?.id || 'c1';
+      const targetClass = classes.find((c) => c.id === targetClassId);
+      await approveTeacherUser(user.email, targetClassId, targetClass?.name);
+      await refreshData();
+      showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (Lớp ${targetClass?.name || ''})!`);
+    } catch (err: any) {
+      showToast(err.message || 'Phê duyệt thất bại!', 'error');
+    }
   };
 
   const handleApproveStaff = async (user: Profile) => {
-    await approveStaffUser(user.email);
-    await refreshData();
-    showToast(`Đã kích hoạt quyền Cán bộ Bếp / Y tế cho ${user.full_name}!`);
+    try {
+      await approveStaffUser(user.email);
+      await refreshData();
+      showToast(`Đã kích hoạt quyền Cán bộ Bếp / Y tế cho ${user.full_name}!`);
+    } catch (err: any) {
+      showToast(err.message || 'Phê duyệt thất bại!', 'error');
+    }
   };
 
   const handlePromoteSchoolAdmin = async (user: Profile) => {
@@ -164,16 +172,24 @@ export default function UserApprovalsPage() {
       return;
     }
 
-    await approveParentUser(parentModalUser.email, selectedStudentIds);
-    await refreshData();
-    setParentModalUser(null);
-    showToast(`Đã duyệt phụ huynh ${parentModalUser.full_name} và liên kết ${selectedStudentIds.length} bé thành công!`);
+    try {
+      await approveParentUser(parentModalUser.email, selectedStudentIds);
+      await refreshData();
+      setParentModalUser(null);
+      showToast(`Đã duyệt phụ huynh ${parentModalUser.full_name} và liên kết ${selectedStudentIds.length} bé thành công!`);
+    } catch (err: any) {
+      showToast(err.message || 'Phê duyệt Phụ huynh thất bại!', 'error');
+    }
   };
 
   const handleReject = async (user: Profile) => {
-    await rejectUser(user.email);
-    await refreshData();
-    showToast(`Đã từ chối / chặn truy cập của ${user.full_name} (${user.email})`, 'error');
+    try {
+      await rejectUser(user.email);
+      await refreshData();
+      showToast(`Đã từ chối / chặn truy cập của ${user.full_name} (${user.email})`, 'error');
+    } catch (err: any) {
+      showToast(err.message || 'Từ chối thất bại!', 'error');
+    }
   };
 
   // --- FILTERING ---

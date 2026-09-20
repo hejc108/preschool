@@ -70,23 +70,40 @@ export async function GET(request: Request) {
     // 1. Mandatory requirement: Upsert into profiles DB using SUPABASE_SERVICE_ROLE_KEY (NO fallback to anon key)
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      const { error: upsertErr } = await supabaseAdmin
+      const { data: existingDbProfile } = await supabaseAdmin
         .from('profiles')
-        .upsert(
-          {
+        .select('id, role, approval_status')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      if (existingDbProfile) {
+        // Profile already exists: Preserve existing role & approval_status, update metadata only
+        await supabaseAdmin
+          .from('profiles')
+          .update({
+            full_name: resolvedName,
+            avatar_url: resolvedAvatar,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('email', cleanEmail);
+      } else {
+        // New user: Insert default PENDING profile (or SUPER_ADMIN for sadmin)
+        const isSadmin = cleanEmail === 'sadmin@suongmai.edu.vn';
+        const { error: insertErr } = await supabaseAdmin
+          .from('profiles')
+          .insert({
             id: userId || `u-gauth-${Date.now()}`,
             email: cleanEmail,
             full_name: resolvedName,
             avatar_url: resolvedAvatar,
-            role: 'GUEST',
-            approval_status: 'PENDING',
+            role: isSadmin ? 'SUPER_ADMIN' : 'GUEST',
+            approval_status: isSadmin ? 'ACTIVE' : 'PENDING',
             created_at: new Date().toISOString(),
-          },
-          { onConflict: 'email' }
-        );
+          });
 
-      if (upsertErr) {
-        console.error('[AUTH CALLBACK ERROR] Không ghi được profile vào Supabase DB:', upsertErr.message);
+        if (insertErr) {
+          console.error('[AUTH CALLBACK ERROR] Không ghi được profile mới vào Supabase DB:', insertErr.message);
+        }
       }
     } catch (adminErr: any) {
       console.error('[AUTH CALLBACK ERROR] Supabase Admin Client Exception:', adminErr.message || adminErr);

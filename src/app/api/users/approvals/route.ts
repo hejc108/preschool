@@ -155,8 +155,14 @@ export async function POST(request: Request) {
     // Strict Admin Client DB Sync with SUPABASE_SERVICE_ROLE_KEY
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      await supabaseAdmin.from('profiles').upsert(
-        {
+      const { data: dbExisting } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role, approval_status')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (!dbExisting) {
+        await supabaseAdmin.from('profiles').insert({
           id: newProfile.id,
           email: newProfile.email,
           full_name: newProfile.full_name,
@@ -164,9 +170,8 @@ export async function POST(request: Request) {
           approval_status: newProfile.approval_status,
           avatar_url: newProfile.avatar_url,
           created_at: newProfile.created_at,
-        },
-        { onConflict: 'email' }
-      );
+        });
+      }
     } catch (e: any) {
       console.error('[APPROVE POST ERROR] Failed to sync new profile to Supabase DB:', e.message || e);
     }
