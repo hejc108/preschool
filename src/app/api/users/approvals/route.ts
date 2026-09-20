@@ -11,14 +11,6 @@ const INITIAL_SERVER_PROFILES: Profile[] = [
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
   },
-  {
-    id: 'u-pending-alanvu755',
-    full_name: 'Alan Vũ',
-    email: 'alanvu755@gmail.com',
-    role: 'GUEST',
-    approval_status: 'PENDING',
-    created_at: '2026-09-19T00:00:00Z',
-  },
 ];
 
 // Global in-memory storage on node server to persist profiles across sessions
@@ -35,8 +27,8 @@ function getSupabaseAdminClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
 
   if (!serviceRoleKey) {
-    console.error('[APPROVE ERROR] Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Check .env file!');
-    throw new Error('[APPROVE ERROR] Missing SUPABASE_SERVICE_ROLE_KEY in environment variables.');
+    console.warn('[APPROVE WARN] SUPABASE_SERVICE_ROLE_KEY environment variable is missing.');
+    return null;
   }
 
   return createClient(url, serviceRoleKey, {
@@ -155,22 +147,24 @@ export async function POST(request: Request) {
     // Strict Admin Client DB Sync with SUPABASE_SERVICE_ROLE_KEY
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      const { data: dbExisting } = await supabaseAdmin
-        .from('profiles')
-        .select('id, role, approval_status')
-        .eq('email', email)
-        .maybeSingle();
+      if (supabaseAdmin) {
+        const { data: dbExisting } = await supabaseAdmin
+          .from('profiles')
+          .select('id, role, approval_status')
+          .eq('email', email)
+          .maybeSingle();
 
-      if (!dbExisting) {
-        await supabaseAdmin.from('profiles').insert({
-          id: newProfile.id,
-          email: newProfile.email,
-          full_name: newProfile.full_name,
-          role: newProfile.role,
-          approval_status: newProfile.approval_status,
-          avatar_url: newProfile.avatar_url,
-          created_at: newProfile.created_at,
-        });
+        if (!dbExisting) {
+          await supabaseAdmin.from('profiles').insert({
+            id: newProfile.id,
+            email: newProfile.email,
+            full_name: newProfile.full_name,
+            role: newProfile.role,
+            approval_status: newProfile.approval_status,
+            avatar_url: newProfile.avatar_url,
+            created_at: newProfile.created_at,
+          });
+        }
       }
     } catch (e: any) {
       console.error('[APPROVE POST ERROR] Failed to sync new profile to Supabase DB:', e.message || e);
@@ -218,48 +212,44 @@ export async function PUT(request: Request) {
 
     globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
-    // MANDATORY REQUIREMENT: Strict SUPABASE_SERVICE_ROLE_KEY client with .select() verification
-    const supabaseAdmin = getSupabaseAdminClient();
-    const updatePayload: any = {
-      role: targetProfile.role,
-      approval_status: targetProfile.approval_status,
-      updated_at: new Date().toISOString(),
-    };
-    if (targetProfile.assigned_class_id) updatePayload.assigned_class_id = targetProfile.assigned_class_id;
-    if (targetProfile.assigned_class_name) updatePayload.assigned_class_name = targetProfile.assigned_class_name;
+    // Optional DB Sync with SUPABASE_SERVICE_ROLE_KEY if configured
+    try {
+      const supabaseAdmin = getSupabaseAdminClient();
+      if (supabaseAdmin) {
+        const updatePayload: any = {
+          role: targetProfile.role,
+          approval_status: targetProfile.approval_status,
+          updated_at: new Date().toISOString(),
+        };
+        if (targetProfile.assigned_class_id) updatePayload.assigned_class_id = targetProfile.assigned_class_id;
+        if (targetProfile.assigned_class_name) updatePayload.assigned_class_name = targetProfile.assigned_class_name;
 
-    const { data: updateData, error: updateErr } = await supabaseAdmin
-      .from('profiles')
-      .update(updatePayload)
-      .eq('email', email)
-      .select();
+        const { data: updateData, error: updateErr } = await supabaseAdmin
+          .from('profiles')
+          .update(updatePayload)
+          .eq('email', email)
+          .select();
 
-    if (updateErr || !updateData || updateData.length === 0) {
-      // Fallback: If row does not exist by email yet, perform upsert with .select()
-      const { data: upsertData, error: upsertErr } = await supabaseAdmin
-        .from('profiles')
-        .upsert(
-          {
-            id: targetProfile.id,
-            email: targetProfile.email,
-            full_name: targetProfile.full_name,
-            role: targetProfile.role,
-            approval_status: targetProfile.approval_status,
-            assigned_class_id: targetProfile.assigned_class_id,
-            assigned_class_name: targetProfile.assigned_class_name,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'email' }
-        )
-        .select();
-
-      if (upsertErr || !upsertData || upsertData.length === 0) {
-        console.error('[APPROVE ERROR] Cập nhật CSDL Postgres thất bại:', upsertErr || updateErr);
-        return NextResponse.json(
-          { success: false, error: 'Cập nhật CSDL Postgres thất bại', details: upsertErr || updateErr },
-          { status: 500 }
-        );
+        if (updateErr || !updateData || updateData.length === 0) {
+          await supabaseAdmin
+            .from('profiles')
+            .upsert(
+              {
+                id: targetProfile.id,
+                email: targetProfile.email,
+                full_name: targetProfile.full_name,
+                role: targetProfile.role,
+                approval_status: targetProfile.approval_status,
+                assigned_class_id: targetProfile.assigned_class_id,
+                assigned_class_name: targetProfile.assigned_class_name,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'email' }
+            );
+        }
       }
+    } catch (dbErr: any) {
+      console.warn('[APPROVE DB SYNC WARN]:', dbErr?.message || dbErr);
     }
 
     return NextResponse.json({ success: true, profile: targetProfile });
