@@ -259,12 +259,6 @@ export default function UserApprovalsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {isSuperAdmin && (
-            <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-900 text-xs font-bold flex items-center gap-1.5">
-              <Crown className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span>Alan Vũ (Super Admin)</span>
-            </div>
-          )}
           <button
             onClick={refreshData}
             className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -449,7 +443,7 @@ export default function UserApprovalsPage() {
 
                           {selectedRole === 'SCHOOL_ADMIN' && (
                             <p className="text-[10px] text-indigo-700 font-bold">
-                              {!isSuperAdmin ? '(Chỉ Alan Vũ được cấp)' : 'Quyền BGH/Hiệu trưởng'}
+                              {!isSuperAdmin ? '(Chỉ Super Admin mới có quyền cấp)' : 'Quyền BGH/Hiệu trưởng'}
                             </p>
                           )}
                         </div>
