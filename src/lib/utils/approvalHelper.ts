@@ -40,11 +40,39 @@ const DEPRECATED_MOCK_EMAILS = [
 
 export function sanitizeProfiles(list: Profile[]): Profile[] {
   return list.filter((p) => {
+    if (p.id === 'u-pending-alanvu755') return false;
     const clean = (p.email || '').toLowerCase().trim();
     if (!clean) return false;
     if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
     return true;
   });
+}
+
+/**
+ * Purge a specific user profile from server cache, API, and local storage
+ */
+export async function purgeUserProfile(email: string = 'alanvu755@gmail.com'): Promise<void> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch(`/api/users/approvals?email=${encodeURIComponent(cleanEmail)}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {}
+
+    try {
+      const profiles = getStoredProfiles().filter(
+        (p) => p.email.toLowerCase().trim() !== cleanEmail && p.id !== 'u-pending-alanvu755'
+      );
+      saveStoredProfiles(profiles);
+    } catch (e) {}
+  }
+
+  if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
+    globalThis.__SUONGMAI_PROFILES_CACHE__ = globalThis.__SUONGMAI_PROFILES_CACHE__.filter(
+      (p) => p.email.toLowerCase().trim() !== cleanEmail && p.id !== 'u-pending-alanvu755'
+    );
+  }
 }
 
 /**

@@ -33,6 +33,7 @@ import {
   promoteToSchoolAdmin,
   rejectUser,
   fetchLiveProfilesFromSupabase,
+  purgeUserProfile,
 } from '@/lib/utils/approvalHelper';
 
 export default function UserApprovalsPage() {
@@ -192,6 +193,16 @@ export default function UserApprovalsPage() {
     }
   };
 
+  const handlePurgeAlanvu755 = async () => {
+    try {
+      await purgeUserProfile('alanvu755@gmail.com');
+      await refreshData();
+      showToast('Đã xóa sạch dữ liệu alanvu755@gmail.com! Bạn có thể đăng ký/đăng nhập lại từ đầu.', 'success');
+    } catch (e) {
+      showToast('Lỗi khi làm sạch dữ liệu!', 'error');
+    }
+  };
+
   // --- FILTERING ---
   const filteredProfiles = profiles.filter((p) => {
     const matchesSearch =
@@ -251,8 +262,15 @@ export default function UserApprovalsPage() {
             </div>
           )}
           <button
+            onClick={handlePurgeAlanvu755}
+            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            title="Xóa sạch dữ liệu alanvu755@gmail.com khỏi bộ nhớ và CSDL"
+          >
+            <span>🧹 Xóa sạch alanvu755</span>
+          </button>
+          <button
             onClick={refreshData}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             <span>🔄 Tải lại danh sách</span>
           </button>
