@@ -76,16 +76,10 @@ function AuthContent() {
     setLoading(true);
 
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamnonsuongmai.edu.vn';
-      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
