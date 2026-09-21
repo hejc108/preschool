@@ -1,6 +1,6 @@
 // Supabase client and local interactive state simulation for Mam Non Suong Mai Kindergarten (Section 2.4 DDL Aligned)
 
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { 
   Student, 
   ClassRoom, 
@@ -24,13 +24,7 @@ const supabaseAnonKey =
   process.env.SUPABASE_PUBLISHABLE_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    flowType: 'pkce',
-    detectSessionInUrl: true,
-    persistSession: true,
-  },
-});
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // MOCK INITIAL DATA FOR DEMO & LOCAL VERIFICATION
 export const INITIAL_CLASSES: ClassRoom[] = [
