@@ -258,7 +258,7 @@ export default function UserApprovalsPage() {
 
       {/* Environment Diagnostic Banner */}
       {debugInfo && debugInfo.hasServiceRoleKey === false && (
-        <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm">
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm mb-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
@@ -266,6 +266,20 @@ export default function UserApprovalsPage() {
               <p className="text-amber-800 mt-0.5">
                 Chưa tìm thấy biến môi trường <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950">SUPABASE_SERVICE_ROLE_KEY</code> trên Vercel.
                 Hệ thống đang tự động fallback truy vấn CSDL qua Anon Client ({debugInfo.dbProfilesCount || 0} bản ghi từ Supabase DB).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {debugInfo && debugInfo.dbError && (
+        <div className="bg-rose-50 border border-rose-300 text-rose-900 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm mb-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-rose-900">Lỗi xác thực CSDL Supabase (Invalid API key):</p>
+              <p className="text-rose-800 mt-0.5 font-mono">
+                Supabase trả về lỗi: &quot;{debugInfo.dbError}&quot;. Giá trị key SUPABASE_SERVICE_ROLE_KEY hoặc NEXT_PUBLIC_SUPABASE_ANON_KEY được cấu hình trên Vercel bị sai hoặc không hợp lệ.
               </p>
             </div>
           </div>
