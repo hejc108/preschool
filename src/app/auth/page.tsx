@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, AlertCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -12,9 +12,15 @@ function AuthContent() {
   const redirectTo = searchParams?.get('redirectTo') || '/admin/dashboard';
   const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Listen for auth state changes & handle Hash (#access_token=...) / Code (?code=...) URL parameters
   useEffect(() => {
+    const queryError = searchParams?.get('error') || searchParams?.get('error_description');
+    if (queryError) {
+      setAuthError(queryError);
+    }
+
     const parseJwt = (token: string) => {
       try {
         const base64Url = token.split('.')[1];
@@ -117,8 +123,8 @@ function AuthContent() {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('[PKCE EXCHANGE ERROR]:', error.message);
-            // Xóa sạch query param ?code= trên URL để ngắt toàn bộ vòng lặp chuyển hướng
-            window.history.replaceState({}, '', '/auth');
+            setAuthError(error.message);
+            window.history.replaceState({}, '', `/auth?error=${encodeURIComponent(error.message)}`);
             setLoading(false);
             return;
           }
@@ -138,12 +144,14 @@ function AuthContent() {
             await processUserRouting(userEmail, fullName, avatarUrl);
             return;
           } else {
+            setAuthError('Không xác định được email từ mã đăng nhập');
             window.history.replaceState({}, '', '/auth');
             setLoading(false);
             return;
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('[AUTH RUNTIME CRASH]:', err);
+          setAuthError(err.message || 'Lỗi runtime khi xử lý xác thực');
           window.history.replaceState({}, '', '/auth');
           setLoading(false);
           return;
@@ -254,21 +262,25 @@ function AuthContent() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    setAuthError(null);
 
     try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth`,
+          redirectTo: `${origin}/auth/callback`,
         },
       });
 
       if (error) {
         console.error('OAuth error:', error.message);
+        setAuthError(error.message);
         await processGoogleLogin();
       }
     } catch (err: any) {
       console.error('OAuth exception:', err);
+      setAuthError(err.message || 'Lỗi khởi tạo đăng nhập Google');
       await processGoogleLogin();
     } finally {
       setLoading(false);
@@ -295,6 +307,17 @@ function AuthContent() {
           <h1 className="text-2xl font-bold text-sky-700 tracking-tight">{t('auth.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
+
+        {/* Error Notification Alert */}
+        {authError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-convent text-red-700 text-sm flex items-start gap-3 shadow-sm">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-800">Đăng nhập không thành công</p>
+              <p className="text-xs text-red-600 mt-0.5 leading-relaxed">{authError}</p>
+            </div>
+          </div>
+        )}
 
         {/* Standard Google OAuth Button */}
         <button

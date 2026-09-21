@@ -31,6 +31,15 @@ function getSupabasePublicClient() {
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
+  const oauthError = searchParams.get('error_description') || searchParams.get('error');
+
+  // 0. If OAuth provider returned an explicit error (e.g. access_denied)
+  if (oauthError && !code) {
+    console.error('[AUTH CALLBACK OAUTH ERROR FROM PROVIDER]:', oauthError);
+    const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(oauthError)}`);
+    response.cookies.delete('suongmai_session');
+    return response;
+  }
 
   let userEmail = searchParams.get('email') || '';
   let fullName = '';
@@ -49,16 +58,29 @@ export async function GET(request: Request) {
     const supabasePublic = getSupabasePublicClient();
     try {
       const { data, error } = await supabasePublic.auth.exchangeCodeForSession(code);
-      if (!error && data.user?.email) {
+      if (error) {
+        console.error('[EXCHANGE_CODE_ERROR]:', error.message, error.status);
+        const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(error.message)}`);
+        response.cookies.delete('suongmai_session');
+        return response;
+      }
+
+      if (data.user?.email) {
         userEmail = data.user.email;
         userId = data.user.id;
         fullName = data.user.user_metadata?.full_name || data.user.user_metadata?.name || '';
         avatarUrl = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || '';
-      } else if (error) {
-        console.error('[AUTH CALLBACK OAUTH ERROR] exchangeCodeForSession failed:', error.message);
+      } else {
+        console.error('[AUTH CALLBACK ERROR] exchangeCodeForSession succeeded but no user email returned');
+        const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Không lấy được email từ tài khoản Google')}`);
+        response.cookies.delete('suongmai_session');
+        return response;
       }
-    } catch (e) {
-      console.warn('[AUTH CALLBACK OAUTH EXCEPTION]:', e);
+    } catch (e: any) {
+      console.error('[AUTH CALLBACK OAUTH EXCEPTION]:', e);
+      const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(e.message || 'Lỗi hệ thống khi xác thực OAuth')}`);
+      response.cookies.delete('suongmai_session');
+      return response;
     }
   }
 
@@ -165,8 +187,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // Clean fallback: redirect to /auth (clean URL without query parameters to prevent redirect loops)
-  const response = NextResponse.redirect(`${origin}/auth`);
+  // Fallback if no user email could be identified: redirect with explicit error parameter
+  console.error('[AUTH CALLBACK ERROR] Không thể xác định email người dùng');
+  const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Không thể xác thực thông tin đăng nhập từ Google. Vui lòng thử lại.')}`);
   response.cookies.delete('suongmai_session');
   return response;
 }
