@@ -266,7 +266,20 @@ function AuthContent() {
 
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const { error } = await supabase.auth.signInWithOAuth({
+      let activeSupabase = supabase;
+
+      try {
+        const keyRes = await fetch('/api/auth/public-key');
+        const keyData = await keyRes.json();
+        if (keyData.url && keyData.anonKey && !keyData.anonKey.includes('mock-key')) {
+          const { createBrowserClient } = await import('@supabase/ssr');
+          activeSupabase = createBrowserClient(keyData.url, keyData.anonKey);
+        }
+      } catch (keyErr) {
+        console.warn('Could not fetch server public key:', keyErr);
+      }
+
+      const { error } = await activeSupabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${origin}/auth/callback`,
@@ -275,7 +288,11 @@ function AuthContent() {
 
       if (error) {
         console.error('OAuth error:', error.message);
-        setAuthError(error.message);
+        let errMsg = error.message;
+        if (errMsg.includes('Invalid API key')) {
+          errMsg = 'Khóa API Supabase không hợp lệ. Vui lòng kiểm tra giá trị SUPABASE_ANON_KEY hoặc SUPABASE_SERVICE_ROLE_KEY trên Vercel.';
+        }
+        setAuthError(errMsg);
         await processGoogleLogin();
       }
     } catch (err: any) {
