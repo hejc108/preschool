@@ -20,6 +20,17 @@ function getSupabaseAdminClient() {
   });
 }
 
+function getValidKey(keys: (string | undefined)[]) {
+  for (const raw of keys) {
+    if (!raw) continue;
+    const clean = raw.trim().replace(/^["']|["']$/g, '');
+    if (clean && !clean.includes('your-production') && !clean.includes('mock-key')) {
+      return clean;
+    }
+  }
+  return '';
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
@@ -51,13 +62,12 @@ export async function GET(request: Request) {
     const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
     const url = rawUrl.trim().replace(/^["']|["']$/g, '');
 
-    const rawAnonKey =
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      '';
-    const anonKey = rawAnonKey.trim().replace(/^["']|["']$/g, '');
+    const anonKey = getValidKey([
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      process.env.SUPABASE_ANON_KEY,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      process.env.SUPABASE_PUBLISHABLE_KEY,
+    ]);
 
     if (!anonKey || anonKey.includes('mock-key') || anonKey.includes('your-production')) {
       console.error('[AUTH CALLBACK ERROR] SUPABASE_ANON_KEY on Vercel is set to placeholder text!');
