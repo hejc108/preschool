@@ -52,7 +52,14 @@ export async function GET(request: Request) {
       process.env.SUPABASE_ANON_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
       process.env.SUPABASE_PUBLISHABLE_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
+      '';
+
+    if (!anonKey || anonKey.includes('mock-key')) {
+      console.error('[AUTH CALLBACK ERROR] NEXT_PUBLIC_SUPABASE_ANON_KEY missing or invalid on Vercel!');
+      const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Khóa API NEXT_PUBLIC_SUPABASE_ANON_KEY chưa được khai báo hoặc không hợp lệ trên Vercel Environment Variables')}`);
+      response.cookies.delete('suongmai_session');
+      return response;
+    }
 
     const supabaseSsr = createServerClient(url, anonKey, {
       cookies: {
@@ -75,7 +82,11 @@ export async function GET(request: Request) {
       const { data, error } = await supabaseSsr.auth.exchangeCodeForSession(code);
       if (error) {
         console.error('[EXCHANGE_CODE_ERROR]:', error.message, error.status);
-        const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(error.message)}`);
+        let errMsg = error.message;
+        if (errMsg.includes('Invalid API key')) {
+          errMsg = 'Khóa API Supabase không hợp lệ (Invalid API key). Vui lòng kiểm tra lại NEXT_PUBLIC_SUPABASE_ANON_KEY trên Vercel.';
+        }
+        const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(errMsg)}`);
         response.cookies.delete('suongmai_session');
         return response;
       }
