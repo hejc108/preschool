@@ -55,7 +55,11 @@ function getSupabaseClient() {
 
 export async function GET() {
   const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
+  const hasServiceRoleKey = !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY);
   
+  let dbProfilesCount = 0;
+  let dbErrorDetail: string | null = null;
+
   // Explicitly use SUPABASE_SERVICE_ROLE_KEY to bypass RLS when fetching profiles
   try {
     const supabaseAdmin = getSupabaseAdminClient();
@@ -64,8 +68,10 @@ export async function GET() {
     if (supabaseClient) {
       const { data, error } = await supabaseClient.from('profiles').select('*').order('created_at', { ascending: false });
       if (error) {
+        dbErrorDetail = error.message;
         console.error('[API GET APPROVALS ERROR]:', error.message || error);
       } else if (data && data.length > 0) {
+        dbProfilesCount = data.length;
         // Merge Supabase DB with server cache
         for (const dbProfile of data as Profile[]) {
           const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim());
@@ -78,6 +84,7 @@ export async function GET() {
       }
     }
   } catch (e: any) {
+    dbErrorDetail = e.message || String(e);
     console.warn('[API GET APPROVALS EXCEPTION]:', e.message || e);
   }
 
@@ -120,6 +127,12 @@ export async function GET() {
     data: sanitized,
     users: sanitized,
     pendingProfiles: sanitized.filter((p) => (p.approval_status || 'PENDING').toUpperCase() === 'PENDING'),
+    debug: {
+      hasServiceRoleKey,
+      dbProfilesCount,
+      totalProfilesCount: sanitized.length,
+      dbError: dbErrorDetail,
+    },
   });
 }
 

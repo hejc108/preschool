@@ -56,11 +56,15 @@ export default function UserApprovalsPage() {
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [debugInfo, setDebugInfo] = useState<{ hasServiceRoleKey?: boolean; dbProfilesCount?: number; dbError?: string | null } | null>(null);
 
   const refreshData = useCallback(async () => {
     try {
       const res = await fetch('/api/users/approvals', { cache: 'no-store' });
       const json = await res.json();
+      if (json.debug) {
+        setDebugInfo(json.debug);
+      }
       const rawList = Array.isArray(json)
         ? json
         : (json.profiles || json.data || json.users || json.pendingProfiles || []);
@@ -249,6 +253,22 @@ export default function UserApprovalsPage() {
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
           )}
           <span>{toastMessage.text}</span>
+        </div>
+      )}
+
+      {/* Environment Diagnostic Banner */}
+      {debugInfo && debugInfo.hasServiceRoleKey === false && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-bold text-amber-900">Cảnh báo môi trường Vercel / Production:</p>
+              <p className="text-amber-800 mt-0.5">
+                Chưa tìm thấy biến môi trường <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950">SUPABASE_SERVICE_ROLE_KEY</code> trên Vercel.
+                Hệ thống đang tự động fallback truy vấn CSDL qua Anon Client ({debugInfo.dbProfilesCount || 0} bản ghi từ Supabase DB).
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
