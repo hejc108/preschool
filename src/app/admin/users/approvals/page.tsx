@@ -213,17 +213,20 @@ export default function UserApprovalsPage() {
       p.full_name.toLowerCase().includes(search.toLowerCase()) ||
       p.email.toLowerCase().includes(search.toLowerCase());
 
-    const status = p.approval_status || 'PENDING';
+    const status = (p.approval_status || 'PENDING').toUpperCase();
     if (filterTab === 'ALL') return matchesSearch;
-    if (filterTab === 'PENDING') return matchesSearch && status === 'PENDING';
+    if (filterTab === 'PENDING') return matchesSearch && (status === 'PENDING' || !p.approval_status);
     if (filterTab === 'ACTIVE') return matchesSearch && status === 'ACTIVE';
     if (filterTab === 'REJECTED') return matchesSearch && status === 'REJECTED';
     return matchesSearch;
   });
 
-  const pendingCount = profiles.filter((p) => (p.approval_status || 'PENDING') === 'PENDING').length;
-  const activeCount = profiles.filter((p) => p.approval_status === 'ACTIVE').length;
-  const rejectedCount = profiles.filter((p) => p.approval_status === 'REJECTED').length;
+  const pendingCount = profiles.filter((p) => {
+    const s = (p.approval_status || 'PENDING').toUpperCase();
+    return s === 'PENDING' || !p.approval_status;
+  }).length;
+  const activeCount = profiles.filter((p) => (p.approval_status || '').toUpperCase() === 'ACTIVE').length;
+  const rejectedCount = profiles.filter((p) => (p.approval_status || '').toUpperCase() === 'REJECTED').length;
 
   return (
     <div className="space-y-6 font-sans">

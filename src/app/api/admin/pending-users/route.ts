@@ -21,10 +21,24 @@ if (!globalThis.__SUONGMAI_PROFILES_CACHE__) {
   globalThis.__SUONGMAI_PROFILES_CACHE__ = [...INITIAL_SERVER_PROFILES];
 }
 
+function getSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    return null;
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -39,7 +53,8 @@ function getSupabaseClient() {
 
 export async function GET() {
   const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
-  const supabase = getSupabaseClient();
+  const supabaseAdmin = getSupabaseAdminClient();
+  const supabase = supabaseAdmin || getSupabaseClient();
 
   let dbProfiles: Profile[] = [];
 
@@ -94,6 +109,10 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     profiles: sanitized,
-    pendingProfiles: sanitized.filter((p) => (p.approval_status || 'PENDING') === 'PENDING'),
+    data: sanitized,
+    pendingProfiles: sanitized.filter((p) => {
+      const s = (p.approval_status || 'PENDING').toUpperCase();
+      return s === 'PENDING';
+    }),
   });
 }

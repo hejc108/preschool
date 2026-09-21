@@ -310,8 +310,9 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       try {
         const res = await fetch('/api/users/approvals');
         const json = await res.json();
-        if (json.success && Array.isArray(json.profiles)) {
-          apiProfiles = json.profiles;
+        const list = json.data || json.profiles;
+        if (json.success && Array.isArray(list)) {
+          apiProfiles = list;
         }
       } catch (e) {}
     }

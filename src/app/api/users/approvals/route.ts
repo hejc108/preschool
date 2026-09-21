@@ -55,12 +55,17 @@ function getSupabaseClient() {
 
 export async function GET() {
   const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
-  const supabase = getSupabaseClient();
+  
+  // Explicitly use SUPABASE_SERVICE_ROLE_KEY to bypass RLS when fetching profiles
+  try {
+    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseClient = supabaseAdmin || getSupabaseClient();
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient.from('profiles').select('*').order('created_at', { ascending: false });
+      if (error) {
+        console.error('[API GET APPROVALS ERROR]:', error.message || error);
+      } else if (data && data.length > 0) {
         // Merge Supabase DB with server cache
         for (const dbProfile of data as Profile[]) {
           const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim());
@@ -71,9 +76,9 @@ export async function GET() {
           }
         }
       }
-    } catch (e) {
-      console.warn('Supabase DB fetch warning:', e);
     }
+  } catch (e: any) {
+    console.warn('[API GET APPROVALS EXCEPTION]:', e.message || e);
   }
 
   // Guarantee sadmin@suongmai.edu.vn is ALWAYS active SUPER_ADMIN
@@ -109,7 +114,7 @@ export async function GET() {
   });
 
   globalThis.__SUONGMAI_PROFILES_CACHE__ = sanitized;
-  return NextResponse.json({ success: true, profiles: sanitized });
+  return NextResponse.json({ success: true, profiles: sanitized, data: sanitized });
 }
 
 export async function POST(request: Request) {
