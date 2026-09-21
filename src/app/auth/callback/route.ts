@@ -59,11 +59,11 @@ export async function GET(request: Request) {
       '';
     const anonKey = rawAnonKey.trim().replace(/^["']|["']$/g, '');
 
-    if (!anonKey || anonKey.includes('mock-key')) {
-      console.error('[AUTH CALLBACK ERROR] SUPABASE_ANON_KEY missing or mock key on Vercel!');
+    if (!anonKey || anonKey.includes('mock-key') || anonKey.includes('your-production')) {
+      console.error('[AUTH CALLBACK ERROR] SUPABASE_ANON_KEY on Vercel is set to placeholder text!');
       const response = NextResponse.redirect(
         `${origin}/auth?error=${encodeURIComponent(
-          'Vercel chưa có biến SUPABASE_ANON_KEY (hoặc NEXT_PUBLIC_SUPABASE_ANON_KEY). Vui lòng copy key "anon public" từ Supabase Dashboard -> Project Settings -> API và thêm vào Vercel.'
+          'Biến SUPABASE_ANON_KEY trên Vercel hiện đang là chữ mẫu ("your-production..."). Vui lòng copy chuỗi key thật (dài khoảng 200 ký tự bắt đầu bằng eyJhbG...) từ Supabase Dashboard -> API và cập nhật lại trên Vercel.'
         )}`
       );
       response.cookies.delete('suongmai_session');
