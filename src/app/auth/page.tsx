@@ -18,6 +18,23 @@ function AuthContent() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user?.email) {
         const userEmail = session.user.email;
+        const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
+        const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
+
+        try {
+          await fetch('/api/users/approvals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userEmail,
+              full_name: fullName,
+              avatar_url: avatarUrl,
+            }),
+          });
+        } catch (err) {
+          console.error('Lỗi tự động đồng bộ profile:', err);
+        }
+
         document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
         window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
       }
@@ -29,9 +46,24 @@ function AuthContent() {
 
       if (hash.includes('access_token') || hash.includes('id_token') || search.includes('code=')) {
         setLoading(true);
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
           if (session?.user?.email) {
             const userEmail = session.user.email;
+            const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
+            const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
+
+            try {
+              await fetch('/api/users/approvals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: userEmail,
+                  full_name: fullName,
+                  avatar_url: avatarUrl,
+                }),
+              });
+            } catch (e) {}
+
             document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
             window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
           } else {
