@@ -33,13 +33,109 @@ function AuthContent() {
       }
     };
 
+    const processUserRouting = async (userEmail: string, fullName: string = '', avatarUrl: string = '') => {
+      const cleanEmail = userEmail.toLowerCase().trim();
+
+      // 1. Tự động ghi nhận/đồng bộ profile vào Supabase DB qua Service Role API
+      try {
+        await fetch('/api/users/approvals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            full_name: fullName || cleanEmail.split('@')[0],
+            avatar_url: avatarUrl,
+          }),
+        });
+      } catch (err) {
+        console.error('Lỗi tự động đồng bộ profile:', err);
+      }
+
+      // 2. Kiểm tra live status từ CSDL để biết tài khoản đã được duyệt chưa và vai trò là gì
+      try {
+        const res = await fetch('/api/auth/refresh-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        const refreshData = await res.json();
+
+        if (refreshData.success && refreshData.isApproved) {
+          const targetRole = refreshData.role || 'PARENT';
+          let targetUrl = refreshData.redirectUrl || '/parent';
+          if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
+            targetUrl = '/admin/dashboard';
+          } else if (targetRole === 'TEACHER') {
+            targetUrl = '/teacher/lesson-plans/new';
+          } else if (targetRole === 'PARENT') {
+            targetUrl = '/parent';
+          } else if (targetRole === 'KITCHEN_STAFF') {
+            targetUrl = '/admin/menu';
+          } else if (targetRole === 'NURSE_STAFF') {
+            targetUrl = '/admin/health';
+          }
+
+          document.cookie = `suongmai_session=active; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `suongmai_user_role=${targetRole}; path=/; max-age=86400; SameSite=Lax`;
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(
+              'suongmai_auth_user',
+              JSON.stringify({ email: cleanEmail, role: targetRole, authenticated: true, timestamp: Date.now() })
+            );
+          }
+
+          window.location.replace(targetUrl);
+          return;
+        } else {
+          // Tài khoản chưa được duyệt -> Chuyển đến màn hình chờ duyệt
+          document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
+          document.cookie = `suongmai_user_role=GUEST; path=/; max-age=86400; SameSite=Lax`;
+          window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
+          return;
+        }
+      } catch (err) {
+        document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
+        window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
+      }
+    };
+
     const handleHashOrCodeAuth = async () => {
       if (typeof window === 'undefined') return;
 
       const hash = window.location.hash || '';
       const search = window.location.search || '';
+      const params = new URLSearchParams(search);
+      const code = params.get('code');
 
-      // 1. Xử lý khi URL có chứa Hash (#access_token=... hoặc #id_token=...) từ Implicit OAuth Flow
+      // 1. Xử lý khi URL có query parameter ?code=... (PKCE OAuth Flow)
+      if (code) {
+        setLoading(true);
+        try {
+          // Quy đổi PKCE code lấy Session chính thức từ Supabase
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          let userEmail = data?.session?.user?.email || data?.user?.email;
+          let fullName = data?.session?.user?.user_metadata?.full_name || data?.session?.user?.user_metadata?.name || data?.user?.user_metadata?.full_name || '';
+          let avatarUrl = data?.session?.user?.user_metadata?.avatar_url || data?.session?.user?.user_metadata?.picture || data?.user?.user_metadata?.avatar_url || '';
+
+          if (!userEmail) {
+            const sessionRes = await supabase.auth.getSession();
+            userEmail = sessionRes.data?.session?.user?.email;
+            fullName = sessionRes.data?.session?.user?.user_metadata?.full_name || sessionRes.data?.session?.user?.user_metadata?.name || userEmail?.split('@')[0] || '';
+            avatarUrl = sessionRes.data?.session?.user?.user_metadata?.avatar_url || sessionRes.data?.session?.user?.user_metadata?.picture || '';
+          }
+
+          if (userEmail) {
+            await processUserRouting(userEmail, fullName, avatarUrl);
+            return;
+          }
+        } catch (err) {
+          console.error('Lỗi quy đổi code sang session:', err);
+        }
+      }
+
+      // 2. Xử lý khi URL có chứa Hash (#access_token=... hoặc #id_token=...) từ Implicit OAuth Flow
       if (hash.includes('access_token=') || hash.includes('id_token=')) {
         setLoading(true);
         let token = '';
@@ -56,51 +152,9 @@ function AuthContent() {
             const fullName = payload.user_metadata?.full_name || payload.user_metadata?.name || payload.name || userEmail.split('@')[0];
             const avatarUrl = payload.user_metadata?.avatar_url || payload.user_metadata?.picture || '';
 
-            try {
-              await fetch('/api/users/approvals', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: userEmail,
-                  full_name: fullName,
-                  avatar_url: avatarUrl,
-                }),
-              });
-            } catch (err) {
-              console.error('Lỗi tự động ghi nhận profile:', err);
-            }
-
-            document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
-            window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+            await processUserRouting(userEmail, fullName, avatarUrl);
             return;
           }
-        }
-      }
-
-      // 2. Xử lý khi URL có chứa query parameter code (?code=...) từ PKCE OAuth Flow
-      if (search.includes('code=')) {
-        setLoading(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.email) {
-          const userEmail = session.user.email;
-          const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
-          const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
-
-          try {
-            await fetch('/api/users/approvals', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: userEmail,
-                full_name: fullName,
-                avatar_url: avatarUrl,
-              }),
-            });
-          } catch (e) {}
-
-          document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
-          window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
-          return;
         }
       }
     };
@@ -111,22 +165,7 @@ function AuthContent() {
         const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
         const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
 
-        try {
-          await fetch('/api/users/approvals', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: userEmail,
-              full_name: fullName,
-              avatar_url: avatarUrl,
-            }),
-          });
-        } catch (err) {
-          console.error('Lỗi tự động đồng bộ profile:', err);
-        }
-
-        document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
-        window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+        await processUserRouting(userEmail, fullName, avatarUrl);
       }
     });
 
