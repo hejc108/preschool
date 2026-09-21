@@ -165,35 +165,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // If OAuth code/email is missing on server side (e.g. Implicit Hash flow returned to client),
-  // return an HTML page with client JS script to forward window.location.hash to /auth without losing token
-  const clientRedirectHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Đang xác thực Google...</title>
-</head>
-<body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #475569;">
-  <div style="text-align: center;">
-    <p style="font-size: 15px; font-weight: 600;">Đang hoàn tất đăng nhập Google...</p>
-    <script>
-      (function() {
-        var hash = window.location.hash || '';
-        var search = window.location.search || '';
-        if (hash && (hash.includes('access_token') || hash.includes('id_token'))) {
-          window.location.replace('/auth' + hash);
-        } else if (search && search.includes('code=')) {
-          window.location.replace('/auth' + search);
-        } else {
-          window.location.replace('/auth?selectEmail=true');
-        }
-      })();
-    </script>
-  </div>
-</body>
-</html>`;
-
-  return new NextResponse(clientRedirectHtml, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
+  // Clean fallback: redirect to /auth (clean URL without query parameters to prevent redirect loops)
+  const response = NextResponse.redirect(`${origin}/auth`);
+  response.cookies.delete('suongmai_session');
+  return response;
 }

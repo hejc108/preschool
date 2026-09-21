@@ -117,8 +117,9 @@ function AuthContent() {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('[PKCE EXCHANGE ERROR]:', error.message);
-            // Nếu lỗi do thiếu code_verifier hoặc hết hạn, chuyển hướng ngay qua Server Route Callback xử lý
-            window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+            // Xóa sạch query param ?code= trên URL để ngắt toàn bộ vòng lặp chuyển hướng
+            window.history.replaceState({}, '', '/auth');
+            setLoading(false);
             return;
           }
 
@@ -137,12 +138,14 @@ function AuthContent() {
             await processUserRouting(userEmail, fullName, avatarUrl);
             return;
           } else {
-            window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+            window.history.replaceState({}, '', '/auth');
+            setLoading(false);
             return;
           }
         } catch (err) {
           console.error('[AUTH RUNTIME CRASH]:', err);
-          window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+          window.history.replaceState({}, '', '/auth');
+          setLoading(false);
           return;
         } finally {
           setLoading(false);
