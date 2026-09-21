@@ -50,14 +50,17 @@ export async function GET(request: Request) {
     const anonKey =
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       process.env.SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
       process.env.SUPABASE_PUBLISHABLE_KEY ||
       '';
 
     if (!anonKey || anonKey.includes('mock-key')) {
-      console.error('[AUTH CALLBACK ERROR] NEXT_PUBLIC_SUPABASE_ANON_KEY missing or invalid on Vercel!');
-      const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Khóa API NEXT_PUBLIC_SUPABASE_ANON_KEY chưa được khai báo hoặc không hợp lệ trên Vercel Environment Variables')}`);
+      console.error('[AUTH CALLBACK ERROR] SUPABASE_ANON_KEY missing or mock key on Vercel!');
+      const response = NextResponse.redirect(
+        `${origin}/auth?error=${encodeURIComponent(
+          'Vercel chưa có biến SUPABASE_ANON_KEY (hoặc NEXT_PUBLIC_SUPABASE_ANON_KEY). Vui lòng copy key "anon public" từ Supabase Dashboard -> Project Settings -> API và thêm vào Vercel.'
+        )}`
+      );
       response.cookies.delete('suongmai_session');
       return response;
     }
@@ -85,7 +88,7 @@ export async function GET(request: Request) {
         console.error('[EXCHANGE_CODE_ERROR]:', error.message, error.status);
         let errMsg = error.message;
         if (errMsg.includes('Invalid API key')) {
-          errMsg = 'Khóa API Supabase không hợp lệ (Invalid API key). Vui lòng kiểm tra lại NEXT_PUBLIC_SUPABASE_ANON_KEY trên Vercel.';
+          errMsg = 'Khóa SUPABASE_ANON_KEY trên Vercel không trùng khớp với Supabase (Invalid API key). Vui lòng copy chính xác key "anon public" từ Supabase Dashboard -> API Settings và cập nhật lại biến SUPABASE_ANON_KEY trên Vercel.';
         }
         const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(errMsg)}`);
         response.cookies.delete('suongmai_session');
