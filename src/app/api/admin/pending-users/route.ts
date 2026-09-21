@@ -110,6 +110,7 @@ export async function GET() {
     success: true,
     profiles: sanitized,
     data: sanitized,
+    users: sanitized,
     pendingProfiles: sanitized.filter((p) => {
       const s = (p.approval_status || 'PENDING').toUpperCase();
       return s === 'PENDING';

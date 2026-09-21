@@ -114,7 +114,13 @@ export async function GET() {
   });
 
   globalThis.__SUONGMAI_PROFILES_CACHE__ = sanitized;
-  return NextResponse.json({ success: true, profiles: sanitized, data: sanitized });
+  return NextResponse.json({
+    success: true,
+    profiles: sanitized,
+    data: sanitized,
+    users: sanitized,
+    pendingProfiles: sanitized.filter((p) => (p.approval_status || 'PENDING').toUpperCase() === 'PENDING'),
+  });
 }
 
 export async function POST(request: Request) {

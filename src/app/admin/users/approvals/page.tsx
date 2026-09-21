@@ -59,15 +59,19 @@ export default function UserApprovalsPage() {
 
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/pending-users');
+      const res = await fetch('/api/users/approvals', { cache: 'no-store' });
       const json = await res.json();
-      if (json.success && Array.isArray(json.profiles)) {
-        setProfiles(json.profiles);
+      const rawList = Array.isArray(json)
+        ? json
+        : (json.profiles || json.data || json.users || json.pendingProfiles || []);
+
+      if (rawList && rawList.length > 0) {
+        setProfiles(rawList);
         setRelations(getStoredRelations());
 
         const initialRoles: Record<string, UserRole> = {};
         const initialClasses: Record<string, string> = {};
-        json.profiles.forEach((p: Profile) => {
+        rawList.forEach((p: Profile) => {
           initialRoles[p.id] = p.role || 'PARENT';
           initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
         });
