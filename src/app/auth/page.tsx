@@ -15,6 +15,96 @@ function AuthContent() {
 
   // Listen for auth state changes & handle Hash (#access_token=...) / Code (?code=...) URL parameters
   useEffect(() => {
+    const parseJwt = (token: string) => {
+      try {
+        const base64Url = token.split('.')[1];
+        if (!base64Url) return null;
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (err) {
+        console.error('Lỗi bóc tách JWT token:', err);
+        return null;
+      }
+    };
+
+    const handleHashOrCodeAuth = async () => {
+      if (typeof window === 'undefined') return;
+
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+
+      // 1. Xử lý khi URL có chứa Hash (#access_token=... hoặc #id_token=...) từ Implicit OAuth Flow
+      if (hash.includes('access_token=') || hash.includes('id_token=')) {
+        setLoading(true);
+        let token = '';
+        if (hash.includes('access_token=')) {
+          token = hash.split('access_token=')[1]?.split('&')[0] || '';
+        } else if (hash.includes('id_token=')) {
+          token = hash.split('id_token=')[1]?.split('&')[0] || '';
+        }
+
+        if (token) {
+          const payload = parseJwt(token);
+          const userEmail = payload?.email;
+          if (userEmail) {
+            const fullName = payload.user_metadata?.full_name || payload.user_metadata?.name || payload.name || userEmail.split('@')[0];
+            const avatarUrl = payload.user_metadata?.avatar_url || payload.user_metadata?.picture || '';
+
+            try {
+              await fetch('/api/users/approvals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: userEmail,
+                  full_name: fullName,
+                  avatar_url: avatarUrl,
+                }),
+              });
+            } catch (err) {
+              console.error('Lỗi tự động ghi nhận profile:', err);
+            }
+
+            document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
+            window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+            return;
+          }
+        }
+      }
+
+      // 2. Xử lý khi URL có chứa query parameter code (?code=...) từ PKCE OAuth Flow
+      if (search.includes('code=')) {
+        setLoading(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const userEmail = session.user.email;
+          const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
+          const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
+
+          try {
+            await fetch('/api/users/approvals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: userEmail,
+                full_name: fullName,
+                avatar_url: avatarUrl,
+              }),
+            });
+          } catch (e) {}
+
+          document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
+          window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+          return;
+        }
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user?.email) {
         const userEmail = session.user.email;
@@ -40,42 +130,7 @@ function AuthContent() {
       }
     });
 
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash || '';
-      const search = window.location.search || '';
-
-      if (hash.includes('access_token') || hash.includes('id_token') || search.includes('code=')) {
-        setLoading(true);
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
-          if (session?.user?.email) {
-            const userEmail = session.user.email;
-            const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
-            const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
-
-            try {
-              await fetch('/api/users/approvals', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: userEmail,
-                  full_name: fullName,
-                  avatar_url: avatarUrl,
-                }),
-              });
-            } catch (e) {}
-
-            document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
-            window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
-          } else {
-            const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-            if (match) {
-              const email = decodeURIComponent(match[1]);
-              window.location.replace(`/auth/callback?email=${encodeURIComponent(email)}`);
-            }
-          }
-        });
-      }
-    }
+    handleHashOrCodeAuth();
 
     return () => {
       subscription.unsubscribe();
