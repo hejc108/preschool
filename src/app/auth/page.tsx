@@ -13,8 +13,13 @@ function AuthContent() {
   const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
 
-  const processGoogleLogin = async (emailToLogin: string = 'alanvu755@gmail.com') => {
-    const cleanEmail = emailToLogin.toLowerCase().trim();
+  const processGoogleLogin = async (emailToLogin: string = '') => {
+    let cleanEmail = emailToLogin.toLowerCase().trim();
+    if (!cleanEmail) {
+      const input = typeof window !== 'undefined' ? prompt('Nhập email Google của bạn:') : null;
+      if (!input) return;
+      cleanEmail = input.toLowerCase().trim();
+    }
     setLoading(true);
 
     try {

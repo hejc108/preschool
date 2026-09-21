@@ -67,46 +67,39 @@ export async function GET(request: Request) {
     const resolvedName = fullName || cleanEmail.split('@')[0];
     const resolvedAvatar = avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
 
-    // 1. Mandatory requirement: Upsert into profiles DB using SUPABASE_SERVICE_ROLE_KEY (NO fallback to anon key)
+    // 1. Mandatory requirement: Upsert into profiles DB using SUPABASE_SERVICE_ROLE_KEY with .select() verification
     try {
       const supabaseAdmin = getSupabaseAdminClient();
+      
       const { data: existingDbProfile } = await supabaseAdmin
         .from('profiles')
         .select('id, role, approval_status')
         .eq('email', cleanEmail)
         .maybeSingle();
 
-      if (existingDbProfile) {
-        // Profile already exists: Preserve existing role & approval_status, update metadata only
-        await supabaseAdmin
-          .from('profiles')
-          .update({
-            full_name: resolvedName,
-            avatar_url: resolvedAvatar,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('email', cleanEmail);
-      } else {
-        // New user: Insert default PENDING profile (or SUPER_ADMIN for sadmin)
-        const isSadmin = cleanEmail === 'sadmin@suongmai.edu.vn';
-        const { error: insertErr } = await supabaseAdmin
-          .from('profiles')
-          .insert({
-            id: userId || `u-gauth-${Date.now()}`,
-            email: cleanEmail,
-            full_name: resolvedName,
-            avatar_url: resolvedAvatar,
-            role: isSadmin ? 'SUPER_ADMIN' : 'GUEST',
-            approval_status: isSadmin ? 'ACTIVE' : 'PENDING',
-            created_at: new Date().toISOString(),
-          });
+      const isSadmin = cleanEmail === 'sadmin@suongmai.edu.vn';
+      const profilePayload = {
+        id: existingDbProfile?.id || userId || `u-gauth-${Date.now()}`,
+        email: cleanEmail,
+        full_name: resolvedName,
+        avatar_url: resolvedAvatar,
+        role: existingDbProfile ? existingDbProfile.role : (isSadmin ? 'SUPER_ADMIN' : 'GUEST'),
+        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSadmin ? 'ACTIVE' : 'PENDING'),
+        updated_at: new Date().toISOString(),
+      };
 
-        if (insertErr) {
-          console.error('[AUTH CALLBACK ERROR] Không ghi được profile mới vào Supabase DB:', insertErr.message);
-        }
+      const { data: upsertData, error: upsertErr } = await supabaseAdmin
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'email' })
+        .select();
+
+      if (upsertErr || !upsertData || upsertData.length === 0) {
+        console.error('[AUTH CALLBACK ERROR] Ghi dữ liệu profile vào Supabase DB thất bại:', upsertErr);
+      } else {
+        console.log('[AUTH CALLBACK SUCCESS] Ghi/Cập nhật profile vào Supabase DB thành công:', upsertData[0]);
       }
     } catch (adminErr: any) {
-      console.error('[AUTH CALLBACK ERROR] Supabase Admin Client Exception:', adminErr.message || adminErr);
+      console.error('[AUTH CALLBACK EXCEPTION] Supabase Admin Client Exception:', adminErr.message || adminErr);
     }
 
     // 2. Also register in local server memory cache
