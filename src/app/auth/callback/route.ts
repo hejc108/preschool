@@ -5,8 +5,10 @@ import { cookies } from 'next/headers';
 import { checkUserApprovalStatus, registerGoogleUserIfMissing } from '@/lib/utils/approvalHelper';
 
 function getSupabaseAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
+  const rawServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const serviceRoleKey = rawServiceRoleKey.trim().replace(/^["']|["']$/g, '');
 
   if (!serviceRoleKey) {
     console.error('[AUTH CALLBACK ERROR] Missing SUPABASE_SERVICE_ROLE_KEY environment variable. Check .env file!');
@@ -46,13 +48,16 @@ export async function GET(request: Request) {
 
   if (code) {
     const cookieStore = cookies();
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
-    const anonKey =
+    const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
+    const url = rawUrl.trim().replace(/^["']|["']$/g, '');
+
+    const rawAnonKey =
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       process.env.SUPABASE_ANON_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
       process.env.SUPABASE_PUBLISHABLE_KEY ||
       '';
+    const anonKey = rawAnonKey.trim().replace(/^["']|["']$/g, '');
 
     if (!anonKey || anonKey.includes('mock-key')) {
       console.error('[AUTH CALLBACK ERROR] SUPABASE_ANON_KEY missing or mock key on Vercel!');

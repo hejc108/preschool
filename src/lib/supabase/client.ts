@@ -13,16 +13,19 @@ import {
   Profile 
 } from '../types/schema';
 
-const supabaseUrl = 
+const rawUrl = 
   process.env.NEXT_PUBLIC_SUPABASE_URL || 
   process.env.SUPABASE_URL || 
   'https://yrieuamibqjyaslprdeo.supabase.co';
-const supabaseAnonKey = 
+const rawAnonKey = 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
   process.env.SUPABASE_ANON_KEY || 
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
   process.env.SUPABASE_PUBLISHABLE_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
+
+const supabaseUrl = rawUrl.trim().replace(/^["']|["']$/g, '');
+const supabaseAnonKey = rawAnonKey.trim().replace(/^["']|["']$/g, '');
 
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
