@@ -24,7 +24,13 @@ const supabaseAnonKey =
   process.env.SUPABASE_PUBLISHABLE_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'pkce',
+    detectSessionInUrl: true,
+    persistSession: true,
+  },
+});
 
 // MOCK INITIAL DATA FOR DEMO & LOCAL VERIFICATION
 export const INITIAL_CLASSES: ClassRoom[] = [

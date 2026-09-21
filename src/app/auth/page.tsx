@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -12,6 +12,43 @@ function AuthContent() {
   const redirectTo = searchParams?.get('redirectTo') || '/admin/dashboard';
   const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
+
+  // Listen for auth state changes & handle Hash (#access_token=...) / Code (?code=...) URL parameters
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user?.email) {
+        const userEmail = session.user.email;
+        document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
+        window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+      }
+    });
+
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+
+      if (hash.includes('access_token') || hash.includes('id_token') || search.includes('code=')) {
+        setLoading(true);
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user?.email) {
+            const userEmail = session.user.email;
+            document.cookie = `suongmai_user_email=${encodeURIComponent(userEmail)}; path=/; max-age=86400; SameSite=Lax`;
+            window.location.replace(`/auth/callback?email=${encodeURIComponent(userEmail)}`);
+          } else {
+            const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+            if (match) {
+              const email = decodeURIComponent(match[1]);
+              window.location.replace(`/auth/callback?email=${encodeURIComponent(email)}`);
+            }
+          }
+        });
+      }
+    }
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const processGoogleLogin = async (emailToLogin: string = '') => {
     let cleanEmail = emailToLogin.toLowerCase().trim();
