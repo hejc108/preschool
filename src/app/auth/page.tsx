@@ -113,8 +113,15 @@ function AuthContent() {
       if (code) {
         setLoading(true);
         try {
-          // Quy đổi PKCE code lấy Session chính thức từ Supabase
+          // Quy đổi PKCE code lấy Session chính thức từ Supabase Client
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error('[PKCE EXCHANGE ERROR]:', error.message);
+            // Nếu lỗi do thiếu code_verifier hoặc hết hạn, chuyển hướng ngay qua Server Route Callback xử lý
+            window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+            return;
+          }
+
           let userEmail = data?.session?.user?.email || data?.user?.email;
           let fullName = data?.session?.user?.user_metadata?.full_name || data?.session?.user?.user_metadata?.name || data?.user?.user_metadata?.full_name || '';
           let avatarUrl = data?.session?.user?.user_metadata?.avatar_url || data?.session?.user?.user_metadata?.picture || data?.user?.user_metadata?.avatar_url || '';
@@ -129,9 +136,16 @@ function AuthContent() {
           if (userEmail) {
             await processUserRouting(userEmail, fullName, avatarUrl);
             return;
+          } else {
+            window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+            return;
           }
         } catch (err) {
-          console.error('Lỗi quy đổi code sang session:', err);
+          console.error('[AUTH RUNTIME CRASH]:', err);
+          window.location.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+          return;
+        } finally {
+          setLoading(false);
         }
       }
 
