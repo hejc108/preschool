@@ -182,14 +182,26 @@ export async function GET(request: Request) {
     const isApproved = liveProfile?.approval_status === 'ACTIVE' || status.approvalStatus === 'ACTIVE';
     const resolvedRole = liveProfile?.role || status.profile?.role || 'PARENT';
 
+    const nextParam = searchParams.get('next') || searchParams.get('returnUrl');
+
     if (isApproved) {
       let targetUrl = '/parent';
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
-        targetUrl = '/admin/dashboard';
+        targetUrl = nextParam && nextParam.startsWith('/') ? nextParam : '/admin/dashboard';
       } else if (resolvedRole === 'TEACHER') {
-        targetUrl = '/teacher/lesson-plans/new';
+        if (nextParam && nextParam.startsWith('/teacher')) {
+          targetUrl = nextParam;
+        } else {
+          targetUrl = '/teacher/lesson-plans/new';
+        }
       } else if (resolvedRole === 'PARENT') {
-        targetUrl = '/parent';
+        if (nextParam && nextParam.startsWith('/parent')) {
+          targetUrl = nextParam;
+        } else if (nextParam && nextParam.startsWith('/teacher')) {
+          targetUrl = '/parent?warning=wrong_role';
+        } else {
+          targetUrl = '/parent';
+        }
       } else if (resolvedRole === 'KITCHEN_STAFF') {
         targetUrl = '/admin/menu';
       } else if (resolvedRole === 'NURSE_STAFF') {

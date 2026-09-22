@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
-  Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck, KeyRound, ShieldCheck 
+  Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck, KeyRound, ShieldCheck, QrCode 
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -47,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
+    { label: 'Mã QR & In Ấn (A4)', href: '/admin/qr-codes', icon: QrCode, badge: 'Standee' },
   ];
 
   const aiNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
@@ -73,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col md:flex-row font-sans">
       {/* Sidebar - Pastel Sky Blue (#F0F9FF) */}
-      <aside className="w-full md:w-64 bg-sky-50 border-b md:border-b-0 md:border-r border-sky-100 text-slate-800 flex flex-col shrink-0 shadow-sm">
+      <aside className="w-full md:w-64 bg-sky-50 border-b md:border-b-0 md:border-r border-sky-100 text-slate-800 flex flex-col shrink-0 shadow-sm print:hidden">
         {/* Brand Header */}
         <div className="p-5 border-b border-sky-100 flex items-center gap-3 bg-sky-100/40">
           <div className="w-10 h-10 bg-sky-500 border border-sky-400 rounded-convent flex items-center justify-center text-white shadow-sm shrink-0">
@@ -213,7 +214,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
           </div>
 
