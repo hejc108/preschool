@@ -1,11 +1,16 @@
-// Service Worker - Mầm Non Sương Mai PWA
-const CACHE_NAME = 'suongmai-pwa-v1';
+// Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
+const CACHE_NAME = 'suongmai-pwa-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
+  '/images/logo.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+  '/icons/apple-touch-icon.png',
   '/icon-192.png',
   '/icon-512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/favicon.ico'
 ];
 
 // Install Event
@@ -32,21 +37,29 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event
+// Fetch Event - Strict PKCE Cookie & Auth Bypass
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
+  // 1. Only handle GET requests
   if (event.request.method !== 'GET') return;
   
-  // Skip cross-origin and API requests (Supabase, external URLs)
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) {
-    return;
+
+  // 2. EXPLICIT BYPASS: Never intercept or cache Auth, API, or Supabase requests
+  // This guarantees zero conflicts with @supabase/ssr Cookie PKCE authentication flow.
+  if (
+    url.pathname.startsWith('/auth') || 
+    url.pathname.startsWith('/api') || 
+    url.origin.includes('supabase.co') ||
+    url.searchParams.has('code') ||
+    url.searchParams.has('state')
+  ) {
+    return; // Pass through directly to network
   }
 
+  // 3. For all other static navigation or assets: Network-First with Cache Fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
-        // Cache static responses dynamically if successful
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -56,7 +69,6 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        // Fallback to cache if offline
         return caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) {
             return cachedResponse;

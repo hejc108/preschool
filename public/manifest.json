@@ -1,25 +1,35 @@
 {
   "name": "Mầm Non Sương Mai",
   "short_name": "Sương Mai",
-  "description": "Hệ Thống Quản Lý & Chăm Sóc Mầm Non Sương Mai",
+  "description": "Hệ Thống Quản Lý, Sổ Liên Lạc Điện Tử & Tác Nghiệp Sương Mai Kindergarten",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f8fafc",
-  "theme_color": "#0284c7",
+  "background_color": "#FFFFFF",
+  "theme_color": "#D32F2F",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }

@@ -284,21 +284,26 @@ export default function ParentPwaPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-slate-50 to-emerald-100/50 text-slate-800 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-200/50 rounded-full blur-3xl pointer-events-none" />
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 via-surface-base to-rose-50/50 text-slate-800 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-200/40 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="max-w-md w-full bg-white/95 backdrop-blur-md border border-emerald-100 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 text-slate-800 text-center ring-1 ring-emerald-900/5">
-          <div className="w-16 h-16 bg-gradient-to-tr from-emerald-500 to-emerald-600 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30">
-            <Heart className="w-8 h-8 fill-emerald-100 text-white" />
+        <div className="max-w-md w-full bg-white/95 backdrop-blur-md border border-amber-100 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 text-slate-800 text-center ring-1 ring-secondary-900/10">
+          {/* Circular Official Logo */}
+          <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-secondary-500 via-primary-600 to-secondary-600 mx-auto mb-4 shadow-xl shadow-secondary-500/20">
+            <img 
+              src="/images/logo.png" 
+              alt="Mầm Non Sương Mai Logo" 
+              className="w-full h-full object-cover rounded-full bg-white"
+            />
           </div>
           
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Sổ Liên Lạc Điện Tử</h1>
-          <p className="text-emerald-700 font-semibold text-xs mt-1 mb-6">Trường Mầm Non Sương Mai</p>
+          <p className="text-secondary-700 font-bold text-xs mt-1 mb-6">Trường Mầm Non Sương Mai</p>
 
           <button
             onClick={handleInPlaceGoogleLogin}
             disabled={isLoggingIn}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold py-3.5 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm mb-4"
+            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:border-secondary-500 text-slate-800 font-bold py-3.5 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm mb-4"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -309,7 +314,23 @@ export default function ParentPwaPage() {
             <span>{isLoggingIn ? 'Đang kết nối Google...' : 'Đăng nhập bằng Google'}</span>
           </button>
 
-          <p className="text-xs text-slate-400 leading-relaxed">Dành cho Phụ huynh học sinh trường Mầm Non Sương Mai.</p>
+          <p className="text-xs text-slate-500 leading-relaxed mb-4">Dành cho Phụ huynh học sinh trường Mầm Non Sương Mai.</p>
+
+          {/* Direct PWA Install Trigger Banner */}
+          <div className="pt-4 border-t border-amber-100 flex items-center justify-between text-left bg-amber-50/60 p-3 rounded-2xl border border-amber-200">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-secondary-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                📱
+              </div>
+              <div>
+                <p className="text-xs font-bold text-secondary-900">Ứng dụng PWA Sương Mai</p>
+                <p className="text-[10px] text-slate-500">Cài lên MH chính để dùng hàng ngày</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-secondary-700 bg-white px-2 py-1 rounded-lg border border-amber-200 shadow-2xs">
+              Sẵn sàng cài đặt
+            </span>
+          </div>
         </div>
       </div>
     );

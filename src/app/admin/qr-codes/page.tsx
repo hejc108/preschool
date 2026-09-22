@@ -32,7 +32,7 @@ export default function AdminQrCodesPage() {
     const ctx = canvas.getContext('2d');
     const img = new Image();
 
-    // High resolution for crisp printing
+    // High resolution for crisp vector printing
     canvas.width = 1200;
     canvas.height = 1200;
 
@@ -71,22 +71,22 @@ export default function AdminQrCodesPage() {
   return (
     <div className="space-y-6">
       {/* Page Header (Hidden when printing) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-convent border border-slate-200/80 shadow-sm print:hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-convent border border-rose-100 shadow-sm print:hidden">
         <div>
-          <div className="flex items-center gap-2 text-sky-600 font-semibold text-xs uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-primary-700 font-bold text-xs uppercase tracking-wider mb-1">
             <QrCode className="w-4 h-4" />
             <span>Hệ Thống Quản Lý Mã QR</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Quản Lý & In Ấn Mã QR (A4 / Standee)</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Quản Lý & In Ấn Mã QR (A4 / Standee)</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Sinh mã QR Vector sắc nét phục vụ in bản A4 hoặc Standee đón tiếp tại Cổng Trường Mầm Non Sương Mai.
+            Sinh mã QR Vector sắc nét nhúng Logo chính thức Trường Mầm Non Sương Mai phục vụ in ấn A4 & Standee.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => handlePrint('BOTH')}
-            className="inline-flex items-center gap-2 bg-sky-600 text-white font-semibold px-4 py-2.5 rounded-pill hover:bg-sky-700 transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
+            className="inline-flex items-center gap-2 bg-primary-700 text-white font-bold px-4 py-2.5 rounded-pill hover:bg-primary-800 transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>In Bộ Mã A4 Đôi</span>
@@ -97,25 +97,25 @@ export default function AdminQrCodesPage() {
       {/* Main Grid: 2 Independent QR Code Cards (Hidden when printing) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:hidden">
         {/* Card 1: Mã QR Cổng Giáo Viên */}
-        <div className="bg-white rounded-convent border border-sky-100 shadow-sm p-6 flex flex-col justify-between relative overflow-hidden group hover:border-sky-300 transition-all">
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-sky-400 to-sky-600" />
+        <div className="bg-white rounded-convent border border-rose-100 shadow-sm p-6 flex flex-col justify-between relative overflow-hidden group hover:border-primary-300 transition-all">
+          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-primary-700 to-primary-600" />
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 text-sky-700 font-semibold text-xs border border-sky-200">
-                <GraduationCap className="w-3.5 h-3.5 text-sky-600" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 text-primary-800 font-bold text-xs border border-rose-200">
+                <GraduationCap className="w-3.5 h-3.5 text-primary-700" />
                 <span>Phân Hệ Giáo Viên</span>
               </div>
               <span className="text-xs font-mono text-slate-400">{teacherUrl}</span>
             </div>
 
-            <h2 className="text-lg font-bold text-slate-800 mb-1">1. Mã QR Cổng Tác Nghiệp Giáo Viên</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">1. Mã QR Cổng Tác Nghiệp Giáo Viên</h2>
             <p className="text-xs text-slate-500 mb-6 leading-relaxed">
               Dành cho Giáo viên và Ban giám hiệu quét mã để mở ứng dụng PWA Điểm danh, Báo ăn, Dặn thuốc và Theo dõi sức khỏe.
             </p>
 
             {/* QR Code Container */}
-            <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80 mb-6">
+            <div className="flex flex-col items-center justify-center p-6 bg-rose-50/30 rounded-2xl border border-rose-100 mb-6">
               <div className="p-4 bg-white rounded-xl shadow-md border border-slate-100">
                 <QRCodeSVG
                   ref={teacherQrRef}
@@ -124,11 +124,11 @@ export default function AdminQrCodesPage() {
                   level="H"
                   includeMargin={true}
                   imageSettings={{
-                    src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=60&auto=format&fit=crop&q=80',
+                    src: '/images/logo.png',
                     x: undefined,
                     y: undefined,
-                    height: 36,
-                    width: 36,
+                    height: 48,
+                    width: 48,
                     excavate: true,
                   }}
                 />
@@ -148,7 +148,7 @@ export default function AdminQrCodesPage() {
             </button>
             <button
               onClick={() => handlePrint('TEACHER')}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-sky-600 text-white font-semibold py-2.5 px-4 rounded-xl hover:bg-sky-700 transition-all text-xs shadow-sm cursor-pointer active:scale-95"
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-primary-700 text-white font-bold py-2.5 px-4 rounded-xl hover:bg-primary-800 transition-all text-xs shadow-sm cursor-pointer active:scale-95"
             >
               <Printer className="w-4 h-4" />
               <span>In Mẫu A4 Standee</span>
@@ -157,25 +157,25 @@ export default function AdminQrCodesPage() {
         </div>
 
         {/* Card 2: Mã QR Sổ Liên Lạc Phụ Huynh */}
-        <div className="bg-white rounded-convent border border-emerald-100 shadow-sm p-6 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-300 transition-all">
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-400 to-teal-600" />
+        <div className="bg-white rounded-convent border border-amber-100 shadow-sm p-6 flex flex-col justify-between relative overflow-hidden group hover:border-secondary-300 transition-all">
+          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-secondary-500 to-secondary-600" />
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-xs border border-emerald-200">
-                <Heart className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-secondary-800 font-bold text-xs border border-amber-200">
+                <Heart className="w-3.5 h-3.5 text-secondary-600 fill-amber-100" />
                 <span>Phân Hệ Phụ Huynh</span>
               </div>
               <span className="text-xs font-mono text-slate-400">{parentUrl}</span>
             </div>
 
-            <h2 className="text-lg font-bold text-slate-800 mb-1">2. Mã QR Sổ Liên Lạc Phụ Huynh</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">2. Mã QR Sổ Liên Lạc Phụ Huynh</h2>
             <p className="text-xs text-slate-500 mb-6 leading-relaxed">
               Đặt tại cổng trường hoặc bảng tin để Phụ huynh quét mã tra cứu điểm danh, thực đơn bán trú, gửi đơn dặn thuốc và dặn nghỉ học.
             </p>
 
             {/* QR Code Container */}
-            <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80 mb-6">
+            <div className="flex flex-col items-center justify-center p-6 bg-amber-50/30 rounded-2xl border border-amber-100 mb-6">
               <div className="p-4 bg-white rounded-xl shadow-md border border-slate-100">
                 <QRCodeSVG
                   ref={parentQrRef}
@@ -184,11 +184,11 @@ export default function AdminQrCodesPage() {
                   level="H"
                   includeMargin={true}
                   imageSettings={{
-                    src: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=60&auto=format&fit=crop&q=80',
+                    src: '/images/logo.png',
                     x: undefined,
                     y: undefined,
-                    height: 36,
-                    width: 36,
+                    height: 48,
+                    width: 48,
                     excavate: true,
                   }}
                 />
@@ -208,7 +208,7 @@ export default function AdminQrCodesPage() {
             </button>
             <button
               onClick={() => handlePrint('PARENT')}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-2.5 px-4 rounded-xl hover:bg-emerald-700 transition-all text-xs shadow-sm cursor-pointer active:scale-95"
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-secondary-600 text-white font-bold py-2.5 px-4 rounded-xl hover:bg-secondary-700 transition-all text-xs shadow-sm cursor-pointer active:scale-95"
             >
               <Printer className="w-4 h-4" />
               <span>In Mẫu A4 Standee</span>
@@ -221,27 +221,29 @@ export default function AdminQrCodesPage() {
       <div className="hidden print:block space-y-12">
         {/* Template 1: Standee Mã QR Giáo Viên */}
         {(printingTarget === 'TEACHER' || printingTarget === 'BOTH') && (
-          <div className="bg-white p-8 border-4 border-sky-600 rounded-3xl min-h-[95vh] flex flex-col justify-between items-center text-center page-break-after-always relative overflow-hidden">
+          <div className="bg-white p-8 border-4 border-primary-700 rounded-3xl min-h-[95vh] flex flex-col justify-between items-center text-center page-break-after-always relative overflow-hidden">
             {/* Outer Decorative Border Header */}
-            <div className="w-full flex items-center justify-between border-b-2 border-sky-100 pb-6 mb-6">
+            <div className="w-full flex items-center justify-between border-b-2 border-rose-100 pb-6 mb-6">
               <div className="flex items-center gap-4 text-left">
-                <div className="w-16 h-16 bg-sky-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-md">
-                  SM
-                </div>
+                <img 
+                  src="/images/logo.png" 
+                  alt="Mầm Non Sương Mai Logo" 
+                  className="w-16 h-16 rounded-full border-2 border-primary-600 shadow-md object-cover bg-white"
+                />
                 <div>
-                  <h1 className="text-2xl font-bold text-sky-950 uppercase tracking-tight">TRƯỜNG MẦM NON SƯƠNG MAI</h1>
-                  <p className="text-xs font-medium text-sky-700 uppercase tracking-wider">Hệ Thống Quản Lý Giáo Dục Mầm Non Chuẩn Quốc Gia</p>
+                  <h1 className="text-2xl font-extrabold text-primary-900 uppercase tracking-tight">TRƯỜNG MẦM NON SƯƠNG MAI</h1>
+                  <p className="text-xs font-bold text-secondary-600 uppercase tracking-wider">Khởi Sáng Trí Tâm - Gieo Mầm Ước Mơ</p>
                 </div>
               </div>
-              <div className="text-right text-xs font-semibold text-sky-800 bg-sky-50 px-4 py-2 rounded-xl border border-sky-200">
+              <div className="text-right text-xs font-bold text-primary-800 bg-rose-50 px-4 py-2 rounded-xl border border-rose-200">
                 MÃ QR CHÍNH THỨC 2026
               </div>
             </div>
 
             {/* Standee Content Body */}
             <div className="my-auto flex flex-col items-center max-w-xl">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-sky-100 text-sky-800 font-bold text-sm mb-4">
-                <GraduationCap className="w-5 h-5 text-sky-600" />
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-100 text-primary-900 font-extrabold text-sm mb-4 border border-rose-200">
+                <GraduationCap className="w-5 h-5 text-primary-700" />
                 <span>CỔNG TÁC NGHIỆP GIÁO VIÊN</span>
               </div>
 
@@ -252,19 +254,27 @@ export default function AdminQrCodesPage() {
                 Giáo viên sử dụng camera điện thoại hoặc Zalo để quét mã QR và đăng nhập vào ứng dụng PWA Tác nghiệp.
               </p>
 
-              {/* Large Crisp QR Code */}
-              <div className="p-6 bg-white border-4 border-sky-500 rounded-3xl shadow-xl mb-6 inline-block">
+              {/* Large Crisp QR Code with Official Logo */}
+              <div className="p-6 bg-white border-4 border-primary-700 rounded-3xl shadow-xl mb-6 inline-block">
                 <QRCodeSVG
                   value={teacherUrl}
                   size={320}
                   level="H"
                   includeMargin={true}
+                  imageSettings={{
+                    src: '/images/logo.png',
+                    x: undefined,
+                    y: undefined,
+                    height: 64,
+                    width: 64,
+                    excavate: true,
+                  }}
                 />
               </div>
 
-              <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 w-full text-left font-medium text-slate-700 text-xs space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-sky-900 font-bold text-sm mb-1">
-                  <CheckCircle2 className="w-4 h-4 text-sky-600" />
+              <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-4 w-full text-left font-medium text-slate-700 text-xs space-y-2 mb-4">
+                <div className="flex items-center gap-2 text-primary-900 font-bold text-sm mb-1">
+                  <CheckCircle2 className="w-4 h-4 text-primary-700" />
                   <span>Hướng dẫn dành cho Giáo viên:</span>
                 </div>
                 <p>1. Mở ứng dụng Camera, Zalo hoặc Google Lens trên điện thoại.</p>
@@ -272,40 +282,42 @@ export default function AdminQrCodesPage() {
                 <p>3. Nhấp vào liên kết hiện lên để truy cập ngay Cổng Tác Nghiệp.</p>
               </div>
 
-              <p className="text-xs font-mono font-semibold text-slate-400 tracking-wider uppercase">{teacherUrl}</p>
+              <p className="text-xs font-mono font-bold text-primary-800 tracking-wider uppercase">{teacherUrl}</p>
             </div>
 
             {/* Standee Footer */}
-            <div className="w-full pt-6 border-t-2 border-sky-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>📍 Địa chỉ: 123 Đường Sương Mai, Phường 4, Quận Tân Bình, TP.HCM</span>
-              <span>☎️ Hotline IT: 0903.112.233</span>
+            <div className="w-full pt-6 border-t-2 border-rose-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
+              <span>📍 Trường Mầm Non Sương Mai • ĐT: 0911.784.875</span>
+              <span>☎️ Hotline IT BGH: 0911.784.875</span>
             </div>
           </div>
         )}
 
         {/* Template 2: Standee Mã QR Phụ Huynh */}
         {(printingTarget === 'PARENT' || printingTarget === 'BOTH') && (
-          <div className="bg-white p-8 border-4 border-emerald-600 rounded-3xl min-h-[95vh] flex flex-col justify-between items-center text-center page-break-after-always relative overflow-hidden">
+          <div className="bg-white p-8 border-4 border-secondary-600 rounded-3xl min-h-[95vh] flex flex-col justify-between items-center text-center page-break-after-always relative overflow-hidden">
             {/* Outer Decorative Border Header */}
-            <div className="w-full flex items-center justify-between border-b-2 border-emerald-100 pb-6 mb-6">
+            <div className="w-full flex items-center justify-between border-b-2 border-amber-100 pb-6 mb-6">
               <div className="flex items-center gap-4 text-left">
-                <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-md">
-                  SM
-                </div>
+                <img 
+                  src="/images/logo.png" 
+                  alt="Mầm Non Sương Mai Logo" 
+                  className="w-16 h-16 rounded-full border-2 border-secondary-600 shadow-md object-cover bg-white"
+                />
                 <div>
-                  <h1 className="text-2xl font-bold text-emerald-950 uppercase tracking-tight">TRƯỜNG MẦM NON SƯƠNG MAI</h1>
-                  <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider">Hệ Thống Sổ Liên Lạc Điện Tử Phụ Huynh</p>
+                  <h1 className="text-2xl font-extrabold text-primary-900 uppercase tracking-tight">TRƯỜNG MẦM NON SƯƠNG MAI</h1>
+                  <p className="text-xs font-bold text-secondary-600 uppercase tracking-wider">Sổ Liên Lạc Điện Tử Phụ Huynh Học Sinh</p>
                 </div>
               </div>
-              <div className="text-right text-xs font-semibold text-emerald-800 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200">
+              <div className="text-right text-xs font-bold text-secondary-800 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200">
                 MÃ QR CHÍNH THỨC 2026
               </div>
             </div>
 
             {/* Standee Content Body */}
             <div className="my-auto flex flex-col items-center max-w-xl">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm mb-4">
-                <Heart className="w-5 h-5 text-emerald-600 fill-emerald-200" />
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 text-secondary-900 font-extrabold text-sm mb-4 border border-amber-200">
+                <Heart className="w-5 h-5 text-secondary-600 fill-amber-200" />
                 <span>SỔ LIÊN LẠC ĐIỆN TỬ PHỤ HUYNH</span>
               </div>
 
@@ -316,19 +328,27 @@ export default function AdminQrCodesPage() {
                 Quý Phụ huynh quét mã QR để nhận thông báo đón bé, dặn thuốc, gửi đơn xin nghỉ học và theo dõi thực đơn bán trú.
               </p>
 
-              {/* Large Crisp QR Code */}
-              <div className="p-6 bg-white border-4 border-emerald-500 rounded-3xl shadow-xl mb-6 inline-block">
+              {/* Large Crisp QR Code with Official Logo */}
+              <div className="p-6 bg-white border-4 border-secondary-600 rounded-3xl shadow-xl mb-6 inline-block">
                 <QRCodeSVG
                   value={parentUrl}
                   size={320}
                   level="H"
                   includeMargin={true}
+                  imageSettings={{
+                    src: '/images/logo.png',
+                    x: undefined,
+                    y: undefined,
+                    height: 64,
+                    width: 64,
+                    excavate: true,
+                  }}
                 />
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 w-full text-left font-medium text-slate-700 text-xs space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm mb-1">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 w-full text-left font-medium text-slate-700 text-xs space-y-2 mb-4">
+                <div className="flex items-center gap-2 text-secondary-900 font-bold text-sm mb-1">
+                  <CheckCircle2 className="w-4 h-4 text-secondary-600" />
                   <span>Hướng dẫn dành cho Phụ huynh:</span>
                 </div>
                 <p>1. Sử dụng Camera điện thoại hoặc ứng dụng Zalo quét mã QR.</p>
@@ -336,13 +356,13 @@ export default function AdminQrCodesPage() {
                 <p>3. Lưu ứng dụng vào Màn hình chính (PWA) để dùng hàng ngày.</p>
               </div>
 
-              <p className="text-xs font-mono font-semibold text-slate-400 tracking-wider uppercase">{parentUrl}</p>
+              <p className="text-xs font-mono font-bold text-secondary-800 tracking-wider uppercase">{parentUrl}</p>
             </div>
 
             {/* Standee Footer */}
-            <div className="w-full pt-6 border-t-2 border-emerald-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>📍 Địa chỉ: 123 Đường Sương Mai, Phường 4, Quận Tân Bình, TP.HCM</span>
-              <span>☎️ Văn phòng trường: (028) 38.123.456</span>
+            <div className="w-full pt-6 border-t-2 border-amber-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
+              <span>📍 Trường Mầm Non Sương Mai • ĐT: 0911.784.875</span>
+              <span>☎️ Hotline Văn phòng trường: 0911.784.875</span>
             </div>
           </div>
         )}

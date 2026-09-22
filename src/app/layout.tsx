@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   title: 'Mầm Non Sương Mai - Hệ Thống Sổ Liên Lạc & Tác Nghiệp',
   description: 'Hệ thống Quản lý, Sổ liên lạc điện tử & Tác nghiệp Sương Mai Kindergarten',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/icons/favicon.ico',
+    apple: '/icons/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -16,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0284c7',
+  themeColor: '#D32F2F',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -31,7 +35,8 @@ export default function RootLayout({
     <html lang="vi">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" href="/icons/favicon.ico" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Sương Mai" />
@@ -42,7 +47,7 @@ export default function RootLayout({
           <PwaInstallPrompt />
         </LanguageProvider>
 
-        {/* Register Service Worker */}
+        {/* Register Service Worker (Root Scope: /) */}
         <Script
           id="register-sw"
           strategy="afterInteractive"
@@ -50,7 +55,7 @@ export default function RootLayout({
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(
                     function(registration) {
                       console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     },

@@ -9,40 +9,53 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // TONE CHỦ ĐẠO: XANH LƠ (SKY / CYAN / SOFT BLUE)
+        // TONE CHỦ ĐẠO: ĐỎ ẤM (WARM RED - LẤY TỪ NGỌN ĐUỐC LOGO SƯƠNG MAI)
         primary: {
-          50: '#F0F9FF',   // Nền siêu nhạt
-          100: '#E0F2FE',  // Hover, viền mềm
-          200: '#BAE6FD',  // Badge nền nhẹ
-          300: '#7DD3FC',  // Điểm nhấn phụ
-          400: '#38BDF8',  // Cyan tươi sáng
-          500: '#0EA5E9',  // Xanh lơ chủ đạo (Sky Blue chính)
-          600: '#0284C7',  // Màu nút chính, text quan trọng
-          700: '#0369A1',  // Màu viền hoặc header sidebar
+          50: '#FFEBEE',   // Nền hồng nhạt dịu
+          100: '#FFCDD2',  // Hover nhẹ, viền mềm
+          200: '#EF9A9A',  // Badge nền nhẹ
+          300: '#E57373',  // Điểm nhấn phụ
+          400: '#EF5350',  // Đỏ sáng
+          500: '#F44336',  // Đỏ ngọn đuốc tươi
+          600: '#E53935',  // Màu nút chính, text quan trọng
+          700: '#D32F2F',  // Màu chủ đạo ngọn đuốc Logo Sương Mai (#D32F2F)
+          800: '#C62828',  // Deep red active state
+          900: '#B71C1C',  // Border đậm
         },
-        // TONE NỀN: TRẮNG SÁNG & SẠCH SẼ
+        // TONE PHỤ: VÀNG CAM (WARM GOLD / ORANGE - LẤY TỪ CHÂN ĐẾ LOGO SƯƠNG MAI)
+        secondary: {
+          50: '#FFF3E0',   // Nền cam nhạt
+          100: '#FFE0B2',  // Badge viền
+          200: '#FFCC80',  // Accent nhẹ
+          300: '#FFB74D',  // Vàng cam
+          400: '#FFA726',  // Cam nhã nhặn (#FFA726)
+          500: '#FF9800',  // Cam chân đế
+          600: '#FB8C00',  // Chân đế Logo Sương Mai chính (#FB8C00)
+          700: '#F57C00',  // Cam đậm
+        },
+        // TONE NỀN: TRẮNG SÁNG ẤM & SẠCH SẼ
         surface: {
-          base: '#F8FAFC',    // Nền trang tổng thể (Light Slate/Ice White)
-          light: '#F8FAFC',   // Alias tương thích
+          base: '#FFFDF9',    // Nền trang tổng thể (Warm White)
+          light: '#FFFDF9',   // Alias tương thích
           card: '#FFFFFF',    // Nền bảng, card trắng tinh
-          border: '#E2E8F0',  // Đường kẻ viền mờ tinh tế
-          sidebar: '#F0F9FF', // Sidebar xanh lơ nhạt
-          muted: '#64748B',   // Text phụ mờ nhẹ
+          border: '#F0EAE1',  // Đường kẻ viền mờ tinh tế
+          sidebar: '#FFF9F5', // Sidebar trắng kem ấm
+          muted: '#786F66',   // Text phụ mờ nhẹ
         },
         accent: {
-          gold: '#D4A373',
-          warm: '#FEF3C7',
-          goldDark: '#B45309',
+          gold: '#FB8C00',
+          warm: '#FFF3E0',
+          goldDark: '#F57C00',
         },
         kitchen: {
-          badge: '#E0F2FE',
-          text: '#0284C7',
-          border: '#BAE6FD',
+          badge: '#FFEBEE',
+          text: '#D32F2F',
+          border: '#FFCDD2',
         },
         status: {
           validGreen: '#10B981',
-          lateAmber: '#F59E0B',
-          dangerSoft: '#EF4444',
+          lateAmber: '#FB8C00',
+          dangerSoft: '#E53935',
         }
       },
       borderRadius: {
