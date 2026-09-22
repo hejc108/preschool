@@ -14,9 +14,9 @@ export function middleware(request: NextRequest) {
   const roleCookie = request.cookies.get('suongmai_user_role')?.value || '';
   const usernameCookie = request.cookies.get('suongmai_username')?.value || '';
 
-  // If approved user accesses /auth/pending-approval, redirect out to active workspace
+  // If approved active user accesses /auth/pending-approval, redirect to proper active portal
   if (pathname === '/auth/pending-approval' && sessionCookie === 'active' && roleCookie && roleCookie !== 'GUEST') {
-    if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie)) {
+    if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN', 'STAFF'].includes(roleCookie)) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
     if (roleCookie === 'TEACHER') {
@@ -34,17 +34,15 @@ export function middleware(request: NextRequest) {
 
   if (isProtected) {
     const isSuperOrSchoolAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie);
+    const isStaff = roleCookie === 'STAFF';
+    const isTeacher = roleCookie === 'TEACHER';
+    const isParent = roleCookie === 'PARENT';
     const isSadmin =
       isSuperOrSchoolAdmin ||
       usernameCookie === 'sadmin' ||
       emailCookie === 'sadmin@suongmai.edu.vn';
 
-    // Rule 1: Active admins (SUPER_ADMIN, SCHOOL_ADMIN, ADMIN) & sadmin are granted full access to /admin
-    if (isAdminRoute && isSadmin && sessionCookie === 'active') {
-      return NextResponse.next();
-    }
-
-    // Rule 2: Unapproved / Pending / Unauthenticated users are redirected
+    // Rule 1: Force PENDING or Unauthenticated users to /auth/pending-approval
     if (sessionCookie !== 'active' || !emailCookie || roleCookie === 'GUEST') {
       if (emailCookie && emailCookie !== 'sadmin@suongmai.edu.vn') {
         const pendingUrl = new URL('/auth/pending-approval', request.url);
@@ -56,26 +54,40 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Rule 3: Enforce strict role-based route boundaries for approved active users
-    const isStaff = roleCookie === 'STAFF';
-    const isTeacher = roleCookie === 'TEACHER';
-    const isParent = roleCookie === 'PARENT';
-
-    if (isAdminRoute && !isSuperOrSchoolAdmin && !isStaff) {
-      if (isTeacher) return NextResponse.redirect(new URL('/teacher', request.url));
-      if (isParent) return NextResponse.redirect(new URL('/parent', request.url));
+    // Rule 2: Enforce Strict Admin Access (Only Super Admin, School Admin, Staff)
+    if (isAdminRoute && !isSadmin && !isStaff) {
+      if (isTeacher) {
+        const teacherUrl = new URL('/teacher', request.url);
+        teacherUrl.searchParams.set('warning', 'unauthorized_admin_access');
+        return NextResponse.redirect(teacherUrl);
+      }
+      if (isParent) {
+        const parentUrl = new URL('/parent', request.url);
+        parentUrl.searchParams.set('warning', 'unauthorized_admin_access');
+        return NextResponse.redirect(parentUrl);
+      }
       const pendingUrl = new URL('/auth/pending-approval', request.url);
       pendingUrl.searchParams.set('email', emailCookie);
       return NextResponse.redirect(pendingUrl);
     }
 
+    // Rule 3: Enforce Teacher Boundary (Parents attempt /teacher -> redirected to /parent)
     if (isTeacherRoute && !isTeacher && !isSuperOrSchoolAdmin && !isStaff) {
-      if (isParent) return NextResponse.redirect(new URL('/parent', request.url));
+      if (isParent) {
+        const parentUrl = new URL('/parent', request.url);
+        parentUrl.searchParams.set('warning', 'wrong_role');
+        return NextResponse.redirect(parentUrl);
+      }
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
+    // Rule 4: Enforce Parent Boundary (Teachers attempt /parent -> redirected to /teacher)
     if (isParentRoute && !isParent && !isSuperOrSchoolAdmin && !isStaff) {
-      if (isTeacher) return NextResponse.redirect(new URL('/teacher', request.url));
+      if (isTeacher) {
+        const teacherUrl = new URL('/teacher', request.url);
+        teacherUrl.searchParams.set('warning', 'wrong_role');
+        return NextResponse.redirect(teacherUrl);
+      }
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
   }

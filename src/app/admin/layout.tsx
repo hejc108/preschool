@@ -197,24 +197,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </>
         )}
-
-        <div className="pt-4 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('admin.sidebar.group_mobile')}</div>
-        <Link
-          href="/teacher"
-          onClick={() => setMobileMenuOpen(false)}
-          className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm text-slate-700 hover:text-primary-900 hover:bg-rose-50/80 transition-all"
-        >
-          <Smartphone className="w-4 h-4 text-primary-600" />
-          <span>{t('admin.sidebar.teacher_app')}</span>
-        </Link>
-        <Link
-          href="/parent"
-          onClick={() => setMobileMenuOpen(false)}
-          className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm text-slate-700 hover:text-primary-900 hover:bg-rose-50/80 transition-all"
-        >
-          <Smartphone className="w-4 h-4 text-secondary-600" />
-          <span>{t('admin.sidebar.parent_app')}</span>
-        </Link>
       </nav>
 
       {/* User Footer Profile */}
