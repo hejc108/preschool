@@ -21,6 +21,30 @@ import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 import { supabase } from '@/lib/supabase/client';
 
+function translateAllergy(allergy: string | undefined | null, language: string): string {
+  if (!allergy || allergy === 'Không' || allergy === 'None') {
+    return language === 'en' ? 'Normal (No allergies)' : 'Bình thường (Không dị ứng)';
+  }
+  if (language === 'en') {
+    if (allergy.includes('Hải sản')) return 'Seafood (Shrimp, Crab)';
+    if (allergy.includes('Sữa bò')) return 'Cow\'s milk (Lactose)';
+    if (allergy.includes('Đậu phụng') || allergy.includes('Đậu phộng')) return 'Peanuts';
+  }
+  return allergy;
+}
+
+function translateReasonTag(tag: string, language: string): string {
+  if (language !== 'en') return tag;
+  const tagMap: Record<string, string> = {
+    '#Biếng_ăn': '#Poor_appetite',
+    '#Chỉ_uống_canh': '#Soup_only',
+    '#Khó_tiêu': '#Indigestion',
+    '#Mệt_mỏi': '#Fatigued',
+    '#Dị_ứng_thức_ăn': '#Food_allergy',
+  };
+  return tagMap[tag] || tag;
+}
+
 export default function TeacherPwaPage() {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'ATTENDANCE' | 'MEDICATION' | 'MEALS' | 'CHECKOUT'>('ATTENDANCE');
@@ -403,7 +427,7 @@ export default function TeacherPwaPage() {
               }}
               className="w-full inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-pill transition-all text-xs"
             >
-              <span>Đăng Nhập Tài Khoản Khác</span>
+              <span>{t('teacher.switch_account')}</span>
             </button>
           </div>
         </div>
@@ -482,7 +506,7 @@ export default function TeacherPwaPage() {
           {/* Quick Action Bar & Summary Count */}
           <div className="flex items-center justify-between bg-white border border-rose-100 p-3 rounded-2xl shadow-xs">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600 font-bold">Sĩ số lớp:</span>
+              <span className="text-xs text-slate-600 font-bold">{t('teacher.class_headcount')}</span>
               <span className="px-2 py-0.5 bg-rose-50 text-primary-800 border border-rose-200 rounded-full font-extrabold text-xs">
                 {students.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length} / {students.length}
               </span>
@@ -494,7 +518,7 @@ export default function TeacherPwaPage() {
               className="px-3 py-1.5 rounded-full text-xs font-bold border border-primary-600 text-primary-700 hover:bg-rose-50 active:bg-rose-100 disabled:opacity-50 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-primary-700" />
-              <span>Chọn có mặt tất cả</span>
+              <span>{t('teacher.btn_select_all')}</span>
             </button>
           </div>
 
@@ -511,7 +535,7 @@ export default function TeacherPwaPage() {
               
               {/* Display Child Name First */}
               <p className="text-slate-800 leading-relaxed">
-                Bé: <strong className="text-slate-900 font-extrabold text-sm">{abs.student_name}</strong> • Phụ huynh: <em>&quot;{abs.reason}&quot;</em>.
+                {t('common.child')}: <strong className="text-slate-900 font-extrabold text-sm">{abs.student_name}</strong> • {t('teacher.parent_label')} <em>&quot;{abs.reason}&quot;</em>.
               </p>
 
               <div className="flex items-center justify-between pt-1">
@@ -554,9 +578,9 @@ export default function TeacherPwaPage() {
                     </div>
                   </div>
 
-                  {student.allergies !== 'Không' && (
+                  {student.allergies !== 'Không' && student.allergies !== 'None' && (
                     <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
-                      ⚠️ {student.allergies}
+                      ⚠️ {translateAllergy(student.allergies, language)}
                     </span>
                   )}
                 </div>
@@ -572,7 +596,7 @@ export default function TeacherPwaPage() {
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    Có mặt
+                    {t('teacher.btn_present')}
                   </button>
 
                   <button
@@ -584,7 +608,7 @@ export default function TeacherPwaPage() {
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    Đến muộn
+                    {t('teacher.btn_late')}
                   </button>
 
                   <button
@@ -596,7 +620,7 @@ export default function TeacherPwaPage() {
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    Vắng
+                    {t('teacher.btn_absent')}
                   </button>
                 </div>
               </div>
@@ -660,9 +684,9 @@ export default function TeacherPwaPage() {
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
-                  <div><strong className="text-slate-700">Tên thuốc:</strong> <span className="text-sky-700 font-bold">{med.medication_name}</span></div>
-                  <div><strong className="text-slate-700">Liều lượng:</strong> {med.dosage}</div>
-                  {med.instructions && <div className="text-slate-500">Lưu ý: {med.instructions}</div>}
+                  <div><strong className="text-slate-700">{t('teacher.med_name')}</strong> <span className="text-sky-700 font-bold">{med.medication_name}</span></div>
+                  <div><strong className="text-slate-700">{t('teacher.med_dosage')}</strong> {med.dosage}</div>
+                  {med.instructions && <div className="text-slate-500">{t('teacher.med_instructions')} {med.instructions}</div>}
                 </div>
 
                 {med.status !== 'ADMINISTERED' ? (
@@ -705,7 +729,7 @@ export default function TeacherPwaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Khung Giờ (*)</label>
+                    <label className="block text-slate-700 font-semibold mb-1">{t('teacher.med_time_slot')}</label>
                     <select
                       value={newMedSlot}
                       onChange={(e) => setNewMedSlot(e.target.value as 'SLOT_1130' | 'SLOT_1430')}
@@ -717,7 +741,7 @@ export default function TeacherPwaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Tên Loại Thuốc (*)</label>
+                    <label className="block text-slate-700 font-semibold mb-1">{t('teacher.med_name_label')}</label>
                     <input
                       type="text"
                       required
@@ -729,7 +753,7 @@ export default function TeacherPwaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Liều Lượng (*)</label>
+                    <label className="block text-slate-700 font-semibold mb-1">{t('teacher.med_dosage_label')}</label>
                     <input
                       type="text"
                       required
@@ -741,7 +765,7 @@ export default function TeacherPwaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Ghi Chú</label>
+                    <label className="block text-slate-700 font-semibold mb-1">{t('teacher.med_notes_label')}</label>
                     <input
                       type="text"
                       placeholder="..."
@@ -792,7 +816,7 @@ export default function TeacherPwaPage() {
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Mức Độ Khẩu Phần (*)</label>
+              <label className="block text-slate-700 font-semibold mb-1">{t('teacher.meal_level_label')}</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -831,7 +855,7 @@ export default function TeacherPwaPage() {
                           : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                       }`}
                     >
-                      {tag}
+                      {translateReasonTag(tag, language)}
                     </button>
                   );
                 })}
@@ -848,20 +872,20 @@ export default function TeacherPwaPage() {
 
           {/* Meal Exceptions Registry List */}
           <div className="space-y-2.5">
-            <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider">Danh Sách Ngoại Lệ</h4>
+            <h4 className="font-bold text-slate-700 text-xs uppercase tracking-wider">{t('teacher.meal_exception_list')}</h4>
             {mealExceptions.map((ex) => (
               <div key={ex.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs shadow-sm">
                 <div>
                   <div className="flex items-center gap-2">
                     <h5 className="font-bold text-slate-900 text-sm">{ex.student_name}</h5>
                     <span className="font-mono text-[10px] px-2.5 py-0.5 bg-sky-50 text-sky-800 font-bold rounded-pill border border-sky-200">
-                      {ex.intake_level}
+                      {ex.intake_level === 'HALF' ? t('teacher.intake_half') : ex.intake_level === 'REFUSED' ? t('teacher.intake_refused') : ex.intake_level}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     {ex.reason_tags.map((tag) => (
                       <span key={tag} className="px-2 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-pill font-mono text-[10px]">
-                        {tag}
+                        {translateReasonTag(tag, language)}
                       </span>
                     ))}
                   </div>
@@ -974,7 +998,7 @@ export default function TeacherPwaPage() {
                   <div className="space-y-2">
                     <label className="block text-slate-700 font-bold text-xs uppercase tracking-wider flex items-center gap-1">
                       <UserCheck className="w-4 h-4 text-emerald-600" />
-                      <span>Đối Chiếu Chân Dung Người Đăng Ký Đón Bé</span>
+                      <span>{t('teacher.face_verification_title')}</span>
                     </label>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -996,10 +1020,10 @@ export default function TeacherPwaPage() {
                             <img src={pickup.avatar_url} alt={pickup.name} className="w-9 h-9 rounded-full border-2 border-emerald-500 object-cover shrink-0" />
                             <div className="min-w-0 text-[11px]">
                               <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[9px] rounded-pill border border-emerald-300 inline-block">
-                                ✓ Ủyl quyền: {pickup.relationship} (Đã duyệt)
+                                {t('teacher.authorized_pickup')} {pickup.relationship} {t('teacher.approved_tag')}
                               </span>
                               <span className="font-bold block text-slate-800 truncate">{pickup.name}</span>
-                              <span className="text-slate-500 text-[10px] font-mono">SĐT: {pickup.phone}</span>
+                              <span className="text-slate-500 text-[10px] font-mono">{t('common.phone')}: {pickup.phone}</span>
                             </div>
                           </div>
                         ))}
@@ -1008,23 +1032,23 @@ export default function TeacherPwaPage() {
                     {/* Pending Safety Notice */}
                     {currentLateStudent?.authorized_pickups?.some((p) => p.approval_status !== 'APPROVED') && (
                       <p className="text-[10px] text-amber-700 font-semibold italic bg-amber-50 p-2 rounded-lg border border-amber-200">
-                        🔒 Hệ thống tự động ẩn người đón đang ở trạng thái Chờ Duyệt / Từ Chối để bảo vệ an toàn cho bé.
+                        {t('teacher.pending_pickup_notice')}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-3 pt-1">
                     <div>
-                      <label className="block text-slate-700 font-semibold mb-1">Lý Do Trả Muộn / Bàn Giao (*)</label>
+                      <label className="block text-slate-700 font-semibold mb-1">{t('teacher.late_pickup_reason_label')}</label>
                       <select
                         value={lateReason}
                         onChange={(e) => setLateReason(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
                       >
-                        <option value="Phụ huynh bận công việc đột xuất">1. Phụ huynh bận công việc đột xuất</option>
-                        <option value="Kẹt xe giờ cao điểm">2. Kẹt xe giờ cao điểm</option>
-                        <option value="Đón bé muộn do thời tiết mưa to">3. Đón bé muộn do thời tiết mưa to</option>
-                        <option value="Người thân đón thay (Đã xác minh khuôn mặt)">4. Người thân đón thay (Đã xác minh khuôn mặt)</option>
+                        <option value="Phụ huynh bận công việc đột xuất">1. {language === 'en' ? 'Parent busy with unexpected work' : 'Phụ huynh bận công việc đột xuất'}</option>
+                        <option value="Kẹt xe giờ cao điểm">2. {language === 'en' ? 'Heavy rush-hour traffic' : 'Kẹt xe giờ cao điểm'}</option>
+                        <option value="Đón bé muộn do thời tiết mưa to">3. {language === 'en' ? 'Late pickup due to heavy rain' : 'Đón bé muộn do thời tiết mưa to'}</option>
+                        <option value="Người thân đón thay (Đã xác minh khuôn mặt)">4. {language === 'en' ? 'Authorized relative pickup (Face verified)' : 'Người thân đón thay (Đã xác minh khuôn mặt)'}</option>
                       </select>
                     </div>
 
@@ -1033,7 +1057,7 @@ export default function TeacherPwaPage() {
                       className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-pill shadow transition-all mt-2 flex items-center justify-center gap-2"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Xác Nhận Khuôn Mặt & Bàn Giao Trẻ</span>
+                      <span>{t('teacher.btn_confirm_face_handover')}</span>
                     </button>
                   </div>
                 </div>
