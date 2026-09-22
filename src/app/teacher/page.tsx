@@ -412,15 +412,15 @@ export default function TeacherPwaPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-20">
-      {/* Mobile Top Header - Pastel Sky Blue */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      {/* Mobile Top Header - Official Warm Brand Red */}
+      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-600 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-white text-base leading-tight">{t('teacher.app_title')}</h1>
-            <p className="text-xs text-sky-100 font-semibold">{t('teacher.class_info')}</p>
+            <h1 className="font-extrabold text-white text-base leading-tight">{t('teacher.app_title')}</h1>
+            <p className="text-xs text-rose-100 font-semibold">{t('teacher.class_info')}</p>
           </div>
         </div>
 
@@ -434,7 +434,7 @@ export default function TeacherPwaPage() {
         <button
           onClick={() => setActiveTab('ATTENDANCE')}
           className={`py-3 transition-all border-b-2 flex flex-col items-center gap-1 ${
-            activeTab === 'ATTENDANCE' ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold' : 'border-transparent text-slate-400'
+            activeTab === 'ATTENDANCE' ? 'border-primary-700 text-primary-700 bg-rose-50/60 font-extrabold' : 'border-transparent text-slate-400'
           }`}
         >
           <UserCheck className="w-4 h-4" />
@@ -444,20 +444,20 @@ export default function TeacherPwaPage() {
         <button
           onClick={() => setActiveTab('MEDICATION')}
           className={`py-3 transition-all border-b-2 flex flex-col items-center gap-1 relative ${
-            activeTab === 'MEDICATION' ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold' : 'border-transparent text-slate-400'
+            activeTab === 'MEDICATION' ? 'border-primary-700 text-primary-700 bg-rose-50/60 font-extrabold' : 'border-transparent text-slate-400'
           }`}
         >
           <HeartPulse className="w-4 h-4" />
           <span>{t('teacher.tab_medication')}</span>
           {medications.filter((m) => m.status === 'PENDING').length > 0 && (
-            <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+            <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-secondary-500 animate-ping" />
           )}
         </button>
 
         <button
           onClick={() => setActiveTab('MEALS')}
           className={`py-3 transition-all border-b-2 flex flex-col items-center gap-1 ${
-            activeTab === 'MEALS' ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold' : 'border-transparent text-slate-400'
+            activeTab === 'MEALS' ? 'border-primary-700 text-primary-700 bg-rose-50/60 font-extrabold' : 'border-transparent text-slate-400'
           }`}
         >
           <Utensils className="w-4 h-4" />
@@ -467,7 +467,7 @@ export default function TeacherPwaPage() {
         <button
           onClick={() => setActiveTab('CHECKOUT')}
           className={`py-3 transition-all border-b-2 flex flex-col items-center gap-1 ${
-            activeTab === 'CHECKOUT' ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold' : 'border-transparent text-slate-400'
+            activeTab === 'CHECKOUT' ? 'border-primary-700 text-primary-700 bg-rose-50/60 font-extrabold' : 'border-transparent text-slate-400'
           }`}
         >
           <LogOut className="w-4 h-4" />
@@ -477,62 +477,73 @@ export default function TeacherPwaPage() {
 
       {/* --- TAB 1: MORNING ATTENDANCE --- */}
       {activeTab === 'ATTENDANCE' && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          {/* Quick Action Bar */}
-          <div className="flex items-center justify-between gap-2">
+        <div className="p-4 space-y-4 flex-1 overflow-y-auto pb-28">
+          {/* Quick Action Bar & Summary Count */}
+          <div className="flex items-center justify-between bg-white border border-rose-100 p-3 rounded-2xl shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-600 font-bold">Sĩ số lớp:</span>
+              <span className="px-2 py-0.5 bg-rose-50 text-primary-800 border border-rose-200 rounded-full font-extrabold text-xs">
+                {students.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length} / {students.length}
+              </span>
+            </div>
+
             <button
               onClick={handleSelectAllPresent}
               disabled={isKitchenLocked}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2.5 px-3 rounded-pill text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              className="px-3 py-1.5 rounded-full text-xs font-bold border border-primary-600 text-primary-700 hover:bg-rose-50 active:bg-rose-100 disabled:opacity-50 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{t('teacher.btn_select_all')}</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary-700" />
+              <span>Chọn có mặt tất cả</span>
             </button>
           </div>
 
           {/* Approved Absence Notices Card */}
           {absences.map((abs) => (
-            <div key={abs.id} className="p-3.5 bg-amber-50 border border-amber-200 rounded-convent text-xs space-y-2 text-slate-800">
+            <div key={abs.id} className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs space-y-2 text-slate-800 shadow-2xs">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-amber-800 flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                <span className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-secondary-600 shrink-0" />
                   {t('teacher.absence_notice')}
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">&lt;08:30 AM</span>
+                <span className="text-[10px] font-mono text-slate-500 font-medium">&lt;08:30 AM</span>
               </div>
-              <p className="text-slate-800">
-                {t('common.parent_name')}: <strong className="text-slate-900">{abs.student_name}</strong>: <em>&quot;{abs.reason}&quot;</em>.
+              
+              {/* Display Child Name First */}
+              <p className="text-slate-800 leading-relaxed">
+                Bé: <strong className="text-slate-900 font-extrabold text-sm">{abs.student_name}</strong> • Phụ huynh: <em>&quot;{abs.reason}&quot;</em>.
               </p>
 
-              {abs.acknowledged_by_teacher ? (
-                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-bold">
-                  <Check className="w-3.5 h-3.5" /> {t('teacher.ack_done')}
-                </span>
-              ) : (
-                <button
-                  onClick={() => handleAcknowledgeAbsence(abs.id)}
-                  className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-pill text-xs transition-colors shadow-sm"
-                >
-                  {t('teacher.ack_btn')}
-                </button>
-              )}
+              <div className="flex items-center justify-between pt-1">
+                {abs.acknowledged_by_teacher ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-extrabold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" /> {t('teacher.ack_done')}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleAcknowledgeAbsence(abs.id)}
+                    className="ml-auto px-3.5 py-1.5 bg-secondary-500 hover:bg-secondary-600 active:bg-secondary-700 text-white font-extrabold rounded-full text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{t('teacher.ack_btn')}</span>
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 
           {/* Student Roll Call List */}
           <div className="space-y-2.5">
             {students.map((student) => (
-              <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent space-y-2 shadow-sm">
+              <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {student.avatar_url ? (
                       <img
                         src={student.avatar_url}
                         alt={student.full_name}
-                        className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
+                        className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
                         {student.full_name.charAt(0)}
                       </div>
                     )}
@@ -543,63 +554,63 @@ export default function TeacherPwaPage() {
                   </div>
 
                   {student.allergies !== 'Không' && (
-                    <span className="text-[10px] px-2 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-pill font-bold">
+                    <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
                       ⚠️ {student.allergies}
                     </span>
                   )}
                 </div>
 
-                {/* 3-State Thumb Buttons */}
+                {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
                 <div className="grid grid-cols-3 gap-1.5 pt-1">
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-pill text-xs font-bold transition-all ${
+                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       student.attendance === 'PRESENT'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    {t('teacher.btn_present')}
+                    Có mặt
                   </button>
 
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-pill text-xs font-bold transition-all ${
+                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       student.attendance === 'PRESENT_LATE'
-                        ? 'bg-amber-500 text-white shadow-sm'
+                        ? 'bg-secondary-600 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    {t('teacher.btn_late')}
+                    Đến muộn
                   </button>
 
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-pill text-xs font-bold transition-all ${
+                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       student.attendance === 'ABSENT'
-                        ? 'bg-sky-600 text-white shadow-sm'
+                        ? 'bg-rose-500 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
-                    {t('teacher.btn_absent')}
+                    Vắng
                   </button>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Fixed Bottom Dispatch Button */}
-          <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 bg-white/95 border-t border-slate-200 backdrop-blur-md z-30">
+          {/* Fixed Bottom Dispatch Button (Warm Red Theme) */}
+          <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 bg-white/95 border-t border-rose-100 backdrop-blur-md z-30">
             <button
               onClick={handleDispatchToKitchen}
               disabled={isKitchenLocked}
-              className={`w-full py-3.5 rounded-pill font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 transition-all ${
+              className={`w-full py-3.5 rounded-full font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 isKitchenLocked
                   ? 'bg-slate-100 text-slate-400 border border-slate-200'
-                  : 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/30 active:scale-98'
+                  : 'bg-primary-700 hover:bg-primary-800 text-white shadow-primary-700/30 active:scale-98'
               }`}
             >
               <Sparkles className="w-5 h-5 text-white" />

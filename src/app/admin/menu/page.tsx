@@ -49,29 +49,29 @@ export default function AdminMenuPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+    <div className="min-h-screen bg-surface-base text-slate-800 flex flex-col font-sans">
+      {/* Top Banner Card - Official Warm Brand Red */}
+      <div className="p-4 sm:p-5 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl shadow-md border border-rose-900/10">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/admin/dashboard" className="p-2 bg-primary-800/80 rounded-full text-white hover:bg-primary-900 transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-white text-base leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
-            <p className="text-xs text-sky-100 font-semibold">Chỉnh sửa trực tiếp (Inline Edit) & xoay vòng tự động</p>
+            <h1 className="font-extrabold text-white text-base sm:text-lg leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
+            <p className="text-xs text-rose-100 font-medium mt-0.5">Chỉnh sửa trực tiếp (Inline Edit) & xoay vòng tự động cho cả 4 tuần</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <button
             onClick={handleSaveMenu}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
+            className="whitespace-nowrap shrink-0 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3.5 sm:px-4 py-2 rounded-full font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-4 h-4 shrink-0" />
             <span>Lưu thay đổi</span>
           </button>
         </div>
-      </header>
+      </div>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
         {/* Success Alert */}
