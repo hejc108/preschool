@@ -47,7 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
-    { label: 'Mã QR & In Ấn (A4)', href: '/admin/qr-codes', icon: QrCode, badge: 'Standee' },
+    { label: 'Mã QR', href: '/admin/qr-codes', icon: QrCode, badge: 'Standee' },
   ];
 
   const aiNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
