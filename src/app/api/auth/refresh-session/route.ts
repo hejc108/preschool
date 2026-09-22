@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     if (!email) {
       const cookieEmail = request.headers.get('cookie')?.match(/suongmai_user_email=([^;]+)/);
       if (cookieEmail) {
-        email = decodeURIComponent(cookieEmail[1]).toLowerCase().trim();
+        email = parseSignedCookieClient(cookieEmail[1]).toLowerCase().trim();
       }
     }
 
@@ -48,9 +49,9 @@ export async function POST(request: Request) {
         role: 'SUPER_ADMIN',
         redirectUrl: '/admin/dashboard',
       });
-      response.cookies.set('suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      response.cookies.set('suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      response.cookies.set('suongmai_user_role', 'SUPER_ADMIN', { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_user_role', 'SUPER_ADMIN', { path: '/', maxAge: 86400, sameSite: 'lax' });
       return response;
     }
 
@@ -93,9 +94,9 @@ export async function POST(request: Request) {
         profile,
       });
 
-      response.cookies.set('suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      response.cookies.set('suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      response.cookies.set('suongmai_user_role', targetRole, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, 'suongmai_user_role', targetRole, { path: '/', maxAge: 86400, sameSite: 'lax' });
 
       return response;
     }

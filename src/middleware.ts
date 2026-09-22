@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { verifyAndExtractCookieValue } from '@/lib/utils/cookieSigner';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Exclude /admin/login from protected routes
@@ -9,10 +10,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionCookie = request.cookies.get('suongmai_session')?.value;
-  const emailCookie = request.cookies.get('suongmai_user_email')?.value?.toLowerCase().trim() || '';
-  const roleCookie = request.cookies.get('suongmai_user_role')?.value || '';
-  const usernameCookie = request.cookies.get('suongmai_username')?.value || '';
+  const rawSession = request.cookies.get('suongmai_session')?.value;
+  const rawEmail = request.cookies.get('suongmai_user_email')?.value;
+  const rawRole = request.cookies.get('suongmai_user_role')?.value;
+  const rawUsername = request.cookies.get('suongmai_username')?.value;
+
+  // Cryptographically verify HMAC SHA-256 signatures before trusting any cookie values
+  const sessionCookie = await verifyAndExtractCookieValue(rawSession);
+  const emailCookie = (await verifyAndExtractCookieValue(rawEmail))?.toLowerCase().trim() || '';
+  const roleCookie = (await verifyAndExtractCookieValue(rawRole)) || '';
+  const usernameCookie = (await verifyAndExtractCookieValue(rawUsername)) || '';
 
   // If approved active user accesses /auth/pending-approval, redirect to proper active portal
   if (pathname === '/auth/pending-approval' && sessionCookie === 'active' && roleCookie && roleCookie !== 'GUEST') {
@@ -47,11 +54,15 @@ export function middleware(request: NextRequest) {
       if (emailCookie && emailCookie !== 'sadmin@suongmai.edu.vn') {
         const pendingUrl = new URL('/auth/pending-approval', request.url);
         pendingUrl.searchParams.set('email', emailCookie);
-        return NextResponse.redirect(pendingUrl);
+        const res = NextResponse.redirect(pendingUrl);
+        if (!sessionCookie && rawSession) res.cookies.delete('suongmai_session');
+        return res;
       }
       const loginUrl = new URL(isAdminRoute ? '/admin/login' : '/auth', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
-      return NextResponse.redirect(loginUrl);
+      const res = NextResponse.redirect(loginUrl);
+      if (!sessionCookie && rawSession) res.cookies.delete('suongmai_session');
+      return res;
     }
 
     // Rule 2: Enforce Strict Admin Access (Only Super Admin, School Admin, Staff)

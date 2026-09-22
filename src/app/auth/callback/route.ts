@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { checkUserApprovalStatus, registerGoogleUserIfMissing } from '@/lib/utils/approvalHelper';
+import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 function getSupabaseAdminClient() {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
     const cookieHeader = request.headers.get('cookie') || '';
     const match = cookieHeader.match(/suongmai_user_email=([^;]+)/);
     if (match) {
-      userEmail = decodeURIComponent(match[1]);
+      userEmail = parseSignedCookieClient(match[1]);
     }
   }
 
@@ -209,17 +210,17 @@ export async function GET(request: Request) {
       }
 
       const response = NextResponse.redirect(`${origin}${targetUrl}`);
-      response.cookies.set('suongmai_session', 'active', {
+      await setSignedCookie(response, 'suongmai_session', 'active', {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      response.cookies.set('suongmai_user_email', cleanEmail, {
+      await setSignedCookie(response, 'suongmai_user_email', cleanEmail, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      response.cookies.set('suongmai_user_role', resolvedRole, {
+      await setSignedCookie(response, 'suongmai_user_role', resolvedRole, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
@@ -230,12 +231,12 @@ export async function GET(request: Request) {
       const pendingRedirect = `${origin}/auth/pending-approval?type=${status.pendingType || 'unknown'}&email=${encodeURIComponent(cleanEmail)}`;
       const response = NextResponse.redirect(pendingRedirect);
       response.cookies.delete('suongmai_session');
-      response.cookies.set('suongmai_user_email', cleanEmail, {
+      await setSignedCookie(response, 'suongmai_user_email', cleanEmail, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      response.cookies.set('suongmai_user_role', 'GUEST', {
+      await setSignedCookie(response, 'suongmai_user_role', 'GUEST', {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',

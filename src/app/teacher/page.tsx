@@ -17,6 +17,7 @@ import { MedicationRequest, MealException, AbsenceRequest } from '@/lib/types/sc
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { fetchLiveProfilesFromSupabase, getStoredProfiles } from '@/lib/utils/approvalHelper';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 import { supabase } from '@/lib/supabase/client';
 
@@ -38,10 +39,10 @@ export default function TeacherPwaPage() {
       let emailFound = '';
       let roleFound = '';
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-      if (match) emailFound = decodeURIComponent(match[1]);
+      if (match) emailFound = parseSignedCookieClient(match[1]);
 
       const roleMatch = document.cookie.match(/suongmai_user_role=([^;]+)/);
-      if (roleMatch) roleFound = decodeURIComponent(roleMatch[1]);
+      if (roleMatch) roleFound = parseSignedCookieClient(roleMatch[1]);
 
       if (!emailFound) {
         const saved = localStorage.getItem('suongmai_auth_user');

@@ -43,11 +43,6 @@ export default function AdminLoginPage() {
           );
         }
 
-        document.cookie = "suongmai_session=active; path=/; max-age=86400; SameSite=Lax";
-        document.cookie = "suongmai_user_email=sadmin@suongmai.edu.vn; path=/; max-age=86400; SameSite=Lax";
-        document.cookie = "suongmai_user_role=SUPER_ADMIN; path=/; max-age=86400; SameSite=Lax";
-        document.cookie = "suongmai_username=sadmin; path=/; max-age=86400; SameSite=Lax";
-
         router.push('/admin/dashboard');
       } else {
         setErrorMsg(data.message || 'Tên đăng nhập hoặc mật khẩu Quản trị không chính xác!');

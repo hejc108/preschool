@@ -81,10 +81,6 @@ function AuthContent() {
             targetUrl = '/admin/health';
           }
 
-          document.cookie = `suongmai_session=active; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `suongmai_user_role=${targetRole}; path=/; max-age=86400; SameSite=Lax`;
-
           if (typeof window !== 'undefined') {
             localStorage.setItem(
               'suongmai_auth_user',
@@ -96,13 +92,10 @@ function AuthContent() {
           return;
         } else {
           // Tài khoản chưa được duyệt -> Chuyển đến màn hình chờ duyệt
-          document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `suongmai_user_role=GUEST; path=/; max-age=86400; SameSite=Lax`;
           window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
           return;
         }
       } catch (err) {
-        document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
         window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
       }
     };
@@ -211,9 +204,6 @@ function AuthContent() {
     setLoading(true);
 
     try {
-      document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
-      document.cookie = `suongmai_user_role=GUEST; path=/; max-age=86400; SameSite=Lax`;
-
       await fetch('/api/users/approvals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,10 +227,6 @@ function AuthContent() {
         } else if (targetRole === 'PARENT') {
           targetUrl = '/parent';
         }
-
-        document.cookie = `suongmai_session=active; path=/; max-age=86400; SameSite=Lax`;
-        document.cookie = `suongmai_user_email=${encodeURIComponent(cleanEmail)}; path=/; max-age=86400; SameSite=Lax`;
-        document.cookie = `suongmai_user_role=${targetRole}; path=/; max-age=86400; SameSite=Lax`;
 
         if (typeof window !== 'undefined') {
           localStorage.setItem(
