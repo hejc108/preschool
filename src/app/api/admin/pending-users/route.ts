@@ -79,10 +79,10 @@ export async function GET() {
   }
 
   // Ensure sadmin is active SUPER_ADMIN
-  let sadminIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
+  let sadminIdx = serverCache.findIndex((p) => p.email?.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
   if (sadminIdx === -1) {
     serverCache.unshift(INITIAL_SERVER_PROFILES[0]);
-  } else {
+  } else if (serverCache[sadminIdx]) {
     serverCache[sadminIdx].role = 'SUPER_ADMIN';
     serverCache[sadminIdx].approval_status = 'ACTIVE';
   }

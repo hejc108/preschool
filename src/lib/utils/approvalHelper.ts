@@ -382,12 +382,17 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
     throw new Error('Chỉ tài khoản sadmin (Super Admin) mới có quyền cấp quyền Quản trị trường!');
   }
 
-  const profiles = getStoredProfiles();
-  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
 
   if (idx === -1) {
-    registerGoogleUserIfMissing(targetEmail);
-    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+    const registered = registerGoogleUserIfMissing(targetEmail);
+    profiles = getStoredProfiles();
+    idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
+    if (idx === -1 && registered) {
+      profiles.push(registered);
+      idx = profiles.length - 1;
+    }
   }
 
   if (typeof window !== 'undefined') {
@@ -406,10 +411,23 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
     }
   }
 
-  profiles[idx].role = 'SCHOOL_ADMIN';
-  profiles[idx].approval_status = 'ACTIVE';
-  saveStoredProfiles(profiles);
+  if (idx !== -1 && profiles[idx]) {
+    profiles[idx].role = 'SCHOOL_ADMIN';
+    profiles[idx].approval_status = 'ACTIVE';
+  } else {
+    const fallback: Profile = {
+      id: `u-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanEmail.split('@')[0],
+      role: 'SCHOOL_ADMIN',
+      approval_status: 'ACTIVE',
+      created_at: new Date().toISOString(),
+    };
+    profiles.push(fallback);
+    idx = profiles.length - 1;
+  }
 
+  saveStoredProfiles(profiles);
   return profiles[idx];
 }
 
@@ -418,12 +436,17 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
  */
 export async function approveTeacherUser(email: string, classId?: string, className?: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
-  const profiles = getStoredProfiles();
-  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
 
   if (idx === -1) {
-    registerGoogleUserIfMissing(email);
-    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+    const registered = registerGoogleUserIfMissing(email);
+    profiles = getStoredProfiles();
+    idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
+    if (idx === -1 && registered) {
+      profiles.push(registered);
+      idx = profiles.length - 1;
+    }
   }
 
   if (typeof window !== 'undefined') {
@@ -444,10 +467,25 @@ export async function approveTeacherUser(email: string, classId?: string, classN
     }
   }
 
-  profiles[idx].role = 'TEACHER';
-  profiles[idx].approval_status = 'ACTIVE';
-  if (classId) profiles[idx].assigned_class_id = classId;
-  if (className) profiles[idx].assigned_class_name = className;
+  if (idx !== -1 && profiles[idx]) {
+    profiles[idx].role = 'TEACHER';
+    profiles[idx].approval_status = 'ACTIVE';
+    if (classId) profiles[idx].assigned_class_id = classId;
+    if (className) profiles[idx].assigned_class_name = className;
+  } else {
+    const fallback: Profile = {
+      id: `u-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanEmail.split('@')[0],
+      role: 'TEACHER',
+      approval_status: 'ACTIVE',
+      assigned_class_id: classId,
+      assigned_class_name: className,
+      created_at: new Date().toISOString(),
+    };
+    profiles.push(fallback);
+    idx = profiles.length - 1;
+  }
 
   saveStoredProfiles(profiles);
   return profiles[idx];
@@ -458,12 +496,17 @@ export async function approveTeacherUser(email: string, classId?: string, classN
  */
 export async function approveStaffUser(email: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
-  const profiles = getStoredProfiles();
-  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
 
   if (idx === -1) {
-    registerGoogleUserIfMissing(email);
-    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+    const registered = registerGoogleUserIfMissing(email);
+    profiles = getStoredProfiles();
+    idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
+    if (idx === -1 && registered) {
+      profiles.push(registered);
+      idx = profiles.length - 1;
+    }
   }
 
   if (typeof window !== 'undefined') {
@@ -482,8 +525,22 @@ export async function approveStaffUser(email: string): Promise<Profile | null> {
     }
   }
 
-  profiles[idx].role = 'STAFF';
-  profiles[idx].approval_status = 'ACTIVE';
+  if (idx !== -1 && profiles[idx]) {
+    profiles[idx].role = 'STAFF';
+    profiles[idx].approval_status = 'ACTIVE';
+  } else {
+    const fallback: Profile = {
+      id: `u-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanEmail.split('@')[0],
+      role: 'STAFF',
+      approval_status: 'ACTIVE',
+      created_at: new Date().toISOString(),
+    };
+    profiles.push(fallback);
+    idx = profiles.length - 1;
+  }
+
   saveStoredProfiles(profiles);
   return profiles[idx];
 }
@@ -496,13 +553,18 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
   relations: ParentStudentRelation[];
 }> {
   const cleanEmail = email.toLowerCase().trim();
-  const profiles = getStoredProfiles();
-  let idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+  let profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
 
   let profile: Profile;
   if (idx === -1) {
     profile = registerGoogleUserIfMissing(email);
-    idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+    profiles = getStoredProfiles();
+    idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
+    if (idx === -1 && profile) {
+      profiles.push(profile);
+      idx = profiles.length - 1;
+    }
   } else {
     profile = profiles[idx];
   }
@@ -523,8 +585,22 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
     }
   }
 
-  profiles[idx].role = 'PARENT';
-  profiles[idx].approval_status = 'ACTIVE';
+  if (idx !== -1 && profiles[idx]) {
+    profiles[idx].role = 'PARENT';
+    profiles[idx].approval_status = 'ACTIVE';
+    profile = profiles[idx];
+  } else {
+    profile = {
+      id: `u-${Date.now()}`,
+      email: cleanEmail,
+      full_name: cleanEmail.split('@')[0],
+      role: 'PARENT',
+      approval_status: 'ACTIVE',
+      created_at: new Date().toISOString(),
+    };
+    profiles.push(profile);
+  }
+
   saveStoredProfiles(profiles);
 
   const relations = getStoredRelations();
@@ -535,10 +611,10 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
     const resolvedName = targetStudent?.full_name || 'Học sinh Sương Mai';
 
     const relIdx = relations.findIndex(
-      (r) => r.parent_email.toLowerCase().trim() === cleanEmail && r.student_id === sId
+      (r) => r.parent_email?.toLowerCase().trim() === cleanEmail && r.student_id === sId
     );
 
-    if (relIdx !== -1) {
+    if (relIdx !== -1 && relations[relIdx]) {
       relations[relIdx].is_verified = true;
       addedRelations.push(relations[relIdx]);
     } else {
@@ -557,7 +633,7 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
   }
 
   saveStoredRelations(relations);
-  return { profile: profiles[idx], relations: addedRelations };
+  return { profile, relations: addedRelations };
 }
 
 /**
@@ -565,10 +641,8 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
  */
 export async function rejectUser(email: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
-  const profiles = getStoredProfiles();
-  const idx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
-
-  if (idx === -1) return null;
+  let profiles = getStoredProfiles();
+  let idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
 
   if (typeof window !== 'undefined') {
     const res = await fetch('/api/users/approvals', {
@@ -585,7 +659,10 @@ export async function rejectUser(email: string): Promise<Profile | null> {
     }
   }
 
-  profiles[idx].approval_status = 'REJECTED';
-  saveStoredProfiles(profiles);
-  return profiles[idx];
+  if (idx !== -1 && profiles[idx]) {
+    profiles[idx].approval_status = 'REJECTED';
+    saveStoredProfiles(profiles);
+    return profiles[idx];
+  }
+  return null;
 }
