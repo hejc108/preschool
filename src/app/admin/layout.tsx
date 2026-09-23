@@ -260,7 +260,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             {/* Brand Logo & Title on Mobile / Desktop */}
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-primary-700 to-secondary-500 shadow-sm shrink-0 md:hidden">
+              <div className="w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-primary-700 to-secondary-500 shadow-sm shrink-0">
                 <img
                   src="/images/logo.png"
                   alt="Mầm Non Sương Mai"
@@ -268,7 +268,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 />
               </div>
               <div className="flex items-center gap-2 text-primary-900 font-bold text-sm sm:text-base">
-                <span className="w-2 h-2 rounded-full bg-primary-600 animate-pulse hidden sm:inline-block" />
                 <span className="truncate">Sương Mai Admin</span>
               </div>
             </div>

@@ -85,8 +85,8 @@ export default function AdminMenuPage() {
         {/* Week Selector Tabs */}
         <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Utensils className="w-5 h-5 text-sky-600" />
-            <span className="font-bold text-sky-900 text-sm">Chọn tuần cấu hình:</span>
+            <Utensils className="w-5 h-5 text-primary-700" />
+            <span className="font-bold text-slate-800 text-sm">Chọn tuần cấu hình:</span>
           </div>
 
           <div className="flex gap-2">
@@ -96,8 +96,8 @@ export default function AdminMenuPage() {
                 onClick={() => setSelectedWeek(w)}
                 className={`px-4 py-2 rounded-pill font-bold text-xs border transition-all ${
                   selectedWeek === w
-                    ? 'bg-sky-600 text-white border-sky-600 shadow'
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    ? 'bg-primary-700 text-white border-primary-700 shadow-md'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-primary-800'
                 }`}
               >
                 Tuần {w}
@@ -108,12 +108,12 @@ export default function AdminMenuPage() {
 
         {/* 4-Week Rotating Matrix Table (Inline Edit) - TC-MENU-04 */}
         <div className="bg-white border border-slate-200 rounded-convent shadow-sm overflow-hidden">
-          <div className="p-4 bg-sky-50 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-              <Edit3 className="w-4 h-4 text-sky-600" />
+          <div className="p-4 bg-rose-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h2 className="font-bold text-primary-900 text-sm flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-primary-700" />
               <span>Ma trận thực đơn tuần {selectedWeek} (chỉnh sửa trực tiếp món ăn)</span>
             </h2>
-            <span className="text-xs text-slate-500 font-mono">Thay đổi tự động lưu vào Database</span>
+            <span className="text-xs text-slate-500 font-normal">Chỉnh sửa trực tiếp ô món ăn và bấm Lưu thay đổi</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -122,7 +122,7 @@ export default function AdminMenuPage() {
                 <tr>
                   <th className="p-3 w-40">Bữa ăn / Ngày</th>
                   {daysList.map((d) => (
-                    <th key={d.key} className="p-3 min-w-[180px]">
+                    <th key={d.key} className="p-3 min-w-[160px] sm:min-w-[170px]">
                       {d.label}
                     </th>
                   ))}
@@ -139,13 +139,13 @@ export default function AdminMenuPage() {
                       const currentDish = meal ? meal.dish_name : '';
 
                       return (
-                        <td key={d.key} className="p-2 border-r border-slate-200">
-                          <input
-                            type="text"
+                        <td key={d.key} className="p-2 border-r border-slate-200 min-w-[160px] sm:min-w-[170px]">
+                          <textarea
+                            rows={2}
                             value={currentDish}
                             onChange={(e) => handleDishChange(selectedWeek, d.key, cat.key, e.target.value)}
                             placeholder="Nhập tên món ăn..."
-                            className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors"
+                            className="w-full min-w-[150px] sm:min-w-[160px] resize-none bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors leading-snug"
                           />
                         </td>
                       );
