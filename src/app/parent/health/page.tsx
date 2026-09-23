@@ -21,14 +21,14 @@ export default function ParentHealthPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans pb-10">
       {/* Top Header */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/parent" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/parent" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-900 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">Sổ Theo Dõi Sức Khỏe Theo Quý</h1>
-            <p className="text-xs text-sky-100 font-semibold">Trần Gia Bảo • Mầm 1 (Rose)</p>
+            <p className="text-xs text-rose-100 font-medium">Trần Gia Bảo • Mầm 1 (Rose)</p>
           </div>
         </div>
 
