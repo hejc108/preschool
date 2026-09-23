@@ -62,21 +62,21 @@ export default function AdminHealthPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Top Header */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-900 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">Nhập liệu sức khỏe định kỳ hàng loạt (Y tế / Giáo viên)</h1>
-            <p className="text-xs text-sky-100 font-semibold">Tự động tính BMI & xếp loại thể trạng chuẩn WHO</p>
+            <p className="text-xs text-rose-100 font-medium">Tự động tính BMI & xếp loại thể trạng chuẩn WHO</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={handleSaveBatch}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
+            className="flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white px-4.5 py-2.5 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
           >
             <Save className="w-4 h-4" />
             <span>Lưu sổ sức khỏe lớp</span>
@@ -107,7 +107,7 @@ export default function AdminHealthPage() {
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
             >
               {INITIAL_CLASSES.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -122,7 +122,7 @@ export default function AdminHealthPage() {
             <select
               value={selectedTerm}
               onChange={(e) => setSelectedTerm(e.target.value as HealthTerm)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
             >
               <option value="Q1">Quý 1 (Tháng 9)</option>
               <option value="Q2">Quý 2 (Tháng 12)</option>
@@ -137,19 +137,19 @@ export default function AdminHealthPage() {
               type="text"
               value={academicYear}
               onChange={(e) => setAcademicYear(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
             />
           </div>
         </div>
 
         {/* Batch Entry Table (TC-HLT-04 & TC-HLT-02) */}
         <div className="bg-white border border-slate-200 rounded-convent shadow-sm overflow-hidden">
-          <div className="p-4 bg-sky-50 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-              <Activity className="w-4 h-4 text-sky-600" />
+          <div className="p-4 bg-rose-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h2 className="font-bold text-primary-900 text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary-700" />
               <span>Danh sách nhập số đo sức khỏe - Lớp {INITIAL_CLASSES.find((c) => c.id === selectedClassId)?.name}</span>
             </h2>
-            <span className="text-xs text-slate-500 font-mono">Dùng phím Tab để chuyển ô nhanh</span>
+            <span className="text-xs text-slate-500 font-normal">Dùng phím Tab để chuyển ô nhanh</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -162,7 +162,7 @@ export default function AdminHealthPage() {
                   <th className="p-3 min-w-[120px]">Cân nặng (kg)</th>
                   <th className="p-3 min-w-[120px]">Chiều cao (cm)</th>
                   <th className="p-3 min-w-[100px]">BMI (Tự động)</th>
-                  <th className="p-3 min-w-[160px]">Xếp loại thể trạng WHO</th>
+                  <th className="p-3 min-w-[190px] sm:min-w-[210px] whitespace-nowrap">Xếp loại thể trạng WHO</th>
                   <th className="p-3 min-w-[200px]">Nhận xét y tế lâm sàng</th>
                 </tr>
               </thead>
@@ -176,7 +176,7 @@ export default function AdminHealthPage() {
                   return (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
-                      <td className="p-3 font-mono font-bold text-sky-700">{st.student_code}</td>
+                      <td className="p-3 font-mono font-bold text-primary-800">{st.student_code}</td>
                       <td className="p-3 font-bold text-slate-900">{st.full_name}</td>
                       <td className="p-3">
                         <input
@@ -185,7 +185,7 @@ export default function AdminHealthPage() {
                           value={data.weight_kg || ''}
                           onChange={(e) => handleInputChange(st.id, 'weight_kg', e.target.value)}
                           placeholder="kg..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
                         />
                       </td>
                       <td className="p-3">
@@ -195,14 +195,14 @@ export default function AdminHealthPage() {
                           value={data.height_cm || ''}
                           onChange={(e) => handleInputChange(st.id, 'height_cm', e.target.value)}
                           placeholder="cm..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
                         />
                       </td>
-                      <td className="p-3 font-mono font-extrabold text-sky-800 text-sm">
+                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm">
                         {bmi > 0 ? bmi : '--'}
                       </td>
-                      <td className="p-3">
-                        <span className={`px-2.5 py-1 rounded-pill text-[11px] font-bold border ${display.bgClass} ${display.textClass}`}>
+                      <td className="p-3 min-w-[190px] sm:min-w-[210px] align-middle">
+                        <span className={`px-3 py-1 rounded-pill text-xs font-bold border whitespace-nowrap inline-flex items-center shadow-2xs ${display.bgClass} ${display.textClass}`}>
                           {display.text}
                         </span>
                       </td>
@@ -212,7 +212,7 @@ export default function AdminHealthPage() {
                           value={data.notes}
                           onChange={(e) => handleInputChange(st.id, 'notes', e.target.value)}
                           placeholder="Nhận xét y tế..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-lg p-2 text-slate-800 text-xs focus:bg-white focus:outline-none"
+                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 text-slate-800 text-xs focus:bg-white focus:outline-none"
                         />
                       </td>
                     </tr>
