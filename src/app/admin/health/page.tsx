@@ -155,11 +155,11 @@ export default function AdminHealthPage() {
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
                 <tr>
                   <th className="p-3 w-12 text-center">STT</th>
-                  <th className="p-3">Mã học sinh</th>
-                  <th className="p-3 min-w-[160px]">Họ và tên bé</th>
-                  <th className="p-3 min-w-[120px]">Cân nặng (kg)</th>
-                  <th className="p-3 min-w-[120px]">Chiều cao (cm)</th>
-                  <th className="p-3 min-w-[100px]">BMI (Tự động)</th>
+                  <th className="p-3 min-w-[130px] whitespace-nowrap">Mã học sinh</th>
+                  <th className="p-3 min-w-[160px] whitespace-nowrap">Họ và tên bé</th>
+                  <th className="p-3 min-w-[125px] whitespace-nowrap">Cân nặng (kg)</th>
+                  <th className="p-3 min-w-[125px] whitespace-nowrap">Chiều cao (cm)</th>
+                  <th className="p-3 min-w-[130px] whitespace-nowrap">BMI (Tự động)</th>
                   <th className="p-3 min-w-[190px] sm:min-w-[210px] whitespace-nowrap">Xếp loại thể trạng WHO</th>
                   <th className="p-3 min-w-[200px]">Nhận xét y tế lâm sàng</th>
                 </tr>
@@ -174,7 +174,7 @@ export default function AdminHealthPage() {
                   return (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
-                      <td className="p-3 font-mono font-bold text-primary-800">{st.student_code}</td>
+                      <td className="p-3 font-mono font-bold text-primary-800 whitespace-nowrap min-w-[130px]">{st.student_code}</td>
                       <td className="p-3 font-bold text-slate-900">{st.full_name}</td>
                       <td className="p-3">
                         <input
@@ -196,7 +196,7 @@ export default function AdminHealthPage() {
                           className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
                         />
                       </td>
-                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm">
+                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm whitespace-nowrap min-w-[130px]">
                         {bmi > 0 ? bmi : '--'}
                       </td>
                       <td className="p-3 min-w-[190px] sm:min-w-[210px] align-middle">

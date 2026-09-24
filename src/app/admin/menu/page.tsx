@@ -120,9 +120,9 @@ export default function AdminMenuPage() {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
                 <tr>
-                  <th className="p-3 w-40">Bữa ăn / Ngày</th>
+                  <th className="p-3 min-w-[180px] whitespace-nowrap">Bữa ăn / Ngày</th>
                   {daysList.map((d) => (
-                    <th key={d.key} className="p-3 min-w-[160px] sm:min-w-[170px]">
+                    <th key={d.key} className="p-3 min-w-[190px] sm:min-w-[200px] whitespace-nowrap">
                       {d.label}
                     </th>
                   ))}
@@ -131,7 +131,7 @@ export default function AdminMenuPage() {
               <tbody className="divide-y divide-slate-200 text-slate-800">
                 {mealCategories.map((cat) => (
                   <tr key={cat.key} className="hover:bg-slate-50/80">
-                    <td className="p-3 font-bold bg-slate-50 text-slate-700 border-r border-slate-200">
+                    <td className="p-3 font-bold bg-slate-50 text-slate-800 border-r border-slate-200 min-w-[180px] whitespace-nowrap">
                       {cat.label}
                     </td>
                     {daysList.map((d) => {
@@ -139,13 +139,13 @@ export default function AdminMenuPage() {
                       const currentDish = meal ? meal.dish_name : '';
 
                       return (
-                        <td key={d.key} className="p-2 border-r border-slate-200 min-w-[160px] sm:min-w-[170px]">
+                        <td key={d.key} className="p-2 border-r border-slate-200 min-w-[190px] sm:min-w-[200px]">
                           <textarea
                             rows={2}
                             value={currentDish}
                             onChange={(e) => handleDishChange(selectedWeek, d.key, cat.key, e.target.value)}
                             placeholder="Nhập tên món ăn..."
-                            className="w-full min-w-[150px] sm:min-w-[160px] resize-none bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors leading-snug"
+                            className="w-full min-w-[180px] sm:min-w-[190px] resize-none bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors leading-snug"
                           />
                         </td>
                       );
