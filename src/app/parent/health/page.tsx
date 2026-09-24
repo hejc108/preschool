@@ -23,7 +23,7 @@ export default function ParentHealthPage() {
       {/* Top Header */}
       <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/parent" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-900 transition-colors">
+          <Link href="/parent" className="w-9 h-9 rounded-full bg-primary-800 hover:bg-primary-900 flex items-center justify-center text-white transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>

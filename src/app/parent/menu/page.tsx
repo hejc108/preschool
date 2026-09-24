@@ -39,14 +39,14 @@ export default function ParentMenuPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans pb-10">
       {/* Top Header */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/parent" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/parent" className="w-9 h-9 rounded-full bg-primary-800 hover:bg-primary-900 flex items-center justify-center text-white transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">Thực Đơn Xoay Vòng 4 Tuần</h1>
-            <p className="text-xs text-sky-100 font-semibold">Mầm Non Sương Mai</p>
+            <p className="text-xs text-rose-100 font-medium">Mầm Non Sương Mai</p>
           </div>
         </div>
 
@@ -70,10 +70,10 @@ export default function ParentMenuPage() {
               <button
                 key={w}
                 onClick={() => setSelectedWeek(w)}
-                className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all text-center ${
+                className={`min-w-[70px] sm:min-w-[84px] h-[36px] rounded-full text-xs sm:text-sm font-medium inline-flex items-center justify-center whitespace-nowrap transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-sky-600 text-white border-sky-600 shadow'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    ? 'bg-primary-700 text-white shadow-sm font-bold'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                 }`}
               >
                 Tuần {w}

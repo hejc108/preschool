@@ -53,7 +53,7 @@ export default function AdminMenuPage() {
       {/* Top Banner Card - Minimalist White Design System */}
       <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-slate-100 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0">
+          <Link href="/admin/dashboard" className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 shadow-sm shrink-0 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
@@ -65,7 +65,7 @@ export default function AdminMenuPage() {
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <button
             onClick={handleSaveMenu}
-            className="whitespace-nowrap shrink-0 flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white px-4.5 py-2.5 rounded-pill font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm whitespace-nowrap bg-amber-500 hover:bg-amber-600 text-white transition-all active:scale-95 cursor-pointer"
           >
             <Save className="w-4 h-4 shrink-0" />
             <span>Lưu thay đổi</span>
@@ -83,21 +83,21 @@ export default function AdminMenuPage() {
         )}
 
         {/* Week Selector Tabs */}
-        <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Utensils className="w-5 h-5 text-primary-700" />
             <span className="font-bold text-slate-800 text-sm">Chọn tuần cấu hình:</span>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {[1, 2, 3, 4].map((w) => (
               <button
                 key={w}
                 onClick={() => setSelectedWeek(w)}
-                className={`px-4 py-2 rounded-pill font-bold text-xs border transition-all ${
+                className={`min-w-[84px] h-[36px] rounded-full text-sm font-medium inline-flex items-center justify-center whitespace-nowrap transition-all cursor-pointer ${
                   selectedWeek === w
-                    ? 'bg-primary-700 text-white border-primary-700 shadow-md'
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-primary-800'
+                    ? 'bg-primary-700 text-white shadow-sm font-bold'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                 }`}
               >
                 Tuần {w}

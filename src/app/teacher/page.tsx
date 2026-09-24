@@ -590,9 +590,9 @@ export default function TeacherPwaPage() {
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
                       student.attendance === 'PRESENT'
-                        ? 'bg-emerald-600 text-white shadow-sm'
+                        ? 'bg-emerald-600 text-white shadow-sm font-bold'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
@@ -602,9 +602,9 @@ export default function TeacherPwaPage() {
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
                       student.attendance === 'PRESENT_LATE'
-                        ? 'bg-secondary-600 text-white shadow-sm'
+                        ? 'bg-secondary-600 text-white shadow-sm font-bold'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
@@ -614,9 +614,9 @@ export default function TeacherPwaPage() {
                   <button
                     onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
                     disabled={isKitchenLocked}
-                    className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
                       student.attendance === 'ABSENT'
-                        ? 'bg-rose-500 text-white shadow-sm'
+                        ? 'bg-rose-500 text-white shadow-sm font-bold'
                         : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                     }`}
                   >
