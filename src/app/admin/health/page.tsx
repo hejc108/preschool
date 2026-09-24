@@ -152,16 +152,16 @@ export default function AdminHealthPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
-              <thead className="bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
+              <thead className="bg-slate-100 text-slate-600 font-semibold text-xs md:text-sm border-b border-slate-200">
                 <tr>
-                  <th className="p-3 w-12 text-center">STT</th>
-                  <th className="p-3 min-w-[130px] whitespace-nowrap">Mã học sinh</th>
-                  <th className="p-3 min-w-[160px] whitespace-nowrap">Họ và tên bé</th>
-                  <th className="p-3 min-w-[125px] whitespace-nowrap">Cân nặng (kg)</th>
-                  <th className="p-3 min-w-[125px] whitespace-nowrap">Chiều cao (cm)</th>
-                  <th className="p-3 min-w-[130px] whitespace-nowrap">BMI (Tự động)</th>
-                  <th className="p-3 min-w-[190px] sm:min-w-[210px] whitespace-nowrap">Xếp loại thể trạng WHO</th>
-                  <th className="p-3 min-w-[200px]">Nhận xét y tế lâm sàng</th>
+                  <th className="p-3 w-12 text-center whitespace-nowrap">STT</th>
+                  <th className="p-3 min-w-[120px] whitespace-nowrap">Mã học sinh</th>
+                  <th className="p-3 min-w-[140px] whitespace-nowrap">Họ và tên</th>
+                  <th className="p-3 min-w-[110px] whitespace-nowrap">Cân nặng (kg)</th>
+                  <th className="p-3 min-w-[110px] whitespace-nowrap">Chiều cao (cm)</th>
+                  <th className="p-3 min-w-[70px] whitespace-nowrap">BMI</th>
+                  <th className="p-3 min-w-[170px] whitespace-nowrap">Xếp loại</th>
+                  <th className="p-3 min-w-[180px] w-full">Nhận xét</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800">
@@ -174,8 +174,8 @@ export default function AdminHealthPage() {
                   return (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
-                      <td className="p-3 font-mono font-bold text-primary-800 whitespace-nowrap min-w-[130px]">{st.student_code}</td>
-                      <td className="p-3 font-bold text-slate-900">{st.full_name}</td>
+                      <td className="p-3 font-mono font-bold text-primary-800 whitespace-nowrap min-w-[120px]">{st.student_code}</td>
+                      <td className="p-3 font-bold text-slate-900 whitespace-nowrap min-w-[140px]">{st.full_name}</td>
                       <td className="p-3">
                         <input
                           type="number"
@@ -196,15 +196,15 @@ export default function AdminHealthPage() {
                           className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
                         />
                       </td>
-                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm whitespace-nowrap min-w-[130px]">
+                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm whitespace-nowrap min-w-[70px]">
                         {bmi > 0 ? bmi : '--'}
                       </td>
-                      <td className="p-3 min-w-[190px] sm:min-w-[210px] align-middle">
+                      <td className="p-3 min-w-[170px] align-middle">
                         <span className={`px-3 py-1 rounded-pill text-xs font-bold border whitespace-nowrap inline-flex items-center shadow-2xs ${display.bgClass} ${display.textClass}`}>
                           {display.text}
                         </span>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 w-full min-w-[180px]">
                         <input
                           type="text"
                           value={data.notes}
