@@ -50,22 +50,22 @@ export default function AdminMenuPage() {
 
   return (
     <div className="min-h-screen bg-surface-base text-slate-800 flex flex-col font-sans">
-      {/* Top Banner Card - Official Warm Brand Red */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl shadow-md border border-rose-900/10">
+      {/* Top Banner Card - Minimalist White Design System */}
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-primary-800/80 rounded-full text-white hover:bg-primary-900 transition-colors shrink-0">
+          <Link href="/admin/dashboard" className="p-2 bg-slate-100 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-extrabold text-white text-base sm:text-lg leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
-            <p className="text-xs text-rose-100 font-medium mt-0.5">Chỉnh sửa trực tiếp (Inline Edit) & xoay vòng tự động cho cả 4 tuần</p>
+            <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
+            <p className="text-slate-500 text-sm mt-1">Chỉnh sửa trực tiếp (Inline Edit) & xoay vòng tự động cho cả 4 tuần</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <button
             onClick={handleSaveMenu}
-            className="whitespace-nowrap shrink-0 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3.5 sm:px-4 py-2 rounded-full font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+            className="whitespace-nowrap shrink-0 flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white px-4.5 py-2.5 rounded-pill font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
           >
             <Save className="w-4 h-4 shrink-0" />
             <span>Lưu thay đổi</span>

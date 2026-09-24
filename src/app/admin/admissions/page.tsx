@@ -126,10 +126,10 @@ export default function AdmissionsPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 p-6 rounded-convent flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm text-slate-800">
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm text-slate-800">
         <div>
-          <h2 className="text-xl font-bold text-sky-900 tracking-tight flex items-center gap-2">
-            <UserPlus className="w-6 h-6 text-sky-600" />
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <UserPlus className="w-6 h-6 text-primary-700" />
             <span>{t('admin.admissions.title')}</span>
           </h2>
           <p className="text-slate-500 text-sm mt-1">
@@ -139,7 +139,7 @@ export default function AdmissionsPage() {
 
         <button
           onClick={() => setShowWalkinModal(true)}
-          className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2.5 rounded-pill transition-all shadow-sm text-sm active:scale-95"
+          className="flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold px-4.5 py-2.5 rounded-pill transition-all shadow-sm text-sm active:scale-95"
         >
           <QrCode className="w-4 h-4" />
           <span>{t('admin.admissions.btn_onsite')}</span>

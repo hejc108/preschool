@@ -71,13 +71,13 @@ export default function AdminQrCodesPage() {
   return (
     <div className="space-y-6">
       {/* Page Header (Hidden when printing) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-convent border border-rose-100 shadow-sm print:hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div>
           <div className="flex items-center gap-2 text-primary-700 font-bold text-xs uppercase tracking-wider mb-1">
             <QrCode className="w-4 h-4" />
             <span>Hệ Thống Quản Lý Mã QR</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Quản Lý & In Ấn Mã QR (A4 / Standee)</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Quản Lý & In Ấn Mã QR (A4 / Standee)</h1>
           <p className="text-slate-500 text-sm mt-1">
             Sinh mã QR Vector sắc nét nhúng Logo chính thức Trường Mầm Non Sương Mai phục vụ in ấn A4 & Standee.
           </p>
@@ -86,7 +86,7 @@ export default function AdminQrCodesPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handlePrint('BOTH')}
-            className="inline-flex items-center gap-2 bg-primary-700 text-white font-bold px-4 py-2.5 rounded-pill hover:bg-primary-800 transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
+            className="inline-flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold px-4.5 py-2.5 rounded-pill transition-all shadow-sm active:scale-95 text-sm cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>In Bộ Mã A4 Đôi</span>

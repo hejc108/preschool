@@ -91,23 +91,24 @@ export default function KitchenMonitorPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 p-6 rounded-convent flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm text-slate-800">
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm text-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-sky-900 tracking-tight">{t('admin.kitchen.title')}</h2>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{t('admin.kitchen.title')}</h2>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-pill text-xs font-semibold">
               <Clock className="w-3.5 h-3.5 text-amber-600" />
               {t('admin.kitchen.auto_cutoff_badge')}
             </span>
           </div>
+          <p className="text-slate-500 text-sm mt-1">Sổ báo suất ăn tự động tính toán tổng sĩ số, bé vắng và bé đi muộn</p>
         </div>
 
         <button
           onClick={handleOpenConfirmModal}
-          className={`flex items-center gap-2 font-semibold px-4 py-2.5 rounded-pill transition-all shadow-sm text-sm ${
+          className={`flex items-center gap-2 font-bold px-4.5 py-2.5 rounded-pill transition-all shadow-sm text-sm active:scale-95 ${
             isLocked
               ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
-              : 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/20'
+              : 'bg-[#FB8C00] hover:bg-[#F57C00] text-white'
           }`}
         >
           {isLocked ? <Lock className="w-4 h-4 text-emerald-600" /> : <Unlock className="w-4 h-4" />}

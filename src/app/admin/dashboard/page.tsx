@@ -20,9 +20,9 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Title & Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-convent shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-sky-800 tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
             <span>{t('admin.dashboard.title')}</span>
           </h2>
           <p className="text-slate-500 text-sm mt-1">
@@ -33,7 +33,7 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/admin/kitchen"
-            className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-medium px-4 py-2.5 rounded-pill transition-all shadow-sm text-sm"
+            className="flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold px-4.5 py-2.5 rounded-pill transition-all shadow-sm text-sm"
           >
             <Utensils className="w-4 h-4" />
             <span>{t('admin.dashboard.btn_kitchen')}</span>

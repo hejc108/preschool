@@ -29,11 +29,11 @@ export default function UsersManagementPage() {
       {/* Header */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-sky-50 border border-sky-200 rounded-pill text-sky-700 text-xs font-bold mb-2">
-            <Users className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-rose-50 border border-rose-200 rounded-pill text-primary-800 text-xs font-bold mb-2">
+            <Users className="w-3.5 h-3.5 text-primary-700" />
             <span>Quản Lý Người Dùng & Phân Quyền Vẫn Hợp (RBAC)</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Danh sách tất cả người dùng trong hệ thống</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Danh sách tất cả người dùng trong hệ thống</h1>
           <p className="text-slate-500 text-sm mt-1">
             Tổng quan tài khoản Super Admin, Quản trị trường, Giáo viên, Cán bộ Bếp/Y tế & Phụ huynh.
           </p>
@@ -41,7 +41,7 @@ export default function UsersManagementPage() {
 
         <Link
           href="/admin/users/approvals"
-          className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto"
+          className="px-4.5 py-2.5 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold text-xs rounded-pill shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto active:scale-95"
         >
           <UserCheck className="w-4 h-4" />
           <span>Màn hình Duyệt Tài Khoản Chờ</span>
