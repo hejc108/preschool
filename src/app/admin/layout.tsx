@@ -258,8 +258,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Menu className="w-6 h-6 text-primary-700" />
             </button>
 
-            {/* Brand Logo & Title on Mobile / Desktop */}
-            <div className="flex items-center gap-2.5">
+            {/* Mobile Only: Brand Logo when Sidebar is hidden */}
+            <div className="flex items-center gap-2.5 md:hidden">
               <div className="w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-primary-700 to-secondary-500 shadow-sm shrink-0">
                 <img
                   src="/images/logo.png"
@@ -267,9 +267,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   className="w-full h-full object-cover rounded-full bg-white"
                 />
               </div>
-              <div className="flex items-center gap-2 text-primary-900 font-bold text-sm sm:text-base">
+              <div className="flex items-center gap-2 text-primary-900 font-bold text-sm">
                 <span className="truncate">Sương Mai Admin</span>
               </div>
+            </div>
+
+            {/* Desktop Only: Elegant Breadcrumb instead of duplicate Logo */}
+            <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <span>Hệ thống quản trị</span>
+              <span className="text-slate-300">/</span>
+              <span className="font-bold text-primary-900 text-sm">Quản lý vận hành Sương Mai</span>
             </div>
           </div>
 

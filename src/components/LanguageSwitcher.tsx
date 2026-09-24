@@ -12,8 +12,8 @@ export function LanguageSwitcher() {
         onClick={() => setLanguage('vi')}
         className={`px-2.5 py-1 rounded-pill transition-all flex items-center gap-1 ${
           language === 'vi'
-            ? 'bg-sky-600 text-white shadow-sm font-extrabold'
-            : 'text-slate-600 hover:text-sky-800'
+            ? 'bg-primary-700 text-white shadow-sm font-extrabold'
+            : 'text-slate-600 hover:text-primary-800'
         }`}
       >
         <span>🇻🇳</span>
@@ -23,8 +23,8 @@ export function LanguageSwitcher() {
         onClick={() => setLanguage('en')}
         className={`px-2.5 py-1 rounded-pill transition-all flex items-center gap-1 ${
           language === 'en'
-            ? 'bg-sky-600 text-white shadow-sm font-extrabold'
-            : 'text-slate-600 hover:text-sky-800'
+            ? 'bg-primary-700 text-white shadow-sm font-extrabold'
+            : 'text-slate-600 hover:text-primary-800'
         }`}
       >
         <span>🇬🇧</span>

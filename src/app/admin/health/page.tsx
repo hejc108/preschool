@@ -60,31 +60,29 @@ export default function AdminHealthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-900 transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="font-bold text-white text-base leading-tight">Nhập liệu sức khỏe định kỳ hàng loạt (Y tế / Giáo viên)</h1>
-            <p className="text-xs text-rose-100 font-medium">Tự động tính BMI & xếp loại thể trạng chuẩn WHO</p>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+        {/* Top Banner Card - Official Warm Brand Red */}
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-primary-700 via-primary-600 to-primary-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl shadow-md border border-rose-900/10">
+          <div className="flex items-center gap-3">
+            <Link href="/admin/dashboard" className="p-2 bg-primary-800/80 rounded-full text-white hover:bg-primary-900 transition-colors shrink-0">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+            <div>
+              <h1 className="font-extrabold text-white text-base sm:text-lg leading-tight">Nhập liệu sức khỏe định kỳ hàng loạt (Y tế / Giáo viên)</h1>
+              <p className="text-xs text-rose-100 font-medium">Tự động tính BMI & xếp loại thể trạng chuẩn WHO</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveBatch}
+              className="flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white px-4.5 py-2.5 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95 shrink-0"
+            >
+              <Save className="w-4 h-4" />
+              <span>Lưu sổ sức khỏe lớp</span>
+            </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSaveBatch}
-            className="flex items-center gap-2 bg-[#FB8C00] hover:bg-[#F57C00] text-white px-4.5 py-2.5 rounded-pill font-bold text-xs shadow-md transition-all active:scale-95"
-          >
-            <Save className="w-4 h-4" />
-            <span>Lưu sổ sức khỏe lớp</span>
-          </button>
-        </div>
-      </header>
-
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
         {/* Validation or Success Alerts */}
         {validationError && (
           <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 font-bold text-xs flex items-center gap-2 shadow-sm animate-shake">
@@ -223,6 +221,5 @@ export default function AdminHealthPage() {
           </div>
         </div>
       </div>
-    </div>
   );
 }
