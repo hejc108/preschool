@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 function getSupabaseClient() {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -51,7 +53,25 @@ export async function GET() {
       });
     }
 
-    // 2. Fetch all students joined with classes
+    // 2. Read global system settings
+    let allowNonRegular = false;
+    if (typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_SYSTEM_SETTINGS__) {
+      allowNonRegular = globalThis.__SUONGMAI_SYSTEM_SETTINGS__.allow_school_admin_view_non_regular;
+    }
+
+    try {
+      const { data: settingRow } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'allow_school_admin_view_non_regular')
+        .maybeSingle();
+
+      if (settingRow && settingRow.value !== undefined) {
+        allowNonRegular = Boolean(settingRow.value);
+      }
+    } catch (e) {}
+
+    // 3. Fetch all students joined with classes
     const { data: studentsData, error } = await supabase
       .from('students')
       .select('*, classes(id, name)')
@@ -65,7 +85,7 @@ export async function GET() {
       );
     }
 
-    // 3. Map students with proper class names and non-regular flags
+    // 4. Map students with proper class names and non-regular flags
     const students = (studentsData || []).map((s: any) => {
       let friendlyClassName = s.classes?.name;
       if (!friendlyClassName && s.class_id && idToNameMap[s.class_id]) {
@@ -98,6 +118,9 @@ export async function GET() {
       total: students.length,
       students,
       classes: classesData || [],
+      settings: {
+        allow_school_admin_view_non_regular: allowNonRegular,
+      },
     });
   } catch (err: any) {
     console.error('GET /api/admin/students exception:', err);

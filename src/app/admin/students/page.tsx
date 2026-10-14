@@ -22,6 +22,7 @@ import {
   Upload,
   ZoomIn,
   Download,
+  Settings2,
 } from 'lucide-react';
 import { INITIAL_STUDENTS, INITIAL_CLASSES, INITIAL_KITCHEN_ORDERS, supabase } from '@/lib/supabase/client';
 import { Student, AuthorizedPickup } from '@/lib/types/schema';
@@ -36,7 +37,8 @@ export default function StudentsDirectoryPage() {
   const [classFilter, setClassFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
-  const [showNonRegular, setShowNonRegular] = useState<boolean>(false);
+  const [globalAllowNonRegular, setGlobalAllowNonRegular] = useState<boolean>(false);
+  const [updatingSetting, setUpdatingSetting] = useState<boolean>(false);
 
   // Load students from Supabase via API route
   React.useEffect(() => {
@@ -47,31 +49,57 @@ export default function StudentsDirectoryPage() {
           const json = await res.json();
           if (json.students && json.students.length > 0) {
             setStudents(json.students as Student[]);
-            setLoading(false);
-            return;
+          }
+          if (json.settings) {
+            setGlobalAllowNonRegular(Boolean(json.settings.allow_school_admin_view_non_regular));
           }
         }
-        // Fallback to client-side supabase if API route unavailable
-        const { data, error } = await supabase
-          .from('students')
-          .select('*, classes(id, name)')
-          .order('full_name', { ascending: true });
-        if (data && !error && data.length > 0) {
-          const mapped = data.map((s: any) => ({
-            ...s,
-            class_name: s.classes?.name || s.class_name || 'Chưa phân lớp',
-            is_non_regular: Boolean(s.is_non_regular),
-          }));
-          setStudents(mapped as Student[]);
+
+        // Fetch system settings to double-check
+        const resSettings = await fetch('/api/admin/system-settings');
+        if (resSettings.ok) {
+          const jsonSettings = await resSettings.json();
+          if (jsonSettings.settings) {
+            setGlobalAllowNonRegular(Boolean(jsonSettings.settings.allow_school_admin_view_non_regular));
+          }
         }
       } catch (err) {
-        console.error('Error fetching students:', err);
+        console.error('Error fetching students or system settings:', err);
       } finally {
         setLoading(false);
       }
     }
     loadStudents();
   }, []);
+
+  // Super Admin: Bật/Tắt cờ cấu hình toàn trường cho phép School Admin xem 21 bé ngoài chính quy
+  const handleToggleGlobalNonRegular = async (newValue: boolean) => {
+    if (updatingSetting) return;
+    setUpdatingSetting(true);
+    setGlobalAllowNonRegular(newValue);
+
+    try {
+      const res = await fetch('/api/admin/system-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'allow_school_admin_view_non_regular',
+          value: newValue,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.settings) {
+          setGlobalAllowNonRegular(Boolean(json.settings.allow_school_admin_view_non_regular));
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi khi cập nhật cấu hình hệ thống:', e);
+    } finally {
+      setUpdatingSetting(false);
+    }
+  };
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -229,9 +257,13 @@ export default function StudentsDirectoryPage() {
 
   // Filtered Students list
   const filteredStudents = students.filter((s) => {
-    // Super Admin Toggle: Ẩn học sinh ngoài chính quy nếu không phải Super Admin hoặc Toggle đang tắt
-    if (s.is_non_regular && (!isSuperAdmin || !showNonRegular)) {
-      return false;
+    // QUY TẮC CẤU HÌNH TẬP TRUNG TOÀN TRƯỜNG:
+    // - SUPER_ADMIN: Luôn xem được đầy đủ 191 bé (gồm cả 21 bé ngoài chính quy).
+    // - SCHOOL_ADMIN / ADMIN thường:
+    //   + Nếu Super Admin BẬT: Thấy đầy đủ 191 bé (gồm 21 bé ngoài chính quy) và xuất Excel ra đủ.
+    //   + Nếu Super Admin TẮT: Tự động ẩn 21 bé ngoài chính quy, chỉ thấy 170 bé chính quy.
+    if (!isSuperAdmin && !globalAllowNonRegular) {
+      if (s.is_non_regular) return false;
     }
 
     const matchesSearch =
@@ -403,20 +435,31 @@ export default function StudentsDirectoryPage() {
             />
           </div>
 
-          {/* SUPER_ADMIN Toggle: Hiển thị học sinh ngoài chính quy */}
+          {/* CẤU HÌNH TẬP TRUNG TOÀN TRƯỜNG DO SUPER_ADMIN ĐIỀU KHIỂN ĐỘC QUYỀN */}
           {isSuperAdmin && (
-            <label className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100/80 border border-amber-300 rounded-pill px-3.5 py-2 text-xs text-amber-900 font-bold cursor-pointer select-none transition-colors shadow-2xs shrink-0">
-              <input
-                type="checkbox"
-                checked={showNonRegular}
-                onChange={(e) => {
-                  setShowNonRegular(e.target.checked);
-                  setCurrentPage(1);
-                }}
-                className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500 cursor-pointer accent-amber-600"
-              />
-              <span>Hiển thị học sinh ngoài chính quy</span>
-            </label>
+            <div className="flex items-center gap-2 bg-amber-50/90 border border-amber-300 rounded-pill px-3.5 py-1.5 text-xs text-amber-900 font-bold shadow-2xs select-none shrink-0">
+              <Settings2 className="w-4 h-4 text-amber-700 shrink-0" />
+              <span className="text-[11px] uppercase tracking-wider text-amber-800 hidden sm:inline">Cấu hình:</span>
+              <span>Cho phép QT trường xem 21 bé ngoài CQ</span>
+              <button
+                type="button"
+                disabled={updatingSetting}
+                onClick={() => handleToggleGlobalNonRegular(!globalAllowNonRegular)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  globalAllowNonRegular ? 'bg-amber-600' : 'bg-slate-300'
+                } ${updatingSetting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Bật/Tắt quyền xem 21 học sinh ngoài chính quy của Quản trị trường (School Admin)"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    globalAllowNonRegular ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-[11px] font-semibold text-amber-700">
+                ({globalAllowNonRegular ? 'Đang BẬT' : 'Đang TẮT'})
+              </span>
+            </div>
           )}
 
           {/* Export Excel Button */}

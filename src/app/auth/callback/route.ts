@@ -141,20 +141,33 @@ export async function GET(request: Request) {
       
       const { data: existingDbProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, approval_status')
+        .select('id, role, approval_status, assigned_class_id, assigned_class_name, phone, is_temporary')
         .eq('email', cleanEmail)
         .maybeSingle();
 
-      const isSadmin = cleanEmail === 'sadmin@suongmai.edu.vn';
-      const profilePayload = {
+      const isSuper = cleanEmail === 'luciaxuan178@gmail.com' || cleanEmail === 'sadmin@suongmai.edu.vn';
+      const profilePayload: any = {
         id: existingDbProfile?.id || userId || `u-gauth-${Date.now()}`,
         email: cleanEmail,
         full_name: resolvedName,
         avatar_url: resolvedAvatar,
-        role: existingDbProfile ? existingDbProfile.role : (isSadmin ? 'SUPER_ADMIN' : 'GUEST'),
-        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSadmin ? 'ACTIVE' : 'PENDING'),
+        role: existingDbProfile ? existingDbProfile.role : (isSuper ? 'SUPER_ADMIN' : 'GUEST'),
+        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSuper ? 'ACTIVE' : 'PENDING'),
         updated_at: new Date().toISOString(),
       };
+
+      if (existingDbProfile?.assigned_class_name) {
+        profilePayload.assigned_class_name = existingDbProfile.assigned_class_name;
+      }
+      if (existingDbProfile?.assigned_class_id) {
+        profilePayload.assigned_class_id = existingDbProfile.assigned_class_id;
+      }
+      if (existingDbProfile?.phone) {
+        profilePayload.phone = existingDbProfile.phone;
+      }
+      if (existingDbProfile?.is_temporary !== undefined) {
+        profilePayload.is_temporary = existingDbProfile.is_temporary;
+      }
 
       const { data: upsertData, error: upsertErr } = await supabaseAdmin
         .from('profiles')

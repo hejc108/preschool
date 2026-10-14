@@ -225,9 +225,20 @@ async function runImport() {
   const profileCols = profileColsTest && profileColsTest[0] ? Object.keys(profileColsTest[0]) : [];
   const hasProfileTemp = profileCols.includes('is_temporary');
   const hasProfileStatus = profileCols.includes('status');
+  const hasProfileClass = profileCols.includes('assigned_class_name');
 
+  const staffArray = Array.from(allStaff.values());
   let staffSavedCount = 0;
-  for (const staff of Array.from(allStaff.values())) {
+
+  for (const staff of staffArray) {
+    // Determine class name from job_title if available
+    let assignedClassName: string | null = null;
+    if (staff.job_title?.includes('Nhà trẻ')) assignedClassName = 'Nhà trẻ';
+    else if (staff.job_title?.includes('Mầm')) assignedClassName = 'Mầm';
+    else if (staff.job_title?.includes('Chồi')) assignedClassName = 'Chồi';
+    else if (staff.job_title?.includes('Lá 1')) assignedClassName = 'Lá 1';
+    else if (staff.job_title?.includes('Lá 2')) assignedClassName = 'Lá 2';
+
     const profilePayload: any = {
       email: staff.email,
       full_name: staff.full_name,
@@ -237,6 +248,7 @@ async function runImport() {
     };
     if (hasProfileTemp) profilePayload.is_temporary = staff.is_temporary;
     if (hasProfileStatus) profilePayload.status = 'ACTIVE';
+    if (hasProfileClass && assignedClassName) profilePayload.assigned_class_name = assignedClassName;
 
     // Check if user already exists in profiles
     const { data: existingUser } = await supabase.from('profiles').select('id, email').eq('email', staff.email).maybeSingle();
@@ -249,16 +261,26 @@ async function runImport() {
         staffSavedCount++;
       }
     } else {
+      // Generate standalone UUID for pre-seeded staff
+      const newId = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : 'e1000000-0000-0000-0000-' + String(staffSavedCount + 1).padStart(12, '0');
+      profilePayload.id = newId;
+      profilePayload.approval_status = 'ACTIVE';
+
       // Attempt upsert/insert
       const { error: insertErr } = await supabase.from('profiles').upsert(profilePayload, { onConflict: 'email' });
       if (insertErr) {
-        console.warn(`ℹ️ Nhân sự ${staff.full_name} (${staff.email}): Chờ đăng nhập lần đầu qua Google Auth (${insertErr.message})`);
+        console.warn(`ℹ️ Nhân sự ${staff.full_name} (${staff.email}): Chờ gỡ Foreign Key trên Supabase (${insertErr.message})`);
       } else {
         staffSavedCount++;
       }
     }
   }
   console.log(`=> Đã xử lý và cập nhật thành công ${staffSavedCount}/${allStaff.size} hồ sơ nhân sự trong hệ thống.`);
+  if (staffSavedCount < allStaff.size) {
+    console.log(`💡 LƯU Ý: Để nạp vĩnh viễn toàn bộ ${allStaff.size} hồ sơ chưa có tài khoản Google vào CSDL Supabase,`);
+    console.log(`   hãy chạy file migration:`);
+    console.log(`   👉 supabase/migrations/00008_unblock_profiles_fk_and_system_settings.sql trong Supabase SQL Editor.`);
+  }
 
   // ==========================================
   // 2. IMPORT DANH SÁCH HỌC SINH & LIÊN HỆ PHỤ HUYNH
