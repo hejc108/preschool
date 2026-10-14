@@ -137,7 +137,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           localStorage.removeItem(key);
         }
       });
-      window.location.href = '/admin/login';
+      // Điều hướng sau đăng xuất:
+      // - Tài khoản sadmin nội bộ -> chuyển về /admin/login
+      // - Toàn bộ tài khoản khác (Google login, Admin, Staff, GV, Phụ huynh) -> chuyển về /auth
+      const isDedicatedSadmin = username === 'sadmin' && cleanEmail === 'sadmin@suongmai.edu.vn';
+      window.location.href = isDedicatedSadmin ? '/admin/login' : '/auth';
     }
   };
 

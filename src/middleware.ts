@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
         if (!sessionCookie && rawSession) res.cookies.delete('suongmai_session');
         return res;
       }
-      const loginUrl = new URL(isAdminRoute ? '/admin/login' : '/auth', request.url);
+      const loginUrl = new URL('/auth', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
       const res = NextResponse.redirect(loginUrl);
       if (!sessionCookie && rawSession) res.cookies.delete('suongmai_session');
