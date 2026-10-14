@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, HeartPulse, Utensils, Lock, 
   ChevronLeft, Plus, Sparkles, Check, AlertCircle, LogOut, 
-  UserCheck, ShieldAlert, Phone, RefreshCw
+  UserCheck, ShieldAlert, Phone, RefreshCw, ChevronDown, Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -15,6 +15,11 @@ import {
 } from '@/lib/supabase/client';
 import { MedicationRequest, MealException, AbsenceRequest, Student, ParentContact, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+
+export interface AssignedClass {
+  id: string;
+  name: string;
+}
 
 export interface TeacherStudent extends Student {
   attendance: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT';
@@ -57,13 +62,88 @@ export default function TeacherPwaPage() {
 
   // Teacher class assignment state (T1 = assigned, T0 = unassigned empty state)
   const [isClassAssigned, setIsClassAssigned] = useState<boolean>(true);
+  const [assignedClasses, setAssignedClasses] = useState<AssignedClass[]>([]);
+  const [activeClass, setActiveClass] = useState<AssignedClass | null>(null);
   const [assignedClassName, setAssignedClassName] = useState<string>('Mầm');
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
   const [refreshingClass, setRefreshingClass] = useState<boolean>(false);
   const [teacherEmail, setTeacherEmail] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [hasParentAccess, setHasParentAccess] = useState<boolean>(false);
+
+  const loadTeacherAssignments = async (email: string) => {
+    try {
+      const res = await fetch(`/api/admin/teacher-assignments?email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.assignments && json.assignments.length > 0) {
+          const list: AssignedClass[] = json.assignments.map((a: any) => ({
+            id: a.class_id,
+            name: a.class_name,
+          }));
+          setAssignedClasses(list);
+          setIsClassAssigned(true);
+
+          // Directive 3: Check sessionStorage for remembered active class
+          const savedClassId =
+            typeof window !== 'undefined'
+              ? sessionStorage.getItem('suongmai_teacher_active_class_id')
+              : null;
+          const found = list.find((c) => c.id === savedClassId);
+          const chosen = found || list[0];
+
+          setActiveClass(chosen);
+          setAssignedClassName(chosen.name);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('API teacher-assignments notice:', e);
+    }
+
+    // Fallback: Check profile
+    const profiles = getStoredProfiles();
+    const profile = profiles.find((p) => p.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (profile && profile.role === 'TEACHER') {
+      if (!profile.assigned_class_id && !profile.assigned_class_name) {
+        setIsClassAssigned(false);
+        setAssignedClasses([]);
+        setActiveClass(null);
+      } else {
+        setIsClassAssigned(true);
+        const rawNames = profile.assigned_class_name || 'Mầm';
+        const names = rawNames.split(',').map((n) => n.trim()).filter(Boolean);
+        const fallbackClasses: AssignedClass[] = names.map((name) => ({
+          id: profile.assigned_class_id || `c-${name.toLowerCase().replace(/\s+/g, '')}`,
+          name,
+        }));
+        setAssignedClasses(fallbackClasses);
+        const savedClassId =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem('suongmai_teacher_active_class_id')
+            : null;
+        const found = fallbackClasses.find((c) => c.id === savedClassId);
+        const chosen = found || fallbackClasses[0];
+        setActiveClass(chosen);
+        setAssignedClassName(chosen.name);
+      }
+    }
+  };
+
+  const handleSelectClass = (c: AssignedClass) => {
+    if (activeClass?.id === c.id) return;
+    // Directive 2: Empty student list and show loading indicator (No Stale Data)
+    setStudents([]);
+    setLoadingStudents(true);
+    setActiveClass(c);
+    setAssignedClassName(c.name);
+    // Directive 3: Remember in sessionStorage
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('suongmai_teacher_active_class_id', c.id);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -103,14 +183,7 @@ export default function TeacherPwaPage() {
           setHasParentAccess(true);
         }
 
-        if (profile && profile.role === 'TEACHER') {
-          if (!profile.assigned_class_id && !profile.assigned_class_name) {
-            setIsClassAssigned(false);
-          } else {
-            setIsClassAssigned(true);
-            setAssignedClassName(profile.assigned_class_name || 'Mầm');
-          }
-        }
+        loadTeacherAssignments(emailFound);
       } else {
         setIsAuthenticated(false);
       }
@@ -147,15 +220,8 @@ export default function TeacherPwaPage() {
   const handleRefreshClassAssignment = async () => {
     setRefreshingClass(true);
     try {
-      const profiles = await fetchLiveProfilesFromSupabase();
       if (teacherEmail) {
-        const profile = profiles.find((p) => p.email.toLowerCase().trim() === teacherEmail.toLowerCase().trim());
-        if (profile) {
-          if (profile.assigned_class_id || profile.assigned_class_name) {
-            setIsClassAssigned(true);
-            setAssignedClassName(profile.assigned_class_name || 'Mầm');
-          }
-        }
+        await loadTeacherAssignments(teacherEmail);
       }
     } catch (e) {
       console.warn('Error checking teacher class assignment:', e);
@@ -184,16 +250,18 @@ export default function TeacherPwaPage() {
   const [selectedIntakeLevel, setSelectedIntakeLevel] = useState<'HALF' | 'REFUSED'>('HALF');
   const [selectedTags, setSelectedTags] = useState<string[]>(['#Biếng_ăn']);
 
-  // Fetch live students for the assigned class from Supabase
+  // Fetch live students for the assigned active class from Supabase
   useEffect(() => {
     async function fetchClassStudents() {
-      if (!assignedClassName) return;
+      if (!activeClass) return;
+      setLoadingStudents(true);
       try {
         const { data, error } = await supabase
           .from('students')
           .select('*')
-          .eq('class_name', assignedClassName)
+          .eq('class_id', activeClass.id)
           .order('full_name', { ascending: true });
+
         if (data && !error && data.length > 0) {
           const mapped = data.map((s: any) => ({
             ...s,
@@ -204,13 +272,43 @@ export default function TeacherPwaPage() {
           setStudents(mapped);
           setNewMedStudentId(mapped[0]?.id || '');
           setSelectedStudentForMeal(mapped[0]?.id || '');
+        } else {
+          // Fallback via /api/admin/students
+          const res = await fetch('/api/admin/students');
+          if (res.ok) {
+            const json = await res.json();
+            if (json.students) {
+              const matched = json.students.filter(
+                (s: any) =>
+                  s.class_id === activeClass.id ||
+                  s.class_name?.toLowerCase().trim() === activeClass.name.toLowerCase().trim()
+              );
+              if (matched.length > 0) {
+                const mapped = matched.map((s: any) => ({
+                  ...s,
+                  attendance: 'PRESENT' as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
+                  checkedOut: false,
+                  checkoutReason: '',
+                }));
+                setStudents(mapped);
+                setNewMedStudentId(mapped[0]?.id || '');
+                setSelectedStudentForMeal(mapped[0]?.id || '');
+              } else {
+                setStudents([]);
+              }
+            }
+          } else {
+            setStudents([]);
+          }
         }
       } catch (e) {
         console.error('Error fetching class students:', e);
+      } finally {
+        setLoadingStudents(false);
       }
     }
     fetchClassStudents();
-  }, [assignedClassName]);
+  }, [activeClass]);
 
   // Late Checkout State
   const [showLateCheckoutModal, setShowLateCheckoutModal] = useState(false);
@@ -255,22 +353,47 @@ export default function TeacherPwaPage() {
           {/* QC Mode Selector Bar */}
           <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500">
             <span className="font-semibold block mb-1">Chế độ kiểm thử (QC Selector):</span>
-            <div className="flex items-center justify-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
               <button
-                onClick={() => setIsClassAssigned(false)}
+                onClick={() => {
+                  setIsClassAssigned(false);
+                  setAssignedClasses([]);
+                  setActiveClass(null);
+                }}
                 className={`px-2 py-1 rounded text-[10px] font-bold ${
                   !isClassAssigned ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                T0 (Chưa gán lớp)
+                T0 (Chưa gán)
               </button>
               <button
-                onClick={() => setIsClassAssigned(true)}
+                onClick={() => {
+                  setIsClassAssigned(true);
+                  const demo = [{ id: '5b61ec3a-11ef-4ca0-b914-97b35f9f3762', name: 'Mầm' }];
+                  setAssignedClasses(demo);
+                  handleSelectClass(demo[0]);
+                }}
                 className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  isClassAssigned ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
+                  isClassAssigned && assignedClasses.length <= 1 ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                T1 (Đã gán lớp Mầm)
+                T1 (Đơn lớp: Mầm)
+              </button>
+              <button
+                onClick={() => {
+                  setIsClassAssigned(true);
+                  const demo = [
+                    { id: '5b61ec3a-11ef-4ca0-b914-97b35f9f3762', name: 'Mầm' },
+                    { id: '9d953115-1de9-4a56-a75c-eadcf903f398', name: 'Chồi' },
+                  ];
+                  setAssignedClasses(demo);
+                  handleSelectClass(demo[0]);
+                }}
+                className={`px-2 py-1 rounded text-[10px] font-bold ${
+                  isClassAssigned && assignedClasses.length > 1 ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                T2 (Đa lớp: Mầm + Chồi)
               </button>
             </div>
           </div>
@@ -489,36 +612,97 @@ export default function TeacherPwaPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-20">
       {/* Mobile Top Header - Official Warm Brand Red */}
-      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-2.5">
+      <header className="px-3 py-2.5 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+        <div className="flex items-center gap-2 min-w-0">
           {['SUPER_ADMIN', 'ADMIN', 'SCHOOL_ADMIN'].includes(userRole) ? (
-            <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-600 transition-colors" title="Về trang Quản trị">
-              <ChevronLeft className="w-5 h-5" />
+            <Link
+              href="/admin/dashboard"
+              className="p-1.5 bg-primary-800 rounded-pill text-white hover:bg-primary-600 transition-colors shrink-0"
+              title="Về trang Quản trị"
+            >
+              <ChevronLeft className="w-4 h-4" />
             </Link>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
+            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
               SM
             </div>
           )}
-          <div>
-            <h1 className="font-extrabold text-white text-base leading-tight">{t('teacher.app_title')}</h1>
-            <p className="text-xs text-rose-100 font-semibold">{assignedClassName || t('teacher.class_info')}</p>
+          <div className="min-w-0">
+            <h1 className="font-extrabold text-white text-sm sm:text-base leading-tight truncate">
+              {t('teacher.app_title')}
+            </h1>
+
+            {/* Class Selector Dropdown in Header */}
+            {assignedClasses.length > 1 ? (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[10px] text-rose-200 font-medium whitespace-nowrap">Đang xem:</span>
+                <div className="relative inline-block">
+                  <select
+                    value={activeClass?.id || ''}
+                    onChange={(e) => {
+                      const sel = assignedClasses.find((c) => c.id === e.target.value);
+                      if (sel) handleSelectClass(sel);
+                    }}
+                    className="bg-white/20 hover:bg-white/30 text-white font-extrabold text-[11px] py-0.5 pl-1.5 pr-5 rounded-md border border-white/30 appearance-none cursor-pointer focus:outline-none max-w-[110px] sm:max-w-[140px] truncate"
+                  >
+                    {assignedClasses.map((c) => (
+                      <option key={c.id} value={c.id} className="text-slate-900 font-bold bg-white">
+                        Lớp {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3 h-3 text-white absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-rose-100 font-semibold truncate">
+                Lớp {activeClass?.name || assignedClassName}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
           {hasParentAccess && (
             <Link
               href="/parent"
-              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-pill text-[11px] font-bold shadow-sm flex items-center gap-1 transition-all animate-pulse hover:animate-none"
+              className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-pill text-[10px] sm:text-[11px] font-bold shadow-sm flex items-center gap-1 transition-all shrink-0 whitespace-nowrap animate-pulse hover:animate-none"
               title="Chuyển sang Cổng Phụ huynh xem thông tin con"
             >
-              <span>👨‍👧 Góc Phụ Huynh</span>
+              <span>👨‍👧 Con tôi</span>
             </Link>
           )}
           <LanguageSwitcher />
         </div>
       </header>
+
+      {/* Segmented Control Bar (Pills) for Multi-Class Quick Switch */}
+      {assignedClasses.length > 1 && (
+        <div className="bg-primary-800/95 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto border-b border-primary-600/40 sticky top-[48px] sm:top-[52px] z-10 shadow-xs">
+          <span className="text-[10px] text-rose-200 whitespace-nowrap font-semibold flex items-center gap-1 shrink-0">
+            <Layers className="w-3 h-3 text-rose-300" /> Chọn lớp:
+          </span>
+          <div className="flex items-center gap-1">
+            {assignedClasses.map((c) => {
+              const isActive = activeClass?.id === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => handleSelectClass(c)}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold ring-1 ring-amber-300'
+                      : 'bg-primary-900/50 text-rose-100 hover:bg-primary-900/80 hover:text-white'
+                  }`}
+                >
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                  <span>{c.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 4 Main Mobile Navigation Tabs */}
       <div className="grid grid-cols-4 bg-white border-b border-slate-200 text-[11px] font-bold text-center">
@@ -622,76 +806,89 @@ export default function TeacherPwaPage() {
           ))}
 
           {/* Student Roll Call List */}
-          <div className="space-y-2.5">
-            {students.map((student) => (
-              <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {student.avatar_url ? (
-                      <img
-                        src={student.avatar_url}
-                        alt={student.full_name}
-                        className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
-                        {student.full_name.charAt(0)}
+          {loadingStudents ? (
+            <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-rose-100 p-6 shadow-xs">
+              <div className="w-8 h-8 border-3 border-primary-700 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs text-slate-600 font-semibold">
+                Đang tải danh sách học sinh Lớp {activeClass?.name || assignedClassName}...
+              </p>
+            </div>
+          ) : students.length === 0 ? (
+            <div className="py-14 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+              Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {students.map((student) => (
+                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {student.avatar_url ? (
+                        <img
+                          src={student.avatar_url}
+                          alt={student.full_name}
+                          className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
+                          {student.full_name.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
+                        <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
                       </div>
-                    )}
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
-                      <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
                     </div>
+
+                    {student.allergies !== 'Không' && student.allergies !== 'None' && (
+                      <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
+                        ⚠️ {translateAllergy(student.allergies, language)}
+                      </span>
+                    )}
                   </div>
 
-                  {student.allergies !== 'Không' && student.allergies !== 'None' && (
-                    <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
-                      ⚠️ {translateAllergy(student.allergies, language)}
-                    </span>
-                  )}
+                  {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    <button
+                      onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
+                      disabled={isKitchenLocked}
+                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                        student.attendance === 'PRESENT'
+                          ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {t('teacher.btn_present')}
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
+                      disabled={isKitchenLocked}
+                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                        student.attendance === 'PRESENT_LATE'
+                          ? 'bg-secondary-600 text-white shadow-sm font-bold'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {t('teacher.btn_late')}
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
+                      disabled={isKitchenLocked}
+                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                        student.attendance === 'ABSENT'
+                          ? 'bg-rose-500 text-white shadow-sm font-bold'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {t('teacher.btn_absent')}
+                    </button>
+                  </div>
                 </div>
-
-                {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
-                <div className="grid grid-cols-3 gap-1.5 pt-1">
-                  <button
-                    onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
-                    disabled={isKitchenLocked}
-                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                      student.attendance === 'PRESENT'
-                        ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                        : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t('teacher.btn_present')}
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
-                    disabled={isKitchenLocked}
-                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                      student.attendance === 'PRESENT_LATE'
-                        ? 'bg-secondary-600 text-white shadow-sm font-bold'
-                        : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t('teacher.btn_late')}
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
-                    disabled={isKitchenLocked}
-                    className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                      student.attendance === 'ABSENT'
-                        ? 'bg-rose-500 text-white shadow-sm font-bold'
-                        : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t('teacher.btn_absent')}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Fixed Bottom Dispatch Button (Warm Red Theme) */}
           <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 bg-white/95 border-t border-rose-100 backdrop-blur-md z-30">
@@ -986,49 +1183,62 @@ export default function TeacherPwaPage() {
             </button>
           </div>
 
-          <div className="space-y-2.5">
-            {students.map((student) => (
-              <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
-                <div className="flex items-center gap-3">
-                  {student.avatar_url ? (
-                    <img
-                      src={student.avatar_url}
-                      alt={student.full_name}
-                      className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
-                      {student.full_name.charAt(0)}
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
-                    <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
-                    {student.checkoutReason && (
-                      <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+          {loadingStudents ? (
+            <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+              <div className="w-8 h-8 border-3 border-primary-700 border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs text-slate-600 font-semibold">
+                Đang tải danh sách học sinh Lớp {activeClass?.name || assignedClassName}...
+              </p>
+            </div>
+          ) : students.length === 0 ? (
+            <div className="py-14 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+              Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {students.map((student) => (
+                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
+                  <div className="flex items-center gap-3">
+                    {student.avatar_url ? (
+                      <img
+                        src={student.avatar_url}
+                        alt={student.full_name}
+                        className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        {student.full_name.charAt(0)}
+                      </div>
                     )}
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
+                      <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
+                      {student.checkoutReason && (
+                        <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {student.checkedOut ? (
-                  <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setLateStudentId(student.id);
-                      setShowLateCheckoutModal(true);
-                    }}
-                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>{t('teacher.checkout_late')}</span>
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+                  {student.checkedOut ? (
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setLateStudentId(student.id);
+                        setShowLateCheckoutModal(true);
+                      }}
+                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{t('teacher.checkout_late')}</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Late Checkout / Handover Verification Modal */}
           {showLateCheckoutModal && (() => {

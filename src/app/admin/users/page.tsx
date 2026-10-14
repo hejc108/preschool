@@ -221,8 +221,25 @@ export default function UsersManagementPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-3.5 px-4 text-right font-mono text-[11px] text-slate-400">
-                    {p.assigned_class_name || p.created_at ? p.assigned_class_name || new Date(p.created_at || '').toLocaleDateString('vi-VN') : '—'}
+                  <td className="py-3.5 px-4 text-right">
+                    {p.assigned_class_name ? (
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {p.assigned_class_name.split(',').map((cName, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-md text-[10px] font-bold"
+                          >
+                            {cName.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : p.created_at ? (
+                      <span className="font-mono text-[11px] text-slate-400">
+                        {new Date(p.created_at).toLocaleDateString('vi-VN')}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -52,6 +52,7 @@ export default function UserApprovalsPage() {
   // Selected role & assigned class state per user row
   const [rowRoles, setRowRoles] = useState<Record<string, UserRole>>({});
   const [rowClasses, setRowClasses] = useState<Record<string, string>>({});
+  const [rowClassIds, setRowClassIds] = useState<Record<string, string[]>>({});
 
   // Multi-student selection modal for parent linking
   const [parentModalUser, setParentModalUser] = useState<Profile | null>(null);
@@ -77,12 +78,31 @@ export default function UserApprovalsPage() {
 
         const initialRoles: Record<string, UserRole> = {};
         const initialClasses: Record<string, string> = {};
+        const initialClassIds: Record<string, string[]> = {};
         rawList.forEach((p: Profile) => {
           initialRoles[p.id] = p.role || 'PARENT';
           initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
+
+          const cIds: string[] = [];
+          if (p.assigned_class_name) {
+            const names = p.assigned_class_name.split(',').map((n) => n.trim().toLowerCase());
+            classes.forEach((c) => {
+              if (names.includes(c.name.toLowerCase())) {
+                cIds.push(c.id);
+              }
+            });
+          }
+          if (cIds.length === 0 && p.assigned_class_id) {
+            cIds.push(p.assigned_class_id);
+          }
+          if (cIds.length === 0 && classes[0]?.id) {
+            cIds.push(classes[0].id);
+          }
+          initialClassIds[p.id] = cIds;
         });
         setRowRoles((prev) => ({ ...initialRoles, ...prev }));
         setRowClasses((prev) => ({ ...initialClasses, ...prev }));
+        setRowClassIds((prev) => ({ ...initialClassIds, ...prev }));
         return;
       }
     } catch (e) {}
@@ -94,12 +114,31 @@ export default function UserApprovalsPage() {
     // Init row state
     const initialRoles: Record<string, UserRole> = {};
     const initialClasses: Record<string, string> = {};
+    const initialClassIds: Record<string, string[]> = {};
     list.forEach((p) => {
       initialRoles[p.id] = p.role || 'PARENT';
       initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c-mam';
+
+      const cIds: string[] = [];
+      if (p.assigned_class_name) {
+        const names = p.assigned_class_name.split(',').map((n) => n.trim().toLowerCase());
+        classes.forEach((c) => {
+          if (names.includes(c.name.toLowerCase())) {
+            cIds.push(c.id);
+          }
+        });
+      }
+      if (cIds.length === 0 && p.assigned_class_id) {
+        cIds.push(p.assigned_class_id);
+      }
+      if (cIds.length === 0 && classes[0]?.id) {
+        cIds.push(classes[0].id);
+      }
+      initialClassIds[p.id] = cIds;
     });
     setRowRoles((prev) => ({ ...initialRoles, ...prev }));
     setRowClasses((prev) => ({ ...initialClasses, ...prev }));
+    setRowClassIds((prev) => ({ ...initialClassIds, ...prev }));
   }, [classes]);
 
   useEffect(() => {
@@ -160,13 +199,42 @@ export default function UserApprovalsPage() {
   };
 
   // --- ACTIONS ---
+  const handleToggleTeacherClass = (profileId: string, classId: string) => {
+    setRowClassIds((prev) => {
+      const current = prev[profileId] || [];
+      const updated = current.includes(classId)
+        ? current.filter((id) => id !== classId)
+        : [...current, classId];
+      return { ...prev, [profileId]: updated };
+    });
+  };
+
   const handleApproveTeacher = async (user: Profile) => {
     try {
-      const targetClassId = rowClasses[user.id] || classes[0]?.id || 'c1';
-      const targetClass = classes.find((c) => c.id === targetClassId);
-      await approveTeacherUser(user.email, targetClassId, targetClass?.name);
+      const selectedIds =
+        rowClassIds[user.id] || (rowClasses[user.id] ? [rowClasses[user.id]] : [classes[0]?.id || '']);
+      if (selectedIds.length === 0) {
+        showToast('Vui lòng chọn ít nhất 1 lớp phụ trách cho giáo viên!', 'error');
+        return;
+      }
+      const selectedClasses = classes.filter((c) => selectedIds.includes(c.id));
+      const classNames = selectedClasses.map((c) => c.name).join(', ') || 'Mầm';
+
+      // 1. Lưu phân công nhiều lớp vào Server API Route
+      await fetch('/api/admin/teacher-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacher_email: user.email,
+          teacher_id: user.id,
+          class_ids: selectedIds,
+        }),
+      });
+
+      // 2. Kích hoạt quyền Giáo viên
+      await approveTeacherUser(user.email, selectedIds[0], classNames);
       await refreshData();
-      showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (Lớp ${targetClass?.name || ''})!`);
+      showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (${classNames})!`);
     } catch (err: any) {
       showToast(err.message || 'Phê duyệt thất bại!', 'error');
     }
@@ -497,21 +565,31 @@ export default function UserApprovalsPage() {
                           )}
 
                           {selectedRole === 'TEACHER' && (
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className="text-[11px] text-slate-500">Lớp:</span>
-                              <select
-                                value={selectedClassId}
-                                onChange={(e) =>
-                                  setRowClasses((prev) => ({ ...prev, [p.id]: e.target.value }))
-                                }
-                                className="bg-amber-50 border border-amber-200 text-amber-900 rounded-md py-1 px-2 text-[11px] font-bold"
-                              >
-                                {classes.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
+                            <div className="space-y-1 mt-1.5">
+                              <span className="text-[11px] font-bold text-slate-700 block">
+                                Phân công lớp phụ trách (chọn 1 hoặc nhiều lớp):
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {classes.map((c) => {
+                                  const isSelected = (rowClassIds[p.id] || []).includes(c.id);
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => handleToggleTeacherClass(p.id, c.id)}
+                                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
+                                        isSelected
+                                          ? 'bg-amber-500 text-slate-950 border-amber-600 font-extrabold'
+                                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                                      }`}
+                                      title={isSelected ? `Bỏ chọn lớp ${c.name}` : `Chọn thêm lớp ${c.name}`}
+                                    >
+                                      <span>{isSelected ? '✓' : '+'}</span>
+                                      <span>{c.name}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
 
