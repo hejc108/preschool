@@ -31,25 +31,43 @@ import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 export default function StudentsDirectoryPage() {
   const { t } = useLanguage();
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
+  const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [showNonRegular, setShowNonRegular] = useState<boolean>(false);
 
-  // Load students from Supabase
+  // Load students from Supabase via API route
   React.useEffect(() => {
     async function loadStudents() {
       try {
+        const res = await fetch('/api/admin/students');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.students && json.students.length > 0) {
+            setStudents(json.students as Student[]);
+            setLoading(false);
+            return;
+          }
+        }
+        // Fallback to client-side supabase if API route unavailable
         const { data, error } = await supabase
           .from('students')
-          .select('*')
+          .select('*, classes(id, name)')
           .order('full_name', { ascending: true });
         if (data && !error && data.length > 0) {
-          setStudents(data as Student[]);
+          const mapped = data.map((s: any) => ({
+            ...s,
+            class_name: s.classes?.name || s.class_name || 'Chưa phân lớp',
+            is_non_regular: Boolean(s.is_non_regular),
+          }));
+          setStudents(mapped as Student[]);
         }
       } catch (err) {
         console.error('Error fetching students:', err);
+      } finally {
+        setLoading(false);
       }
     }
     loadStudents();
@@ -220,7 +238,12 @@ export default function StudentsDirectoryPage() {
       s.full_name.toLowerCase().includes(search.toLowerCase()) ||
       s.student_code.toLowerCase().includes(search.toLowerCase());
 
-    const matchesClass = classFilter === 'ALL' || s.class_name === classFilter;
+    const matchesClass =
+      classFilter === 'ALL'
+        ? true
+        : classFilter === 'Chưa phân lớp'
+        ? !s.class_name || s.class_name === 'Chưa phân lớp'
+        : s.class_name === classFilter;
     const matchesStatus =
       statusFilter === 'ALL'
         ? true
@@ -239,7 +262,7 @@ export default function StudentsDirectoryPage() {
   );
 
   // --- SAVE STUDENT EDITS ---
-  const handleSaveEditStudent = (e: React.FormEvent) => {
+  const handleSaveEditStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editStudent) return;
 
@@ -252,44 +275,59 @@ export default function StudentsDirectoryPage() {
       INITIAL_STUDENTS[index] = editStudent;
     }
 
+    try {
+      await fetch('/api/admin/students', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editStudent.id,
+          full_name: editStudent.full_name,
+          gender: editStudent.gender,
+          dob: editStudent.dob,
+          allergies: editStudent.allergies,
+          status: editStudent.status,
+          avatar_url: editStudent.avatar_url,
+          is_non_regular: editStudent.is_non_regular,
+        }),
+      });
+    } catch (err) {
+      console.error('Error saving student edits:', err);
+    }
+
     setEditStudent(null);
   };
 
   // --- SINGLE CLASS TRANSFER HANDLER ---
-  const handleExecuteSingleTransfer = (e: React.FormEvent) => {
+  const handleExecuteSingleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferStudent) return;
 
-    const classIdMap: Record<string, string> = {
-      'Nhà trẻ': 'c-nhatre',
-      'Mầm': 'c-mam',
-      'Chồi': 'c-choi',
-      'Lá 1': 'c-la1',
-      'Lá 2': 'c-la2',
-    };
-    const oldClass = transferStudent.class_name || '';
-    const targetClassId = classIdMap[newSingleClass] || 'c-mam';
+    const oldClass = transferStudent.class_name || 'Chưa phân lớp';
 
     setStudents((prev) =>
       prev.map((s) =>
         s.id === transferStudent.id
-          ? { ...s, class_id: targetClassId, class_name: newSingleClass }
+          ? { ...s, class_name: newSingleClass }
           : s
       )
     );
 
     const targetSingleton = INITIAL_STUDENTS.find((s) => s.id === transferStudent.id);
     if (targetSingleton) {
-      targetSingleton.class_id = targetClassId;
       targetSingleton.class_name = newSingleClass;
     }
 
-    if (supabase) {
-      supabase
-        .from('students')
-        .update({ class_id: targetClassId, class_name: newSingleClass })
-        .eq('id', transferStudent.id)
-        .then(() => {});
+    try {
+      await fetch('/api/admin/students', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: transferStudent.id,
+          target_class_name: newSingleClass,
+        }),
+      });
+    } catch (err) {
+      console.error('Error transferring student class:', err);
     }
 
     syncClassHeadcount(oldClass, newSingleClass, 1);
@@ -330,6 +368,7 @@ export default function StudentsDirectoryPage() {
               <option value="Chồi">Chồi</option>
               <option value="Lá 1">Lá 1</option>
               <option value="Lá 2">Lá 2</option>
+              <option value="Chưa phân lớp">Chưa phân lớp</option>
             </select>
           </div>
 
@@ -407,115 +446,142 @@ export default function StudentsDirectoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {paginatedStudents.map((s) => {
-                const pendingCount =
-                  s.authorized_pickups?.filter((p) => p.approval_status === 'PENDING').length || 0;
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-500 font-medium">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Đang đồng bộ hồ sơ học sinh từ cơ sở dữ liệu...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                    Không tìm thấy hồ sơ học sinh nào phù hợp với bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                paginatedStudents.map((s) => {
+                  const pendingCount =
+                    s.authorized_pickups?.filter((p) => p.approval_status === 'PENDING').length || 0;
 
-                return (
-                  <tr key={s.id} className="hover:bg-sky-50/50 transition-colors">
-                    <td className="py-4 px-4 font-mono font-bold text-sky-700 text-xs whitespace-nowrap">
-                      {s.student_code}
-                    </td>
-                    <td className="py-4 px-4 font-bold text-slate-900">
-                      <div className="flex items-center gap-3">
-                        {s.avatar_url ? (
-                          <img
-                            src={s.avatar_url}
-                            alt={s.full_name}
-                            className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shadow-sm shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
-                            {s.full_name.charAt(0)}
-                          </div>
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="block font-bold">{s.full_name}</span>
-                            {s.is_non_regular && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-                                Ngoài chính quy
-                              </span>
-                            )}
-                            {pendingCount > 0 && (
-                              <span
-                                className="relative inline-flex items-center justify-center p-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-md shadow-xs animate-pulse"
-                                title={`${pendingCount} yêu cầu đang chờ duyệt`}
-                              >
-                                <Clock className="w-3.5 h-3.5" />
-                                <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white">
-                                  {pendingCount}
+                  return (
+                    <tr key={s.id} className="hover:bg-sky-50/50 transition-colors">
+                      <td className="py-4 px-4 font-mono font-bold text-sky-700 text-xs whitespace-nowrap">
+                        {s.student_code}
+                      </td>
+                      <td className="py-4 px-4 font-bold text-slate-900">
+                        <div className="flex items-center gap-3">
+                          {s.avatar_url ? (
+                            <img
+                              src={s.avatar_url}
+                              alt={s.full_name}
+                              className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shadow-sm shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                              {s.full_name.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="block font-bold">{s.full_name}</span>
+                              {s.is_non_regular && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                                  Ngoài chính quy
                                 </span>
-                              </span>
-                            )}
+                              )}
+                              {pendingCount > 0 && (
+                                <span
+                                  className="relative inline-flex items-center justify-center p-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-md shadow-xs animate-pulse"
+                                  title={`${pendingCount} yêu cầu đang chờ duyệt`}
+                                >
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                                    {pendingCount}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              {s.parents?.length ? `Phụ huynh: ${s.parents[0].name}` : ''}
+                            </span>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            {s.parents?.length ? `Phụ huynh: ${s.parents[0].name}` : ''}
-                          </span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-xs font-semibold text-slate-800 whitespace-nowrap">
-                      {s.class_name}
-                    </td>
-                    <td className="py-4 px-4 text-xs">
-                      {s.allergies === 'Không' ? (
-                        <span className="text-slate-400 italic">{t('admin.students.normal_allergy')}</span>
-                      ) : (
-                        <span className="px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-pill font-bold whitespace-nowrap">
-                          ⚠️ {s.allergies}
+                      </td>
+                      <td className="py-4 px-4 text-xs font-semibold whitespace-nowrap">
+                        {s.class_name && s.class_name !== 'Chưa phân lớp' ? (
+                          <span className="text-slate-800">{s.class_name}</span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-pill text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            Chưa phân lớp
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-xs">
+                        {s.allergies === 'Không' ? (
+                          <span className="text-slate-400 italic">{t('admin.students.normal_allergy')}</span>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-pill font-bold whitespace-nowrap">
+                            ⚠️ {s.allergies}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-xs whitespace-nowrap">
+                        <span
+                          className={`px-2.5 py-1 rounded-pill font-bold ${
+                            s.status === 'ACTIVE'
+                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                              : 'bg-slate-100 border border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {s.status === 'ACTIVE'
+                            ? t('admin.students.status_enrolled')
+                            : t('admin.students.status_graduated')}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-xs whitespace-nowrap">
-                      <span
-                        className={`px-2.5 py-1 rounded-pill font-bold ${
-                          s.status === 'ACTIVE'
-                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-                            : 'bg-slate-100 border border-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {s.status === 'ACTIVE'
-                          ? t('admin.students.status_enrolled')
-                          : t('admin.students.status_graduated')}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center w-36 whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-2">
-                        {/* 1. XEM ICON BUTTON */}
-                        <button
-                          onClick={() => setViewStudentId(s.id)}
-                          className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg border border-sky-200 transition-colors shadow-xs"
-                          title="Xem chi tiết hồ sơ"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                      </td>
+                      <td className="py-4 px-4 text-center w-36 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-2">
+                          {/* 1. XEM ICON BUTTON */}
+                          <button
+                            onClick={() => setViewStudentId(s.id)}
+                            className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-lg border border-sky-200 transition-colors shadow-xs"
+                            title="Xem chi tiết hồ sơ"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
 
-                        {/* 2. SỬA ICON BUTTON */}
-                        <button
-                          onClick={() => setEditStudent({ ...s })}
-                          className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-200 transition-colors shadow-xs"
-                          title="Chỉnh sửa thông tin bé"
-                        >
-                          <Edit3 className="w-4 h-4 text-amber-600" />
-                        </button>
+                          {/* 2. SỬA ICON BUTTON */}
+                          <button
+                            onClick={() => setEditStudent({ ...s })}
+                            className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-200 transition-colors shadow-xs"
+                            title="Chỉnh sửa thông tin bé"
+                          >
+                            <Edit3 className="w-4 h-4 text-amber-600" />
+                          </button>
 
-                        {/* 3. CHUYỂN LỚP ICON BUTTON */}
-                        <button
-                          onClick={() => {
-                            setTransferStudent(s);
-                            setNewSingleClass(s.class_name || 'Mầm');
-                          }}
-                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition-colors shadow-xs"
-                          title="Chuyển lớp học"
-                        >
-                          <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          {/* 3. CHUYỂN LỚP ICON BUTTON */}
+                          <button
+                            onClick={() => {
+                              setTransferStudent(s);
+                              setNewSingleClass(
+                                s.class_name && s.class_name !== 'Chưa phân lớp'
+                                  ? s.class_name
+                                  : 'Mầm'
+                              );
+                            }}
+                            className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition-colors shadow-xs"
+                            title="Chuyển lớp học"
+                          >
+                            <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
