@@ -13,8 +13,14 @@ import {
   INITIAL_ABSENCE_REQUESTS, 
   INITIAL_MEAL_EXCEPTIONS 
 } from '@/lib/supabase/client';
-import { MedicationRequest, MealException, AbsenceRequest } from '@/lib/types/schema';
+import { MedicationRequest, MealException, AbsenceRequest, Student, ParentContact, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+
+export interface TeacherStudent extends Student {
+  attendance: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT';
+  checkedOut: boolean;
+  checkoutReason: string;
+}
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations } from '@/lib/utils/approvalHelper';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
@@ -51,7 +57,7 @@ export default function TeacherPwaPage() {
 
   // Teacher class assignment state (T1 = assigned, T0 = unassigned empty state)
   const [isClassAssigned, setIsClassAssigned] = useState<boolean>(true);
-  const [assignedClassName, setAssignedClassName] = useState<string>('Mầm 1 (Rose)');
+  const [assignedClassName, setAssignedClassName] = useState<string>('Mầm');
   const [refreshingClass, setRefreshingClass] = useState<boolean>(false);
   const [teacherEmail, setTeacherEmail] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
@@ -102,7 +108,7 @@ export default function TeacherPwaPage() {
             setIsClassAssigned(false);
           } else {
             setIsClassAssigned(true);
-            setAssignedClassName(profile.assigned_class_name || 'Mầm 1 (Rose)');
+            setAssignedClassName(profile.assigned_class_name || 'Mầm');
           }
         }
       } else {
@@ -147,7 +153,7 @@ export default function TeacherPwaPage() {
         if (profile) {
           if (profile.assigned_class_id || profile.assigned_class_name) {
             setIsClassAssigned(true);
-            setAssignedClassName(profile.assigned_class_name || 'Mầm 1 (Rose)');
+            setAssignedClassName(profile.assigned_class_name || 'Mầm');
           }
         }
       }
@@ -159,21 +165,14 @@ export default function TeacherPwaPage() {
   };
 
   // Attendance State
-  const [students, setStudents] = useState(
-    INITIAL_STUDENTS.map((s) => ({
-      ...s,
-      attendance: 'PRESENT' as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
-      checkedOut: false,
-      checkoutReason: '',
-    }))
-  );
+  const [students, setStudents] = useState<TeacherStudent[]>([]);
   const [isKitchenLocked, setIsKitchenLocked] = useState(false);
   const [absences, setAbsences] = useState<AbsenceRequest[]>(INITIAL_ABSENCE_REQUESTS);
 
   // Medication State
   const [medications, setMedications] = useState<MedicationRequest[]>(INITIAL_MEDICATIONS);
   const [showAddMedModal, setShowAddMedModal] = useState(false);
-  const [newMedStudentId, setNewMedStudentId] = useState(INITIAL_STUDENTS[0].id);
+  const [newMedStudentId, setNewMedStudentId] = useState('');
   const [newMedSlot, setNewMedSlot] = useState<'SLOT_1130' | 'SLOT_1430'>('SLOT_1130');
   const [newMedName, setNewMedName] = useState('');
   const [newMedDosage, setNewMedDosage] = useState('');
@@ -181,9 +180,37 @@ export default function TeacherPwaPage() {
 
   // Meal Exceptions State
   const [mealExceptions, setMealExceptions] = useState<MealException[]>(INITIAL_MEAL_EXCEPTIONS);
-  const [selectedStudentForMeal, setSelectedStudentForMeal] = useState(INITIAL_STUDENTS[0].id);
+  const [selectedStudentForMeal, setSelectedStudentForMeal] = useState('');
   const [selectedIntakeLevel, setSelectedIntakeLevel] = useState<'HALF' | 'REFUSED'>('HALF');
   const [selectedTags, setSelectedTags] = useState<string[]>(['#Biếng_ăn']);
+
+  // Fetch live students for the assigned class from Supabase
+  useEffect(() => {
+    async function fetchClassStudents() {
+      if (!assignedClassName) return;
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .eq('class_name', assignedClassName)
+          .order('full_name', { ascending: true });
+        if (data && !error && data.length > 0) {
+          const mapped = data.map((s: any) => ({
+            ...s,
+            attendance: 'PRESENT' as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
+            checkedOut: false,
+            checkoutReason: '',
+          }));
+          setStudents(mapped);
+          setNewMedStudentId(mapped[0]?.id || '');
+          setSelectedStudentForMeal(mapped[0]?.id || '');
+        }
+      } catch (e) {
+        console.error('Error fetching class students:', e);
+      }
+    }
+    fetchClassStudents();
+  }, [assignedClassName]);
 
   // Late Checkout State
   const [showLateCheckoutModal, setShowLateCheckoutModal] = useState(false);
@@ -243,7 +270,7 @@ export default function TeacherPwaPage() {
                   isClassAssigned ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                T1 (Đã gán lớp Mầm 1)
+                T1 (Đã gán lớp Mầm)
               </button>
             </div>
           </div>
@@ -288,7 +315,7 @@ export default function TeacherPwaPage() {
 
   const handleAddMedication = (e: React.FormEvent) => {
     e.preventDefault();
-    const student = INITIAL_STUDENTS.find((s) => s.id === newMedStudentId);
+    const student = students.find((s) => s.id === newMedStudentId);
     const newMed: MedicationRequest = {
       id: `m-${Date.now()}`,
       student_id: newMedStudentId,
@@ -315,7 +342,7 @@ export default function TeacherPwaPage() {
 
   const handleSaveMealException = (e: React.FormEvent) => {
     e.preventDefault();
-    const student = INITIAL_STUDENTS.find((s) => s.id === selectedStudentForMeal);
+    const student = students.find((s) => s.id === selectedStudentForMeal);
     const newEx: MealException = {
       id: `me-${Date.now()}`,
       student_id: selectedStudentForMeal,
@@ -761,7 +788,7 @@ export default function TeacherPwaPage() {
                       onChange={(e) => setNewMedStudentId(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
                     >
-                      {INITIAL_STUDENTS.map((s) => (
+                      {students.map((s) => (
                         <option key={s.id} value={s.id}>{s.full_name} ({s.student_code})</option>
                       ))}
                     </select>
@@ -1041,7 +1068,7 @@ export default function TeacherPwaPage() {
                     </label>
 
                     <div className="grid grid-cols-2 gap-2">
-                      {currentLateStudent?.parents?.map((parent, idx) => (
+                      {currentLateStudent?.parents?.map((parent: ParentContact, idx: number) => (
                         <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2">
                           <img src={parent.avatar_url} alt={parent.name} className="w-9 h-9 rounded-full border border-slate-300 object-cover shrink-0" />
                           <div className="min-w-0 text-[11px]">
@@ -1053,8 +1080,8 @@ export default function TeacherPwaPage() {
 
                       {/* HARD GATE SAFETY FILTER: ONLY DISPLAY APPROVED PICKUPS */}
                       {currentLateStudent?.authorized_pickups
-                        ?.filter((pickup) => pickup.approval_status === 'APPROVED')
-                        .map((pickup) => (
+                        ?.filter((pickup: AuthorizedPickup) => pickup.approval_status === 'APPROVED')
+                        .map((pickup: AuthorizedPickup) => (
                           <div key={pickup.id} className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2 col-span-2">
                             <img src={pickup.avatar_url} alt={pickup.name} className="w-9 h-9 rounded-full border-2 border-emerald-500 object-cover shrink-0" />
                             <div className="min-w-0 text-[11px]">

@@ -159,7 +159,7 @@ export default function AdminDashboardPage() {
                 <span className="font-mono text-[10px] text-slate-400">08:42 AM</span>
               </div>
               <p className="text-slate-700">
-                {language === 'vi' ? 'Bé' : 'Child'} <strong className="text-slate-900">Trần Gia Bảo</strong> (Mầm 1) <span className="text-amber-700 font-mono font-bold">+{totalLateArrivals}</span>.
+                {language === 'vi' ? 'Ghi nhận đến muộn:' : 'Late arrivals:'} <span className="text-amber-700 font-mono font-bold">+{totalLateArrivals}</span> {language === 'vi' ? 'bé hôm nay.' : 'children today.'}
               </p>
             </div>
 
@@ -172,7 +172,7 @@ export default function AdminDashboardPage() {
                 <span className="font-mono text-[10px] text-slate-400">08:30 AM</span>
               </div>
               <p className="text-slate-700">
-                Cô Thái Thị Thanh Vâng • Mầm 1 (Rose). 23 {language === 'vi' ? 'suất ăn' : 'meals'}.
+                Báo ăn lớp Mầm: 38 {language === 'vi' ? 'suất ăn' : 'meals'}.
               </p>
             </div>
 
@@ -185,7 +185,7 @@ export default function AdminDashboardPage() {
                 <span className="font-mono text-[10px] text-slate-400">07:55 AM</span>
               </div>
               <p className="text-slate-700">
-                {t('common.parent_name')}: <strong className="text-slate-900">Lê Minh Anh</strong> (Siro Astex 5ml - 11:30).
+                {language === 'vi' ? 'Dặn thuốc buổi trưa: Siro Astex 5ml (11:30).' : 'Mid-day medication: Astex syrup 5ml (11:30).'}
               </p>
             </div>
           </div>

@@ -23,7 +23,7 @@ import {
   ZoomIn,
   Download,
 } from 'lucide-react';
-import { INITIAL_STUDENTS, INITIAL_CLASSES, INITIAL_KITCHEN_ORDERS } from '@/lib/supabase/client';
+import { INITIAL_STUDENTS, INITIAL_CLASSES, INITIAL_KITCHEN_ORDERS, supabase } from '@/lib/supabase/client';
 import { Student, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
@@ -36,6 +36,24 @@ export default function StudentsDirectoryPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [showNonRegular, setShowNonRegular] = useState<boolean>(false);
+
+  // Load students from Supabase
+  React.useEffect(() => {
+    async function loadStudents() {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('full_name', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setStudents(data as Student[]);
+        }
+      } catch (err) {
+        console.error('Error fetching students:', err);
+      }
+    }
+    loadStudents();
+  }, []);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -144,7 +162,7 @@ export default function StudentsDirectoryPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Single Class Transfer state
-  const [newSingleClass, setNewSingleClass] = useState('Mầm 1 (Rose)');
+  const [newSingleClass, setNewSingleClass] = useState('Mầm');
   const [singleTransferReason, setSingleTransferReason] = useState('');
 
   // Form state for Admin direct pickup upload inside Edit modal
@@ -243,12 +261,14 @@ export default function StudentsDirectoryPage() {
     if (!transferStudent) return;
 
     const classIdMap: Record<string, string> = {
-      'Mầm 1 (Rose)': 'c1',
-      'Chồi 2 (Lily)': 'c2',
-      'Lá 3 (Sunflower)': 'c3',
+      'Nhà trẻ': 'c-nhatre',
+      'Mầm': 'c-mam',
+      'Chồi': 'c-choi',
+      'Lá 1': 'c-la1',
+      'Lá 2': 'c-la2',
     };
     const oldClass = transferStudent.class_name || '';
-    const targetClassId = classIdMap[newSingleClass] || 'c1';
+    const targetClassId = classIdMap[newSingleClass] || 'c-mam';
 
     setStudents((prev) =>
       prev.map((s) =>
@@ -262,6 +282,14 @@ export default function StudentsDirectoryPage() {
     if (targetSingleton) {
       targetSingleton.class_id = targetClassId;
       targetSingleton.class_name = newSingleClass;
+    }
+
+    if (supabase) {
+      supabase
+        .from('students')
+        .update({ class_id: targetClassId, class_name: newSingleClass })
+        .eq('id', transferStudent.id)
+        .then(() => {});
     }
 
     syncClassHeadcount(oldClass, newSingleClass, 1);
@@ -297,9 +325,11 @@ export default function StudentsDirectoryPage() {
               className="bg-transparent text-slate-800 font-medium focus:outline-none cursor-pointer"
             >
               <option value="ALL">{t('admin.students.filter_all_classes')}</option>
-              <option value="Mầm 1 (Rose)">Mầm 1 (Rose)</option>
-              <option value="Chồi 2 (Lily)">Chồi 2 (Lily)</option>
-              <option value="Lá 3 (Sunflower)">Lá 3 (Sunflower)</option>
+              <option value="Nhà trẻ">Nhà trẻ</option>
+              <option value="Mầm">Mầm</option>
+              <option value="Chồi">Chồi</option>
+              <option value="Lá 1">Lá 1</option>
+              <option value="Lá 2">Lá 2</option>
             </select>
           </div>
 
@@ -474,7 +504,7 @@ export default function StudentsDirectoryPage() {
                         <button
                           onClick={() => {
                             setTransferStudent(s);
-                            setNewSingleClass(s.class_name || 'Mầm 1 (Rose)');
+                            setNewSingleClass(s.class_name || 'Mầm');
                           }}
                           className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition-colors shadow-xs"
                           title="Chuyển lớp học"
@@ -1262,9 +1292,11 @@ export default function StudentsDirectoryPage() {
                   onChange={(e) => setNewSingleClass(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-semibold text-slate-800 focus:outline-none focus:border-sky-500"
                 >
-                  <option value="Mầm 1 (Rose)">Mầm 1 (Rose)</option>
-                  <option value="Chồi 2 (Lily)">Chồi 2 (Lily)</option>
-                  <option value="Lá 3 (Sunflower)">Lá 3 (Sunflower)</option>
+                  <option value="Nhà trẻ">Nhà trẻ</option>
+                  <option value="Mầm">Mầm</option>
+                  <option value="Chồi">Chồi</option>
+                  <option value="Lá 1">Lá 1</option>
+                  <option value="Lá 2">Lá 2</option>
                 </select>
               </div>
 

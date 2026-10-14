@@ -15,60 +15,32 @@ import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAlle
 import { INITIAL_HEALTH_RECORDS, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { getStoredRelations, fetchLiveProfilesFromSupabase } from '@/lib/utils/approvalHelper';
 
-// Demo Parent Profiles for Testing Data Isolation & Selector Logic
+export interface ParentChild {
+  id: string;
+  full_name: string;
+  class_name: string;
+  teacher_name: string;
+  student_code: string;
+  allergies: string;
+  avatar_initials: string;
+  attendance_status: string;
+  checked_in_time: string;
+  avatar_url: string;
+}
+
+// Parent Profiles for Testing Data Isolation & Selector Logic
 const MOCK_PARENT_PROFILES = [
   {
     id: 'p0',
     name: 'Phụ huynh P0 (Chưa gán con - Empty State)',
-    children: [],
   },
   {
     id: 'p1',
-    name: 'Phụ huynh P1 (1 con duy nhất - TC-AUTH-01)',
-    children: [
-      {
-        id: 's1',
-        full_name: 'Trần Gia Bảo',
-        class_name: 'Mầm 1 (Rose)',
-        teacher_name: 'Cô Thái Thị Thanh Vâng',
-        student_code: 'SM-2026-001',
-        allergies: 'Hải sản (Tôm, Cua)',
-        avatar_initials: 'GB',
-        attendance_status: 'PRESENT',
-        checked_in_time: '07:45',
-        avatar_url: 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80',
-      },
-    ],
+    name: 'Phụ huynh P1 (1 con duy nhất)',
   },
   {
     id: 'p2',
-    name: 'Phụ huynh P2 (Multi-child 2 con - TC-AUTH-02)',
-    children: [
-      {
-        id: 's1',
-        full_name: 'Trần Gia Bảo',
-        class_name: 'Mầm 1 (Rose)',
-        teacher_name: 'Cô Thái Thị Thanh Vâng',
-        student_code: 'SM-2026-001',
-        allergies: 'Hải sản (Tôm, Cua)',
-        avatar_initials: 'GB',
-        attendance_status: 'PRESENT',
-        checked_in_time: '07:45',
-        avatar_url: 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80',
-      },
-      {
-        id: 's4',
-        full_name: 'Phạm Quỳnh Chi',
-        class_name: 'Chồi 2 (Lily)',
-        teacher_name: 'Sơ Anna Tuyết',
-        student_code: 'SM-2026-004',
-        allergies: 'Sữa bò (Lactose)',
-        avatar_initials: 'QC',
-        attendance_status: 'PRESENT',
-        checked_in_time: '08:05',
-        avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-      },
-    ],
+    name: 'Phụ huynh P2 (Multi-child 2 con)',
   },
 ];
 
@@ -185,11 +157,53 @@ export default function ParentPwaPage() {
     }
   };
 
-  const currentParent = MOCK_PARENT_PROFILES[activeParentIndex] || MOCK_PARENT_PROFILES[0];
-  const parentChildren = currentParent?.children || [];
+  const [realStudents, setRealStudents] = useState<Student[]>([]);
+
+  React.useEffect(() => {
+    async function loadRealStudents() {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('full_name', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setRealStudents(data as Student[]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadRealStudents();
+  }, []);
+
+  const parentChildren: ParentChild[] = React.useMemo(() => {
+    if (activeParentIndex === 0) return [];
+
+    const targetSlice = realStudents.slice(0, activeParentIndex);
+    return targetSlice.map((s) => ({
+      id: s.id,
+      full_name: s.full_name,
+      class_name: s.class_name || 'Mầm',
+      teacher_name: `Giáo viên lớp ${s.class_name || 'Mầm'}`,
+      student_code: s.student_code,
+      allergies: s.allergies || 'Không',
+      avatar_initials: s.full_name
+        .split(' ')
+        .filter(Boolean)
+        .map((w) => w[0])
+        .join('')
+        .slice(-2)
+        .toUpperCase(),
+      attendance_status: 'PRESENT',
+      checked_in_time: '07:45',
+      avatar_url:
+        s.avatar_url ||
+        'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80',
+    }));
+  }, [activeParentIndex, realStudents]);
 
   // Selected Child State
-  const [selectedChildId, setSelectedChildId] = useState<string>(parentChildren[0]?.id || '');
+  const [selectedChildId, setSelectedChildId] = useState<string>('');
 
   React.useEffect(() => {
     if (parentChildren.length > 0 && !parentChildren.some((c) => c.id === selectedChildId)) {
@@ -291,10 +305,10 @@ export default function ParentPwaPage() {
   const latestHealth = selectedChild
     ? INITIAL_HEALTH_RECORDS.filter(
         (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
-      ).slice(-1)[0] || INITIAL_HEALTH_RECORDS[0]
-    : INITIAL_HEALTH_RECORDS[0];
+      ).slice(-1)[0] || null
+    : null;
 
-  const healthDisplay = getGrowthStatusDisplay(latestHealth.growth_status);
+  const healthDisplay = latestHealth ? getGrowthStatusDisplay(latestHealth.growth_status) : null;
 
   if (!isAuthenticated) {
     return (
@@ -448,7 +462,7 @@ export default function ParentPwaPage() {
           <button
             onClick={() => {
               setActiveParentIndex(1);
-              setSelectedChildId(MOCK_PARENT_PROFILES[1].children[0].id);
+              if (realStudents[0]?.id) setSelectedChildId(realStudents[0].id);
             }}
             className={`px-2 py-0.5 rounded font-bold transition-all ${
               activeParentIndex === 1 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
@@ -459,7 +473,7 @@ export default function ParentPwaPage() {
           <button
             onClick={() => {
               setActiveParentIndex(2);
-              setSelectedChildId(MOCK_PARENT_PROFILES[2].children[0].id);
+              if (realStudents[0]?.id) setSelectedChildId(realStudents[0].id);
             }}
             className={`px-2 py-0.5 rounded font-bold transition-all ${
               activeParentIndex === 2 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
@@ -731,14 +745,18 @@ export default function ParentPwaPage() {
                 Chi tiết <ArrowRight className="w-3 h-3" />
               </span>
             </div>
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="font-semibold text-slate-900 font-mono text-sm">
-                {latestHealth.weight_kg} kg • {latestHealth.height_cm} cm
-              </span>
-              <span className={`px-2.5 py-0.5 rounded-pill text-[10px] font-bold border ${healthDisplay.bgClass} ${healthDisplay.textClass}`}>
-                {healthDisplay.text}
-              </span>
-            </div>
+            {latestHealth && healthDisplay ? (
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="font-semibold text-slate-900 font-mono text-sm">
+                  {latestHealth.weight_kg} kg • {latestHealth.height_cm} cm
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-pill text-[10px] font-bold border ${healthDisplay.bgClass} ${healthDisplay.textClass}`}>
+                  {healthDisplay.text}
+                </span>
+              </div>
+            ) : (
+              <p className="text-slate-500 text-[11px] italic">Xem sổ theo dõi sức khỏe định kỳ</p>
+            )}
           </Link>
         </div>
       )}

@@ -21,7 +21,7 @@ export default function AdmissionsPage() {
 
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [targetAppId, setTargetAppId] = useState<string | null>(null);
-  const [assignedClass, setAssignedClass] = useState<string>('Mầm 1 (Rose)');
+  const [assignedClass, setAssignedClass] = useState<string>('Mầm');
 
   const handleUpdateStatus = (id: string, newStatus: 'ACCEPTED' | 'REJECTED') => {
     if (newStatus === 'ACCEPTED') {
@@ -52,11 +52,13 @@ export default function AdmissionsPage() {
     const appToAccept = applications.find((a) => a.id === targetAppId) || selectedApp;
     if (appToAccept) {
       const classIdMap: Record<string, string> = {
-        'Mầm 1 (Rose)': 'c1',
-        'Chồi 2 (Lily)': 'c2',
-        'Lá 3 (Sunflower)': 'c3',
+        'Nhà trẻ': 'c-nhatre',
+        'Mầm': 'c-mam',
+        'Chồi': 'c-choi',
+        'Lá 1': 'c-la1',
+        'Lá 2': 'c-la2',
       };
-      const classId = classIdMap[assignedClass] || 'c1';
+      const classId = classIdMap[assignedClass] || 'c-mam';
 
       // Insert new student record into INITIAL_STUDENTS singleton
       const newStudent = {
@@ -421,9 +423,11 @@ export default function AdmissionsPage() {
                   onChange={(e) => setAssignedClass(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-semibold focus:outline-none focus:border-sky-500"
                 >
-                  <option value="Mầm 1 (Rose)">Mầm 1 (Rose)</option>
-                  <option value="Chồi 2 (Lily)">Chồi 2 (Lily)</option>
-                  <option value="Lá 3 (Sunflower)">Lá 3 (Sunflower)</option>
+                  <option value="Nhà trẻ">Nhà trẻ</option>
+                  <option value="Mầm">Mầm</option>
+                  <option value="Chồi">Chồi</option>
+                  <option value="Lá 1">Lá 1</option>
+                  <option value="Lá 2">Lá 2</option>
                 </select>
               </div>
 

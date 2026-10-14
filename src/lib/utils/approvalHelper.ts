@@ -40,8 +40,8 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     email: 'thaiminhtue153@gmail.com',
     role: 'TEACHER',
     approval_status: 'ACTIVE',
-    assigned_class_id: 'c1',
-    assigned_class_name: 'Mầm 1 (Rose)',
+    assigned_class_id: 'c-mam',
+    assigned_class_name: 'Mầm',
     phone: '0394468315',
     created_at: '2026-08-26T00:00:00Z',
   },
@@ -52,23 +52,13 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     role: 'TEACHER',
     approval_status: 'ACTIVE',
     is_temporary: true,
-    assigned_class_id: 'c1',
-    assigned_class_name: 'Mầm 1 (Rose)',
+    assigned_class_id: 'c-mam',
+    assigned_class_name: 'Mầm',
     created_at: '2026-08-26T00:00:00Z',
   },
 ];
 
-export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [
-  {
-    id: 'rel-vang-tue',
-    parent_id: 'u-teacher-parent-vang',
-    parent_email: 'thaiminhtue153@gmail.com',
-    student_id: 's-nonreg-13',
-    student_name: 'Lê Phương Minh Tuệ',
-    is_verified: true,
-    created_at: '2026-08-26T00:00:00Z',
-  },
-];
+export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [];
 
 const DEPRECATED_MOCK_EMAILS = [
   'admin@suongmai.edu.vn',
@@ -649,8 +639,11 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
   const addedRelations: ParentStudentRelation[] = [];
 
   for (const sId of studentIds) {
-    const targetStudent = INITIAL_STUDENTS.find((s) => s.id === sId);
-    const resolvedName = targetStudent?.full_name || 'Học sinh Sương Mai';
+    let resolvedName = 'Học sinh Sương Mai';
+    try {
+      const { data: st } = await supabase.from('students').select('full_name').eq('id', sId).single();
+      if (st?.full_name) resolvedName = st.full_name;
+    } catch (e) {}
 
     const relIdx = relations.findIndex(
       (r) => r.parent_email?.toLowerCase().trim() === cleanEmail && r.student_id === sId

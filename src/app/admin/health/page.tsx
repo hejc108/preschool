@@ -4,24 +4,40 @@ import React, { useState } from 'react';
 import { Activity, Save, CheckCircle2, ChevronLeft, AlertCircle, Users, Search } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_HEALTH_RECORDS, calculateBMI, classifyWHOGrowthStatus, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
-import { HealthRecord, HealthTerm } from '@/lib/types/schema';
-import { INITIAL_CLASSES, INITIAL_STUDENTS } from '@/lib/supabase/client';
+import { HealthRecord, HealthTerm, Student } from '@/lib/types/schema';
+import { INITIAL_CLASSES, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export default function AdminHealthPage() {
-  const [selectedClassId, setSelectedClassId] = useState<string>('c1'); // Mầm 1 (Rose)
+  const [selectedClassId, setSelectedClassId] = useState<string>('c-mam');
   const [selectedTerm, setSelectedTerm] = useState<HealthTerm>('Q3');
   const [academicYear, setAcademicYear] = useState<string>('2026-2027');
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
 
-  // Filter students by selected class
-  const classStudents = INITIAL_STUDENTS.filter((s) => s.class_id === selectedClassId);
+  React.useEffect(() => {
+    async function loadStudents() {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('full_name', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setAllStudents(data as Student[]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadStudents();
+  }, []);
+
+  const selectedClassName = INITIAL_CLASSES.find((c) => c.id === selectedClassId)?.name;
+  const classStudents = allStudents.filter(
+    (s) => s.class_id === selectedClassId || s.class_name === selectedClassName
+  );
 
   // Health records form state mapped by student ID
-  const [recordsMap, setRecordsMap] = useState<Record<string, { weight_kg: number; height_cm: number; notes: string }>>({
-    s1: { weight_kg: 19.5, height_cm: 112.0, notes: 'Thể trạng chuẩn WHO' },
-    s2: { weight_kg: 17.0, height_cm: 106.0, notes: 'Phát triển tốt' },
-    s3: { weight_kg: 14.5, height_cm: 101.5, notes: 'Cần bổ sung thêm đạm' },
-  });
+  const [recordsMap, setRecordsMap] = useState<Record<string, { weight_kg: number; height_cm: number; notes: string }>>({});
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -165,57 +181,65 @@ export default function AdminHealthPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800">
-                {classStudents.map((st, idx) => {
-                  const data = recordsMap[st.id] || { weight_kg: 18.0, height_cm: 108.0, notes: '' };
-                  const bmi = calculateBMI(data.weight_kg, data.height_cm);
-                  const status = classifyWHOGrowthStatus(bmi);
-                  const display = getGrowthStatusDisplay(status);
+                {classStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-slate-500">
+                      Chưa có dữ liệu học sinh trong lớp {selectedClassName || 'này'}.
+                    </td>
+                  </tr>
+                ) : (
+                  classStudents.map((st, idx) => {
+                    const data = recordsMap[st.id] || { weight_kg: 0, height_cm: 0, notes: '' };
+                    const bmi = calculateBMI(data.weight_kg, data.height_cm);
+                    const status = classifyWHOGrowthStatus(bmi);
+                    const display = getGrowthStatusDisplay(status);
 
-                  return (
-                    <tr key={st.id} className="hover:bg-slate-50">
-                      <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
-                      <td className="p-3 font-mono font-bold text-primary-800 whitespace-nowrap min-w-[120px]">{st.student_code}</td>
-                      <td className="p-3 font-bold text-slate-900 whitespace-nowrap min-w-[140px]">{st.full_name}</td>
-                      <td className="p-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={data.weight_kg || ''}
-                          onChange={(e) => handleInputChange(st.id, 'weight_kg', e.target.value)}
-                          placeholder="kg..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
-                        />
-                      </td>
-                      <td className="p-3">
-                        <input
-                          type="number"
-                          step="0.5"
-                          value={data.height_cm || ''}
-                          onChange={(e) => handleInputChange(st.id, 'height_cm', e.target.value)}
-                          placeholder="cm..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
-                        />
-                      </td>
-                      <td className="p-3 font-mono font-extrabold text-primary-900 text-sm whitespace-nowrap min-w-[70px]">
-                        {bmi > 0 ? bmi : '--'}
-                      </td>
-                      <td className="p-3 min-w-[170px] align-middle">
-                        <span className={`px-3 py-1 rounded-pill text-xs font-bold border whitespace-nowrap inline-flex items-center shadow-2xs ${display.bgClass} ${display.textClass}`}>
-                          {display.text}
-                        </span>
-                      </td>
-                      <td className="p-3 w-full min-w-[180px]">
-                        <input
-                          type="text"
-                          value={data.notes}
-                          onChange={(e) => handleInputChange(st.id, 'notes', e.target.value)}
-                          placeholder="Nhận xét y tế..."
-                          className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 text-slate-800 text-xs focus:bg-white focus:outline-none"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={st.id} className="hover:bg-slate-50">
+                        <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
+                        <td className="p-3 font-mono font-bold text-primary-800 whitespace-nowrap min-w-[120px]">{st.student_code}</td>
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap min-w-[140px]">{st.full_name}</td>
+                        <td className="p-3">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={data.weight_kg || ''}
+                            onChange={(e) => handleInputChange(st.id, 'weight_kg', e.target.value)}
+                            placeholder="kg..."
+                            className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={data.height_cm || ''}
+                            onChange={(e) => handleInputChange(st.id, 'height_cm', e.target.value)}
+                            placeholder="cm..."
+                            className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-mono font-bold text-slate-900 text-xs focus:bg-white focus:outline-none"
+                          />
+                        </td>
+                        <td className="p-3 font-mono font-extrabold text-primary-900 text-sm whitespace-nowrap min-w-[70px]">
+                          {bmi > 0 ? bmi : '--'}
+                        </td>
+                        <td className="p-3 min-w-[170px] align-middle">
+                          <span className={`px-3 py-1 rounded-pill text-xs font-bold border whitespace-nowrap inline-flex items-center shadow-2xs ${display.bgClass} ${display.textClass}`}>
+                            {display.text}
+                          </span>
+                        </td>
+                        <td className="p-3 w-full min-w-[180px]">
+                          <input
+                            type="text"
+                            value={data.notes}
+                            onChange={(e) => handleInputChange(st.id, 'notes', e.target.value)}
+                            placeholder="Nhận xét y tế..."
+                            className="w-full bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 text-slate-800 text-xs focus:bg-white focus:outline-none"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

@@ -96,11 +96,28 @@ export default function UserApprovalsPage() {
     const initialClasses: Record<string, string> = {};
     list.forEach((p) => {
       initialRoles[p.id] = p.role || 'PARENT';
-      initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
+      initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c-mam';
     });
     setRowRoles((prev) => ({ ...initialRoles, ...prev }));
     setRowClasses((prev) => ({ ...initialClasses, ...prev }));
   }, [classes]);
+
+  useEffect(() => {
+    async function loadStudents() {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('full_name', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setStudents(data as Student[]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadStudents();
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -182,7 +199,7 @@ export default function UserApprovalsPage() {
       .filter((r) => r.parent_email.toLowerCase().trim() === user.email.toLowerCase().trim())
       .map((r) => r.student_id);
 
-    setSelectedStudentIds(existing.length > 0 ? existing : [students[0]?.id || 's1']);
+    setSelectedStudentIds(existing.length > 0 ? existing : (students[0]?.id ? [students[0].id] : []));
   };
 
   const handleToggleStudentSelection = (studentId: string) => {
@@ -664,7 +681,7 @@ export default function UserApprovalsPage() {
                           <div>
                             <p className="font-bold text-slate-900 text-xs">{s.full_name}</p>
                             <p className="text-[11px] text-slate-500 font-mono">
-                              Mã: {s.student_code} • Lớp {s.class_name || 'Mầm 1'}
+                              Mã: {s.student_code} • Lớp {s.class_name || 'Mầm'}
                             </p>
                           </div>
                         </div>

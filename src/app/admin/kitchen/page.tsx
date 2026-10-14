@@ -2,17 +2,36 @@
 
 import React, { useState, useEffect } from 'react';
 import { Utensils, Lock, Unlock, RefreshCw, Sparkles, AlertTriangle, ShieldCheck, Clock, Check, X, AlertCircle } from 'lucide-react';
-import { INITIAL_KITCHEN_ORDERS, INITIAL_STUDENTS } from '@/lib/supabase/client';
-import { KitchenMealOrder } from '@/lib/types/schema';
+import { INITIAL_KITCHEN_ORDERS, supabase } from '@/lib/supabase/client';
+import { KitchenMealOrder, Student } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function KitchenMonitorPage() {
   const { t, language } = useLanguage();
   const [orders, setOrders] = useState<KitchenMealOrder[]>(INITIAL_KITCHEN_ORDERS);
+  const [allergyStudents, setAllergyStudents] = useState<Student[]>([]);
   const [isLocked, setIsLocked] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [cutoffTime] = useState('08:30');
   const [triggerLog, setTriggerLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchAllergies() {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .neq('allergies', 'Không')
+          .order('full_name', { ascending: true });
+        if (data && !error) {
+          setAllergyStudents(data as Student[]);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    fetchAllergies();
+  }, []);
 
   // Auto-lock timer: Automatically lock if current time >= 08:30 AM
   useEffect(() => {
@@ -195,19 +214,23 @@ export default function KitchenMonitorPage() {
           {t('admin.kitchen.allergy_subtitle')}
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-          {INITIAL_STUDENTS.filter((s) => s.allergies !== 'Không').map((student) => (
-            <div key={student.id} className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-bold text-slate-900 text-sm truncate">{student.full_name}</span>
-                <span className="text-slate-500 text-xs whitespace-nowrap shrink-0">({student.class_name})</span>
+        {allergyStudents.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">Hiện không có bé nào có lưu ý đặc biệt về dị ứng thực phẩm.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {allergyStudents.map((student) => (
+              <div key={student.id} className="p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-bold text-slate-900 text-sm truncate">{student.full_name}</span>
+                  <span className="text-slate-500 text-xs whitespace-nowrap shrink-0">({student.class_name})</span>
+                </div>
+                <span className="px-2.5 py-1 bg-sky-100 border border-sky-200 text-sky-800 rounded-pill font-bold whitespace-nowrap shrink-0">
+                  ⚠️ {student.allergies}
+                </span>
               </div>
-              <span className="px-2.5 py-1 bg-sky-100 border border-sky-200 text-sky-800 rounded-pill font-bold whitespace-nowrap shrink-0">
-                ⚠️ {student.allergies}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ADMIN CONFIRMATION MODAL OVERLAY */}
