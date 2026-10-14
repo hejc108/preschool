@@ -86,12 +86,18 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(pendingUrl);
     }
 
-    // Rule 2.1: Cô lập quyền bảo mật & cấu hình nhạy cảm chỉ dành riêng cho SUPER_ADMIN (sadmin)
+    // Rule 2.1: CHỐT CHẶN 3: Cô lập quyền bảo mật & cấu hình nhạy cảm chỉ dành riêng cho SUPER_ADMIN
     const isSensitiveAdminRoute =
       pathname.startsWith('/admin/settings/security') ||
       pathname.startsWith('/admin/settings/email');
 
-    if (isSensitiveAdminRoute && roleCookie !== 'SUPER_ADMIN' && usernameCookie !== 'sadmin' && emailCookie !== 'sadmin@suongmai.edu.vn') {
+    const isStrictSuperAdmin =
+      emailCookie !== 'hejc108@gmail.com' &&
+      (roleCookie === 'SUPER_ADMIN' ||
+       emailCookie === 'luciaxuan178@gmail.com' ||
+       emailCookie === 'sadmin@suongmai.edu.vn');
+
+    if (isSensitiveAdminRoute && !isStrictSuperAdmin) {
       const dashboardUrl = new URL('/admin/dashboard', request.url);
       dashboardUrl.searchParams.set('warning', 'super_admin_required');
       return NextResponse.redirect(dashboardUrl);

@@ -11,28 +11,50 @@ import {
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { supabase } from '@/lib/supabase/client';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLanguage();
-  const [userRole, setUserRole] = useState<string>('SUPER_ADMIN');
-  const [username, setUsername] = useState<string>('sadmin');
+  const [userRole, setUserRole] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
   const [userFullName, setUserFullName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      let role = '';
+      let email = '';
+      let uname = '';
+      let fname = '';
+
+      // 1. Read from signed cookies
+      const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
+      if (matchRole) role = parseSignedCookieClient(matchRole[1]);
+
+      const matchEmail = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (matchEmail) email = parseSignedCookieClient(matchEmail[1]).toLowerCase().trim();
+
+      const matchUser = document.cookie.match(/suongmai_username=([^;]+)/);
+      if (matchUser) uname = parseSignedCookieClient(matchUser[1]);
+
+      // 2. Read from localStorage session
       const savedUser = localStorage.getItem('suongmai_auth_user');
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
-          if (parsed.role) setUserRole(parsed.role);
-          if (parsed.username) setUsername(parsed.username);
-          if (parsed.full_name) setUserFullName(parsed.full_name);
-          if (parsed.email) setUserEmail(parsed.email);
+          if (parsed.role) role = parsed.role;
+          if (parsed.email) email = parsed.email.toLowerCase().trim();
+          if (parsed.username) uname = parsed.username;
+          if (parsed.full_name) fname = parsed.full_name;
         } catch (e) {}
       }
+
+      setUserRole(role);
+      setUsername(uname);
+      setUserEmail(email);
+      setUserFullName(fname);
     }
   }, []);
 
@@ -65,7 +87,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.ai_lessons'), href: '/teacher/lesson-plans/new', icon: Sparkles, badge: 'AI 5.0' },
   ];
 
-  const isSuperAdmin = userRole === 'SUPER_ADMIN' || username === 'sadmin';
+  const cleanEmail = (userEmail || '').toLowerCase().trim();
+  // CHỐT CHẶN 1 (STRICT EQUALITY): Chỉ SUPER_ADMIN hoặc email luciaxuan178@gmail.com / sadmin mới thấy menu nhạy cảm.
+  // Khóa chặt: hejc108@gmail.com (Role: ADMIN / STAFF) tuyệt đối KHÔNG ĐƯỢC thấy menu này.
+  const isSuperAdmin =
+    cleanEmail !== 'hejc108@gmail.com' &&
+    (userRole === 'SUPER_ADMIN' ||
+      cleanEmail === 'luciaxuan178@gmail.com' ||
+      cleanEmail === 'sadmin@suongmai.edu.vn');
 
   const settingsNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
     { label: 'Duyệt phân quyền', href: '/admin/users/approvals', icon: UserCheck, badge: 'Mới' },
@@ -112,7 +141,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
-  const isSuperAdminUser = userRole === 'SUPER_ADMIN' || username === 'sadmin';
+  const isSuperAdminUser =
+    cleanEmail !== 'hejc108@gmail.com' &&
+    (userRole === 'SUPER_ADMIN' || cleanEmail === 'sadmin@suongmai.edu.vn');
 
   const displayName =
     userFullName ||

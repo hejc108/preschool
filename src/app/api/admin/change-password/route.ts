@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAndExtractCookieValue } from '@/lib/utils/cookieSigner';
 
 declare global {
   var __SUONGMAI_SADMIN_PASSWORD__: string | undefined;
@@ -21,6 +22,26 @@ function getSupabaseClient() {
 
 export async function POST(request: Request) {
   try {
+    const rawSession = request.headers.get('cookie')?.match(/suongmai_session=([^;]+)/)?.[1];
+    const rawRole = request.headers.get('cookie')?.match(/suongmai_user_role=([^;]+)/)?.[1];
+    const rawEmail = request.headers.get('cookie')?.match(/suongmai_user_email=([^;]+)/)?.[1];
+
+    const session = await verifyAndExtractCookieValue(rawSession);
+    const role = await verifyAndExtractCookieValue(rawRole);
+    const email = (await verifyAndExtractCookieValue(rawEmail))?.toLowerCase().trim();
+
+    const isStrictSuperAdmin =
+      session === 'active' &&
+      email !== 'hejc108@gmail.com' &&
+      (role === 'SUPER_ADMIN' || email === 'sadmin@suongmai.edu.vn' || email === 'luciaxuan178@gmail.com');
+
+    if (!isStrictSuperAdmin) {
+      return NextResponse.json(
+        { success: false, message: 'Quyền truy cập bị từ chối: Chỉ Super Admin mới có quyền đổi mật khẩu' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const username = (body.username || 'sadmin').toLowerCase().trim();
     const oldPassword = body.oldPassword || body.old_password || '';

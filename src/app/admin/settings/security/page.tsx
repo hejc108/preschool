@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Shield, KeyRound, Lock, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 export default function SecuritySettingsPage() {
   const [oldPassword, setOldPassword] = useState('');
@@ -10,29 +11,41 @@ export default function SecuritySettingsPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [checked, setChecked] = useState<boolean>(false);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       let role = '';
-      let username = '';
+      let email = '';
       const savedUser = localStorage.getItem('suongmai_auth_user');
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
           role = parsed.role || '';
-          username = parsed.username || '';
+          email = (parsed.email || '').toLowerCase().trim();
         } catch (e) {}
       }
       const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
-      if (matchRole) role = decodeURIComponent(matchRole[1]);
-      const matchUser = document.cookie.match(/suongmai_username=([^;]+)/);
-      if (matchUser) username = decodeURIComponent(matchUser[1]);
+      if (matchRole) role = parseSignedCookieClient(matchRole[1]);
+      const matchEmail = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (matchEmail) email = parseSignedCookieClient(matchEmail[1]).toLowerCase().trim();
 
-      const isSuper = role.includes('SUPER_ADMIN') || username === 'sadmin';
+      const cleanEmail = email.toLowerCase().trim();
+      const isSuper =
+        cleanEmail !== 'hejc108@gmail.com' &&
+        (role === 'SUPER_ADMIN' ||
+          cleanEmail === 'luciaxuan178@gmail.com' ||
+          cleanEmail === 'sadmin@suongmai.edu.vn');
+
       setIsSuperAdmin(isSuper);
+      setChecked(true);
     }
   }, []);
+
+  if (!checked) {
+    return null;
+  }
 
   if (!isSuperAdmin) {
     return (

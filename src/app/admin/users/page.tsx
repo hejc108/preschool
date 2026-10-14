@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Users, UserCheck, Shield, Crown, Search, CheckCircle2, XCircle, ArrowRight, Download, Filter } from 'lucide-react';
 import { Profile } from '@/lib/types/schema';
 import { fetchLiveProfilesFromSupabase } from '@/lib/utils/approvalHelper';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 export default function UsersManagementPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -21,21 +22,26 @@ export default function UsersManagementPage() {
 
     if (typeof window !== 'undefined') {
       let role = '';
-      let username = '';
+      let email = '';
       const savedUser = localStorage.getItem('suongmai_auth_user');
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
           role = parsed.role || '';
-          username = parsed.username || '';
+          email = (parsed.email || '').toLowerCase().trim();
         } catch (e) {}
       }
       const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
-      if (matchRole) role = decodeURIComponent(matchRole[1]);
-      const matchUser = document.cookie.match(/suongmai_username=([^;]+)/);
-      if (matchUser) username = decodeURIComponent(matchUser[1]);
+      if (matchRole) role = parseSignedCookieClient(matchRole[1]);
+      const matchEmail = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (matchEmail) email = parseSignedCookieClient(matchEmail[1]).toLowerCase().trim();
 
-      const isSuper = role.includes('SUPER_ADMIN') || username === 'sadmin';
+      const cleanEmail = email.toLowerCase().trim();
+      const isSuper =
+        cleanEmail !== 'hejc108@gmail.com' &&
+        (role === 'SUPER_ADMIN' ||
+          cleanEmail === 'luciaxuan178@gmail.com' ||
+          cleanEmail === 'sadmin@suongmai.edu.vn');
       setIsSuperAdmin(isSuper);
     }
   }, []);

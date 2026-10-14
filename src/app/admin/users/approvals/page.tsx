@@ -36,6 +36,7 @@ import {
   fetchLiveProfilesFromSupabase,
   purgeUserProfile,
 } from '@/lib/utils/approvalHelper';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 export default function UserApprovalsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -45,7 +46,8 @@ export default function UserApprovalsPage() {
 
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'REJECTED'>('PENDING');
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('admin@suongmai.edu.vn');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
 
   // Selected role & assigned class state per user row
   const [rowRoles, setRowRoles] = useState<Record<string, UserRole>>({});
@@ -103,23 +105,37 @@ export default function UserApprovalsPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let emailFound = '';
+      let roleFound = '';
       const savedUser = localStorage.getItem('suongmai_auth_user');
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
           if (parsed.email) emailFound = parsed.email;
+          if (parsed.role) roleFound = parsed.role;
         } catch (e) {}
       }
-      if (!emailFound && document.cookie) {
-        const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-        if (match) emailFound = decodeURIComponent(match[1]);
+      if (document.cookie) {
+        if (!emailFound) {
+          const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+          if (match) emailFound = parseSignedCookieClient(match[1]);
+        }
+        if (!roleFound) {
+          const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
+          if (matchRole) roleFound = parseSignedCookieClient(matchRole[1]);
+        }
       }
-      if (emailFound) setCurrentUserEmail(emailFound);
+      if (emailFound) setCurrentUserEmail(emailFound.toLowerCase().trim());
+      if (roleFound) setCurrentUserRole(roleFound);
     }
     refreshData();
   }, [refreshData]);
 
-  const isSuperAdmin = true;
+  const cleanEmail = currentUserEmail.toLowerCase().trim();
+  const isSuperAdmin =
+    cleanEmail !== 'hejc108@gmail.com' &&
+    (currentUserRole === 'SUPER_ADMIN' ||
+      cleanEmail === 'luciaxuan178@gmail.com' ||
+      cleanEmail === 'sadmin@suongmai.edu.vn');
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
