@@ -428,12 +428,26 @@ export default function TeacherPwaPage() {
               <span>Chuyển Đến Trang Phụ Huynh</span>
             </Link>
             <button
-              onClick={() => {
-                document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-                document.cookie = "suongmai_user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-                document.cookie = "suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-                if (typeof window !== 'undefined') localStorage.removeItem('suongmai_auth_user');
-                setIsAuthenticated(false);
+              onClick={async () => {
+                try {
+                  if (supabase && supabase.auth) await supabase.auth.signOut();
+                } catch (e) {}
+                try {
+                  await fetch('/api/auth/logout', { method: 'POST' });
+                } catch (e) {}
+                const cookiesToClear = ['suongmai_session', 'suongmai_user_email', 'suongmai_user_role', 'suongmai_username', 'suongmai_has_children'];
+                cookiesToClear.forEach((name) => {
+                  document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+                });
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('suongmai_auth_user');
+                  Object.keys(localStorage).forEach((key) => {
+                    if (key.startsWith('sb-') || key.includes('supabase')) {
+                      localStorage.removeItem(key);
+                    }
+                  });
+                  window.location.href = '/auth';
+                }
               }}
               className="w-full inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-pill transition-all text-xs"
             >

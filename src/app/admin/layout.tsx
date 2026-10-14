@@ -10,12 +10,15 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { supabase } from '@/lib/supabase/client';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLanguage();
   const [userRole, setUserRole] = useState<string>('SUPER_ADMIN');
   const [username, setUsername] = useState<string>('sadmin');
+  const [userFullName, setUserFullName] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -26,6 +29,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           const parsed = JSON.parse(savedUser);
           if (parsed.role) setUserRole(parsed.role);
           if (parsed.username) setUsername(parsed.username);
+          if (parsed.full_name) setUserFullName(parsed.full_name);
+          if (parsed.email) setUserEmail(parsed.email);
         } catch (e) {}
       }
     }
@@ -73,14 +78,61 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
   ];
 
-  const handleLogout = () => {
-    document.cookie = "suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "suongmai_user_email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie = "suongmai_username=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  const handleLogout = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    try {
+      if (supabase && supabase.auth) {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {}
+
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {}
+
+    const cookiesToClear = [
+      'suongmai_session',
+      'suongmai_user_email',
+      'suongmai_user_role',
+      'suongmai_username',
+      'suongmai_has_children',
+    ];
+    cookiesToClear.forEach((name) => {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    });
+
     if (typeof window !== 'undefined') {
       localStorage.removeItem('suongmai_auth_user');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      window.location.href = '/admin/login';
     }
+  };
+
+  const isSuperAdminUser = userRole === 'SUPER_ADMIN' || username === 'sadmin';
+
+  const displayName =
+    userFullName ||
+    (isSuperAdminUser
+      ? 'Quản Trị Tối Cao (Super Admin)'
+      : userEmail || t('admin.header.principal'));
+
+  const displaySubtitle = isSuperAdminUser
+    ? 'Hệ Thống Sương Mai'
+    : (userRole === 'STAFF' ? 'Nhân Viên Sương Mai' : 'BGH Sương Mai');
+
+  const getInitials = (name: string) => {
+    if (isSuperAdminUser) return 'SA';
+    if (!name) return 'SM';
+    const clean = name.replace(/\(.*?\)/g, '').trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase() || 'SM';
   };
 
   const renderNavContent = () => (
@@ -207,25 +259,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* User Footer Profile */}
       <div className="p-4 border-t border-rose-100 bg-rose-50/50 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary-700 to-secondary-500 p-0.5 flex items-center justify-center text-xs font-bold text-white shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary-700 to-secondary-500 p-0.5 flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0">
             <div className="w-full h-full rounded-full bg-primary-700 flex items-center justify-center">
-              SĐ
+              {getInitials(displayName)}
             </div>
           </div>
-          <div>
-            <p className="text-xs font-bold text-primary-900">{t('admin.header.principal')}</p>
-            <span className="text-[10px] text-slate-500 font-medium">BGH Sương Mai</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-primary-900 truncate" title={displayName}>
+              {displayName}
+            </p>
+            <span className="text-[10px] text-slate-500 font-medium truncate block">
+              {displaySubtitle}
+            </span>
           </div>
         </div>
-        <Link 
-          href="/admin/login" 
+        <button 
+          type="button"
           onClick={handleLogout}
           title={t('admin.sidebar.logout')} 
-          className="text-slate-400 hover:text-primary-700 transition-colors p-1.5"
+          className="text-slate-400 hover:text-primary-700 hover:bg-rose-100/60 rounded-lg transition-colors p-1.5 shrink-0"
         >
           <LogOut className="w-4 h-4" />
-        </Link>
+        </button>
       </div>
     </>
   );

@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldAlert, LogOut, RefreshCw } from 'lucide-react';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { supabase } from '@/lib/supabase/client';
 
 function PendingApprovalContent() {
   const router = useRouter();
@@ -77,13 +78,26 @@ function PendingApprovalContent() {
     router.push('/auth');
   };
 
-  const handleLogout = () => {
-    document.cookie = 'suongmai_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = 'suongmai_user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  const handleLogout = async () => {
+    try {
+      if (supabase && supabase.auth) await supabase.auth.signOut();
+    } catch (e) {}
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    const cookiesToClear = ['suongmai_session', 'suongmai_user_email', 'suongmai_user_role', 'suongmai_username', 'suongmai_has_children'];
+    cookiesToClear.forEach((name) => {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    });
     if (typeof window !== 'undefined') {
       localStorage.removeItem('suongmai_auth_user');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+      window.location.href = '/auth';
     }
-    router.push('/auth');
   };
 
   return (
