@@ -42,7 +42,7 @@
     "header": {
       "meal_orders": "Meal Headcount",
       "office": "School Board Office",
-      "principal": "Sister Maria (Principal)",
+      "principal": "Sister Lucia Xuan (Vu Thi Xuan - Principal)",
       "cutoff_badge": "Cut-off 08:30",
       "convent_tag": "Mam Non Suong Mai Kindergarten System"
     },
@@ -161,7 +161,7 @@
   },
   "teacher": {
     "app_title": "Teacher",
-    "class_info": "Class Rose 1 • Sister Maria Tuoi",
+    "class_info": "Class Rose 1 • Teacher Thai Thi Thanh Vang",
     "locked_badge": "KITCHEN LOCKED",
     "cutoff_badge": "MORNING 08:30",
     "tab_attendance": "Attendance",
@@ -262,7 +262,7 @@
     "board_confirmation_title": "School Confirmation",
     "board_confirmation_text": "The School guarantees no meal charges for excused absence days.",
     "commitment_note": "The School guarantees no meal charges for excused absence days.",
-    "mother_superior_signature": "— Sister Maria (Mam Non Suong Mai School)",
+    "mother_superior_signature": "— Sister Lucia Xuan (Vu Thi Xuan - Principal)",
     "btn_hotline": "📞 Hotline / Duty Sister",
     "modal_absence_title": "Absence Application",
     "simulate_cutoff": "",

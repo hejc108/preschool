@@ -33,6 +33,30 @@ export default function StudentsDirectoryPage() {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [showNonRegular, setShowNonRegular] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let role = '';
+      let username = '';
+      const savedUser = localStorage.getItem('suongmai_auth_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          role = parsed.role || '';
+          username = parsed.username || '';
+        } catch (e) {}
+      }
+      const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
+      if (matchRole) role = decodeURIComponent(matchRole[1]);
+      const matchUser = document.cookie.match(/suongmai_username=([^;]+)/);
+      if (matchUser) username = decodeURIComponent(matchUser[1]);
+
+      const isSuper = role.includes('SUPER_ADMIN') || username === 'sadmin';
+      setIsSuperAdmin(isSuper);
+    }
+  }, []);
 
   // Modals state
   const [viewStudentId, setViewStudentId] = useState<string | null>(null);
@@ -54,6 +78,7 @@ export default function StudentsDirectoryPage() {
       'STT',
       'Mã Bé',
       'Họ Và Tên Bé',
+      'Phân Loại Hồ Sơ',
       'Giới Tính',
       'Ngày Sinh',
       'Lớp Học',
@@ -82,6 +107,7 @@ export default function StudentsDirectoryPage() {
         index + 1,
         `"${s.student_code}"`,
         `"${s.full_name}"`,
+        `"${s.is_non_regular ? 'Ngoài chính quy' : 'Chính quy'}"`,
         `"${s.gender}"`,
         `"${s.dob}"`,
         `"${s.class_name || ''}"`,
@@ -161,6 +187,11 @@ export default function StudentsDirectoryPage() {
 
   // Filtered Students list
   const filteredStudents = students.filter((s) => {
+    // Super Admin Toggle: Ẩn học sinh ngoài chính quy nếu không phải Super Admin hoặc Toggle đang tắt
+    if (s.is_non_regular && (!isSuperAdmin || !showNonRegular)) {
+      return false;
+    }
+
     const matchesSearch =
       s.full_name.toLowerCase().includes(search.toLowerCase()) ||
       s.student_code.toLowerCase().includes(search.toLowerCase());
@@ -297,6 +328,22 @@ export default function StudentsDirectoryPage() {
             />
           </div>
 
+          {/* SUPER_ADMIN Toggle: Hiển thị học sinh ngoài chính quy */}
+          {isSuperAdmin && (
+            <label className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100/80 border border-amber-300 rounded-pill px-3.5 py-2 text-xs text-amber-900 font-bold cursor-pointer select-none transition-colors shadow-2xs shrink-0">
+              <input
+                type="checkbox"
+                checked={showNonRegular}
+                onChange={(e) => {
+                  setShowNonRegular(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500 cursor-pointer accent-amber-600"
+              />
+              <span>Hiển thị học sinh ngoài chính quy</span>
+            </label>
+          )}
+
           {/* Export Excel Button */}
           <button
             onClick={handleExportExcel}
@@ -349,6 +396,11 @@ export default function StudentsDirectoryPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="block font-bold">{s.full_name}</span>
+                            {s.is_non_regular && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                                Ngoài chính quy
+                              </span>
+                            )}
                             {pendingCount > 0 && (
                               <span
                                 className="relative inline-flex items-center justify-center p-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-md shadow-xs animate-pulse"

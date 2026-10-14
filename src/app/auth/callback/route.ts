@@ -187,13 +187,17 @@ export async function GET(request: Request) {
 
     if (isApproved) {
       let targetUrl = '/parent';
+      const hasChildren = status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0);
+
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
         targetUrl = nextParam && nextParam.startsWith('/') ? nextParam : '/admin/dashboard';
       } else if (resolvedRole === 'TEACHER') {
-        if (nextParam && nextParam.startsWith('/teacher')) {
+        if (nextParam && nextParam.startsWith('/parent') && hasChildren) {
+          targetUrl = nextParam;
+        } else if (nextParam && nextParam.startsWith('/teacher')) {
           targetUrl = nextParam;
         } else {
-          targetUrl = '/teacher/lesson-plans/new';
+          targetUrl = '/teacher';
         }
       } else if (resolvedRole === 'PARENT') {
         if (nextParam && nextParam.startsWith('/parent')) {
@@ -225,6 +229,15 @@ export async function GET(request: Request) {
         maxAge: 86400,
         sameSite: 'lax',
       });
+      if (hasChildren) {
+        await setSignedCookie(response, 'suongmai_has_children', 'true', {
+          path: '/',
+          maxAge: 86400,
+          sameSite: 'lax',
+        });
+      } else {
+        response.cookies.delete('suongmai_has_children');
+      }
       return response;
     } else {
       // Pending user: Redirect to /auth/pending-approval

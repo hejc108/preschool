@@ -172,7 +172,7 @@ export default function AdminDashboardPage() {
                 <span className="font-mono text-[10px] text-slate-400">08:30 AM</span>
               </div>
               <p className="text-slate-700">
-                Sơ Maria Tươi • Mầm 1 (Rose). 23 {language === 'vi' ? 'suất ăn' : 'meals'}.
+                Cô Thái Thị Thanh Vâng • Mầm 1 (Rose). 23 {language === 'vi' ? 'suất ăn' : 'meals'}.
               </p>
             </div>
 

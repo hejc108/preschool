@@ -60,11 +60,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.ai_lessons'), href: '/teacher/lesson-plans/new', icon: Sparkles, badge: 'AI 5.0' },
   ];
 
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || username === 'sadmin';
+
   const settingsNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [
-    { label: 'Duyệt tài khoản', href: '/admin/users/approvals', icon: UserCheck, badge: 'Mới' },
-    { label: 'Quản lý người dùng', href: '/admin/users', icon: Users },
-    { label: 'Đổi mật khẩu / Bảo mật', href: '/admin/settings/security', icon: KeyRound },
-    { label: 'Cấu hình email', href: '/admin/settings/email', icon: Mail },
+    { label: 'Duyệt phân quyền', href: '/admin/users/approvals', icon: UserCheck, badge: 'Mới' },
+    { label: 'Quản lý tài khoản', href: '/admin/users', icon: Users },
+    ...(isSuperAdmin
+      ? [
+          { label: 'Đổi mật khẩu', href: '/admin/settings/security', icon: KeyRound },
+          { label: 'Cấu hình Email hệ thống', href: '/admin/settings/email', icon: Mail },
+        ]
+      : []),
   ];
 
   const handleLogout = () => {

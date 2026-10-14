@@ -10,6 +10,41 @@ export default function SecuritySettingsPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(true);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let role = '';
+      let username = '';
+      const savedUser = localStorage.getItem('suongmai_auth_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          role = parsed.role || '';
+          username = parsed.username || '';
+        } catch (e) {}
+      }
+      const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
+      if (matchRole) role = decodeURIComponent(matchRole[1]);
+      const matchUser = document.cookie.match(/suongmai_username=([^;]+)/);
+      if (matchUser) username = decodeURIComponent(matchUser[1]);
+
+      const isSuper = role.includes('SUPER_ADMIN') || username === 'sadmin';
+      setIsSuperAdmin(isSuper);
+    }
+  }, []);
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="p-8 bg-white rounded-2xl border border-rose-200 text-center max-w-lg mx-auto mt-12 shadow-sm">
+        <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+        <h2 className="text-lg font-bold text-slate-800">Truy Cập Bị Giới Hạn</h2>
+        <p className="text-xs text-slate-500 mt-2">
+          Khu vực Quản trị Bảo mật & Đổi mật khẩu hệ thống chỉ dành riêng cho tài khoản SUPER_ADMIN (sadmin).
+        </p>
+      </div>
+    );
+  }
 
   const showToastMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setToast({ text, type });

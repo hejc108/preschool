@@ -42,7 +42,7 @@
     "header": {
       "meal_orders": "Sĩ số suất ăn",
       "office": "Văn phòng Ban Giám Hiệu",
-      "principal": "Sơ Maria (Hiệu Trưởng)",
+      "principal": "Sơ Lucia Xuân (Vũ Thị Xuân - Hiệu Trưởng)",
       "cutoff_badge": "Chốt 08:30",
       "convent_tag": "Hệ thống Mầm Non Sương Mai"
     },
@@ -161,7 +161,7 @@
   },
   "teacher": {
     "app_title": "Giáo viên",
-    "class_info": "Lớp Mầm 1 (Rose) • Sơ Maria Tươi",
+    "class_info": "Lớp Mầm 1 (Rose) • Cô Thái Thị Thanh Vâng",
     "locked_badge": "Đã khóa sổ báo bếp (08:30)",
     "cutoff_badge": "SÁNG 08:30",
     "tab_attendance": "Điểm danh",
@@ -262,7 +262,7 @@
     "board_confirmation_title": "Nhà trường ghi nhận",
     "board_confirmation_text": "Trường không tính tiền ăn những ngày nghỉ.",
     "commitment_note": "Trường không tính tiền ăn những ngày nghỉ.",
-    "mother_superior_signature": "— Sơ Maria (Trưởng Mầm Non Sương Mai)",
+    "mother_superior_signature": "— Sơ Lucia Xuân (Vũ Thị Xuân - Hiệu Trưởng)",
     "btn_hotline": "📞 Hotline / Sơ Trực Ban",
     "modal_absence_title": "Đơn xin nghỉ học cho bé",
     "simulate_cutoff": "",

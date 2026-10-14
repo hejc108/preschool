@@ -16,7 +16,7 @@ import {
 import { MedicationRequest, MealException, AbsenceRequest } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { fetchLiveProfilesFromSupabase, getStoredProfiles } from '@/lib/utils/approvalHelper';
+import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations } from '@/lib/utils/approvalHelper';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 import { supabase } from '@/lib/supabase/client';
@@ -57,6 +57,7 @@ export default function TeacherPwaPage() {
   const [userRole, setUserRole] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [hasParentAccess, setHasParentAccess] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -86,6 +87,15 @@ export default function TeacherPwaPage() {
         const resolvedRole = profile?.role || roleFound || 'TEACHER';
         setUserRole(resolvedRole);
         setIsAuthenticated(true);
+
+        const hasCookieFlag = document.cookie.includes('suongmai_has_children');
+        const relations = getStoredRelations();
+        const hasChildInRelations = relations.some(
+          (r) => r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim() && r.is_verified
+        );
+        if (hasCookieFlag || hasChildInRelations) {
+          setHasParentAccess(true);
+        }
 
         if (profile && profile.role === 'TEACHER') {
           if (!profile.assigned_class_id && !profile.assigned_class_name) {
@@ -439,17 +449,32 @@ export default function TeacherPwaPage() {
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-20">
       {/* Mobile Top Header - Official Warm Brand Red */}
       <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-600 transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
+        <div className="flex items-center gap-2.5">
+          {['SUPER_ADMIN', 'ADMIN', 'SCHOOL_ADMIN'].includes(userRole) ? (
+            <Link href="/admin/dashboard" className="p-2 bg-primary-800 rounded-pill text-white hover:bg-primary-600 transition-colors" title="Về trang Quản trị">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
+              SM
+            </div>
+          )}
           <div>
             <h1 className="font-extrabold text-white text-base leading-tight">{t('teacher.app_title')}</h1>
-            <p className="text-xs text-rose-100 font-semibold">{t('teacher.class_info')}</p>
+            <p className="text-xs text-rose-100 font-semibold">{assignedClassName || t('teacher.class_info')}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {hasParentAccess && (
+            <Link
+              href="/parent"
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-pill text-[11px] font-bold shadow-sm flex items-center gap-1 transition-all animate-pulse hover:animate-none"
+              title="Chuyển sang Cổng Phụ huynh xem thông tin con"
+            >
+              <span>👨‍👧 Góc Phụ Huynh</span>
+            </Link>
+          )}
           <LanguageSwitcher />
         </div>
       </header>

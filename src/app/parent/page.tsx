@@ -30,7 +30,7 @@ const MOCK_PARENT_PROFILES = [
         id: 's1',
         full_name: 'Trần Gia Bảo',
         class_name: 'Mầm 1 (Rose)',
-        teacher_name: 'Sơ Maria Tươi',
+        teacher_name: 'Cô Thái Thị Thanh Vâng',
         student_code: 'SM-2026-001',
         allergies: 'Hải sản (Tôm, Cua)',
         avatar_initials: 'GB',
@@ -48,7 +48,7 @@ const MOCK_PARENT_PROFILES = [
         id: 's1',
         full_name: 'Trần Gia Bảo',
         class_name: 'Mầm 1 (Rose)',
-        teacher_name: 'Sơ Maria Tươi',
+        teacher_name: 'Cô Thái Thị Thanh Vâng',
         student_code: 'SM-2026-001',
         allergies: 'Hải sản (Tôm, Cua)',
         avatar_initials: 'GB',
@@ -84,6 +84,8 @@ export default function ParentPwaPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [wrongRoleNotice, setWrongRoleNotice] = useState<boolean>(false);
+  const [isTeacherUser, setIsTeacherUser] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<string>('');
 
   // Read logged in parent email and relations
   React.useEffect(() => {
@@ -94,22 +96,34 @@ export default function ParentPwaPage() {
       }
 
       let emailFound = '';
+      let roleFound = '';
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
       if (match) emailFound = decodeURIComponent(match[1]);
+
+      const roleMatch = document.cookie.match(/suongmai_user_role=([^;]+)/);
+      if (roleMatch) roleFound = decodeURIComponent(roleMatch[1]);
+
       if (!emailFound) {
         const saved = localStorage.getItem('suongmai_auth_user');
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
             if (parsed.email) emailFound = parsed.email;
+            if (parsed.role) roleFound = parsed.role;
           } catch (e) {}
+        }
+      }
+      if (roleFound) {
+        setUserRole(roleFound);
+        if (roleFound.includes('TEACHER')) {
+          setIsTeacherUser(true);
         }
       }
       if (emailFound) {
         setParentEmail(emailFound);
         setIsAuthenticated(true);
         const rels = getStoredRelations().filter(
-          (r) => (r.parent_email.toLowerCase().trim() === emailFound.toLowerCase().trim()) && r.is_verified
+          (r) => (r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim()) && r.is_verified
         );
         if (rels.length === 0) {
           setActiveParentIndex(0); // Show empty state if user has 0 linked kids
@@ -458,10 +472,16 @@ export default function ParentPwaPage() {
 
       {/* Mobile Top Header */}
       <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
+        <div className="flex items-center gap-2.5">
+          {['SUPER_ADMIN', 'ADMIN', 'SCHOOL_ADMIN'].includes(userRole) ? (
+            <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors" title="Về trang Quản trị">
+              <ChevronLeft className="w-5 h-5" />
+            </Link>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
+              SM
+            </div>
+          )}
           <div>
             <h1 className="font-bold text-white text-base leading-tight">{t('parent.app_title')}</h1>
             <p className="text-xs text-sky-100 font-semibold">{t('common.school_name')}</p>
@@ -469,6 +489,15 @@ export default function ParentPwaPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isTeacherUser && (
+            <Link
+              href="/teacher"
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-pill text-[11px] font-bold shadow-sm flex items-center gap-1 transition-all"
+              title="Quay lại Cổng Tác Nghiệp Giáo Viên"
+            >
+              <span>👩‍🏫 Cổng Giáo Viên</span>
+            </Link>
+          )}
           <LanguageSwitcher />
         </div>
       </header>

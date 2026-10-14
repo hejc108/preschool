@@ -12,6 +12,7 @@ export interface Profile {
   approval_status?: 'PENDING' | 'ACTIVE' | 'REJECTED';
   assigned_class_id?: string;
   assigned_class_name?: string;
+  is_temporary?: boolean;
   created_at?: string;
 }
 
@@ -22,6 +23,17 @@ export interface ParentStudentRelation {
   student_id: string;
   student_name?: string;
   is_verified: boolean;
+  created_at?: string;
+}
+
+export interface TeacherClassAssignment {
+  id: string;
+  teacher_id: string;
+  teacher_email: string;
+  class_id: string;
+  class_name?: string;
+  academic_year?: string;
+  is_main_teacher?: boolean;
   created_at?: string;
 }
 
@@ -64,6 +76,7 @@ export interface Student {
   allergies: string;
   status: 'ACTIVE' | 'GRADUATED' | 'WITHDRAWN';
   avatar_url?: string;
+  is_non_regular?: boolean;
   parents?: ParentContact[];
   authorized_pickups?: AuthorizedPickup[];
   created_at?: string;

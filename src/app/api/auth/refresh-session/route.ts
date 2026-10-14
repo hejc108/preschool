@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
@@ -86,10 +87,14 @@ export async function POST(request: Request) {
         redirectUrl = '/teacher';
       }
 
+      const status = checkUserApprovalStatus(email);
+      const hasChildren = status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0);
+
       const response = NextResponse.json({
         success: true,
         isApproved: true,
         role: targetRole,
+        hasChildren,
         redirectUrl,
         profile,
       });
@@ -97,6 +102,11 @@ export async function POST(request: Request) {
       await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_role', targetRole, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      if (hasChildren) {
+        await setSignedCookie(response, 'suongmai_has_children', 'true', { path: '/', maxAge: 86400, sameSite: 'lax' });
+      } else {
+        response.cookies.delete('suongmai_has_children');
+      }
 
       return response;
     }

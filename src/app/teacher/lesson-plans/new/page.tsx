@@ -290,6 +290,15 @@ export default function TeacherAILessonPlanNewPage() {
         </div>
       </header>
 
+      {/* Mobile Screen Notice (Tính năng tối ưu cho Web Desktop) */}
+      <div className="md:hidden mx-4 mt-4 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900 shadow-xs">
+        <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <strong className="block font-bold">Lưu ý cho Giáo viên:</strong>
+          <span>Tính năng Soạn bài giảng AI & Xuất slide PowerPoint được thiết kế chuyên biệt cho màn hình Web Desktop. Vui lòng mở trên máy tính để có trải nghiệm soạn giáo án tốt nhất!</span>
+        </div>
+      </div>
+
       {/* Main Workspace Split-Screen Container (Left 35%, Right 65%) */}
       <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
         

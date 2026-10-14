@@ -14,12 +14,14 @@ export async function middleware(request: NextRequest) {
   const rawEmail = request.cookies.get('suongmai_user_email')?.value;
   const rawRole = request.cookies.get('suongmai_user_role')?.value;
   const rawUsername = request.cookies.get('suongmai_username')?.value;
+  const rawHasChildren = request.cookies.get('suongmai_has_children')?.value;
 
   // Cryptographically verify HMAC SHA-256 signatures before trusting any cookie values
   const sessionCookie = await verifyAndExtractCookieValue(rawSession);
   const emailCookie = (await verifyAndExtractCookieValue(rawEmail))?.toLowerCase().trim() || '';
   const roleCookie = (await verifyAndExtractCookieValue(rawRole)) || '';
   const usernameCookie = (await verifyAndExtractCookieValue(rawUsername)) || '';
+  const hasChildrenCookie = (await verifyAndExtractCookieValue(rawHasChildren)) === 'true';
 
   // If approved active user accesses /auth/pending-approval, redirect to proper active portal
   if (pathname === '/auth/pending-approval' && sessionCookie === 'active' && roleCookie && roleCookie !== 'GUEST') {
@@ -40,11 +42,13 @@ export async function middleware(request: NextRequest) {
   const isProtected = isAdminRoute || isTeacherRoute || isParentRoute;
 
   if (isProtected) {
+    const isSuperAdmin = roleCookie === 'SUPER_ADMIN';
     const isSuperOrSchoolAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(roleCookie);
     const isStaff = roleCookie === 'STAFF';
     const isTeacher = roleCookie === 'TEACHER';
     const isParent = roleCookie === 'PARENT';
     const isSadmin =
+      isSuperAdmin ||
       isSuperOrSchoolAdmin ||
       usernameCookie === 'sadmin' ||
       emailCookie === 'sadmin@suongmai.edu.vn';
@@ -82,6 +86,17 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(pendingUrl);
     }
 
+    // Rule 2.1: Cô lập quyền bảo mật & cấu hình nhạy cảm chỉ dành riêng cho SUPER_ADMIN (sadmin)
+    const isSensitiveAdminRoute =
+      pathname.startsWith('/admin/settings/security') ||
+      pathname.startsWith('/admin/settings/email');
+
+    if (isSensitiveAdminRoute && roleCookie !== 'SUPER_ADMIN' && usernameCookie !== 'sadmin' && emailCookie !== 'sadmin@suongmai.edu.vn') {
+      const dashboardUrl = new URL('/admin/dashboard', request.url);
+      dashboardUrl.searchParams.set('warning', 'super_admin_required');
+      return NextResponse.redirect(dashboardUrl);
+    }
+
     // Rule 3: Enforce Teacher Boundary (Parents attempt /teacher -> redirected to /parent)
     if (isTeacherRoute && !isTeacher && !isSuperOrSchoolAdmin && !isStaff) {
       if (isParent) {
@@ -92,8 +107,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
-    // Rule 4: Enforce Parent Boundary (Teachers attempt /parent -> redirected to /teacher)
+    // Rule 4: Enforce Parent Boundary (Xử lý tài khoản Đa vai trò: Cô giáo kiêm Phụ huynh)
+    // Nếu giáo viên có con liên kết (hasChildrenCookie === true), cho phép truy cập /parent/* bình thường!
     if (isParentRoute && !isParent && !isSuperOrSchoolAdmin && !isStaff) {
+      if (isTeacher && hasChildrenCookie) {
+        return NextResponse.next();
+      }
       if (isTeacher) {
         const teacherUrl = new URL('/teacher', request.url);
         teacherUrl.searchParams.set('warning', 'wrong_role');

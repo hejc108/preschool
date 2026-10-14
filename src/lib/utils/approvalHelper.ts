@@ -25,9 +25,50 @@ export const INITIAL_MOCK_PROFILES: Profile[] = [
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
   },
+  {
+    id: 'u-principal-xuan',
+    full_name: 'Sơ Lucia Xuân (Vũ Thị Xuân - Hiệu Trưởng)',
+    email: 'luciaxuan178@gmail.com',
+    role: 'SCHOOL_ADMIN',
+    approval_status: 'ACTIVE',
+    phone: '0974602878',
+    created_at: '2026-08-26T00:00:00Z',
+  },
+  {
+    id: 'u-teacher-parent-vang',
+    full_name: 'Thái Thị Thanh Vâng (Cô giáo kiêm Phụ huynh)',
+    email: 'thaiminhtue153@gmail.com',
+    role: 'TEACHER',
+    approval_status: 'ACTIVE',
+    assigned_class_id: 'c1',
+    assigned_class_name: 'Mầm 1 (Rose)',
+    phone: '0394468315',
+    created_at: '2026-08-26T00:00:00Z',
+  },
+  {
+    id: 'u-teacher-temp-chau',
+    full_name: 'Nguyễn Thị Châu (Gv Mầm thời vụ)',
+    email: 'lucychaunguyen1223@gmail.com',
+    role: 'TEACHER',
+    approval_status: 'ACTIVE',
+    is_temporary: true,
+    assigned_class_id: 'c1',
+    assigned_class_name: 'Mầm 1 (Rose)',
+    created_at: '2026-08-26T00:00:00Z',
+  },
 ];
 
-export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [];
+export const INITIAL_MOCK_RELATIONS: ParentStudentRelation[] = [
+  {
+    id: 'rel-vang-tue',
+    parent_id: 'u-teacher-parent-vang',
+    parent_email: 'thaiminhtue153@gmail.com',
+    student_id: 's-nonreg-13',
+    student_name: 'Lê Phương Minh Tuệ',
+    is_verified: true,
+    created_at: '2026-08-26T00:00:00Z',
+  },
+];
 
 const DEPRECATED_MOCK_EMAILS = [
   'admin@suongmai.edu.vn',
@@ -184,6 +225,12 @@ export function checkUserApprovalStatus(email: string): {
     profile = registerGoogleUserIfMissing(cleanEmail);
   }
 
+  // Check parent role & student relations for all users (including teachers with children)
+  const userRelations = relations.filter(
+    (r) => (r.parent_email?.toLowerCase().trim() === cleanEmail || r.parent_id === profile.id) && r.is_verified
+  );
+  const hasLinkedChildren = userRelations.length > 0;
+
   const isTeacherOrStaff = ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'ADMIN'].includes(profile.role);
 
   if (isTeacherOrStaff) {
@@ -193,19 +240,14 @@ export function checkUserApprovalStatus(email: string): {
       profile,
       approvalStatus: profile.approval_status || 'PENDING',
       isTeacherOrStaff: true,
-      isParentVerified: false,
-      linkedStudents: [],
+      isParentVerified: hasLinkedChildren,
+      linkedStudents: userRelations,
       redirectUrl: isActive
         ? (profile.role === 'TEACHER' ? '/teacher' : '/admin/dashboard')
         : `/auth/pending-approval?type=teacher&email=${encodeURIComponent(cleanEmail)}`,
       pendingType: isActive ? undefined : 'teacher',
     };
   }
-
-  // Check parent role & student relations
-  const userRelations = relations.filter(
-    (r) => (r.parent_email.toLowerCase().trim() === cleanEmail || r.parent_id === profile.id) && r.is_verified
-  );
 
   const isActiveParent = (profile.approval_status as string) === 'ACTIVE';
 

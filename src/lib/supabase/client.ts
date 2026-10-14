@@ -31,7 +31,7 @@ export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // MOCK INITIAL DATA FOR DEMO & LOCAL VERIFICATION
 export const INITIAL_CLASSES: ClassRoom[] = [
-  { id: 'c1', name: 'Mầm 1 (Rose)', grade_level: 'MẦM', room_number: 'A-101', teacher_name: 'Sơ Maria Tươi', total_students: 25 },
+  { id: 'c1', name: 'Mầm 1 (Rose)', grade_level: 'MẦM', room_number: 'A-101', teacher_name: 'Cô Thái Thị Thanh Vâng', total_students: 25 },
   { id: 'c2', name: 'Chồi 2 (Lily)', grade_level: 'CHỒI', room_number: 'B-202', teacher_name: 'Sơ Anna Tuyết', total_students: 28 },
   { id: 'c3', name: 'Lá 3 (Sunflower)', grade_level: 'LÁ', room_number: 'C-303', teacher_name: 'Cô Nguyễn Thu Hà', total_students: 30 },
 ];
@@ -131,6 +131,26 @@ export const INITIAL_STUDENTS: Student[] = [
     ],
     authorized_pickups: [
       { id: 'p5-1', name: 'Đỗ Văn Minh (Ông Ngoại)', relationship: 'Ông Ngoại', phone: '0904111222', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', approval_status: 'PENDING' },
+    ],
+  },
+  {
+    id: 's-nonreg-13',
+    student_code: 'SM-2026-NR13',
+    full_name: 'Lê Phương Minh Tuệ',
+    gender: 'NỮ',
+    dob: '2023-06-15',
+    class_id: 'c1',
+    class_name: 'Mầm 1 (Rose)',
+    allergies: 'Không',
+    status: 'ACTIVE',
+    is_non_regular: true,
+    avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    parents: [
+      { name: 'Lê Văn Sáu', relationship: 'BỐ', phone: '0825213979', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80' },
+      { name: 'Thái Thị Thanh Vâng (Giáo viên)', relationship: 'MẸ', phone: '0394468315', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' },
+    ],
+    authorized_pickups: [
+      { id: 'p-nr-1', name: 'Thái Thị Thanh Vâng (Mẹ / GV)', relationship: 'Mẹ', phone: '0394468315', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', approval_status: 'APPROVED' },
     ],
   },
 ];

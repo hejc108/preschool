@@ -72,7 +72,7 @@ function AuthContent() {
           if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
             targetUrl = '/admin/dashboard';
           } else if (targetRole === 'TEACHER') {
-            targetUrl = '/teacher/lesson-plans/new';
+            targetUrl = '/teacher';
           } else if (targetRole === 'PARENT') {
             targetUrl = '/parent';
           } else if (targetRole === 'KITCHEN_STAFF') {

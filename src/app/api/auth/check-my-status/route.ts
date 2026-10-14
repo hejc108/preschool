@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(role)) {
         redirectUrl = '/admin/dashboard';
       } else if (role === 'TEACHER') {
-        redirectUrl = '/teacher/lesson-plans/new';
+        redirectUrl = '/teacher';
       } else if (role === 'PARENT') {
         redirectUrl = '/parent';
       } else if (role === 'KITCHEN_STAFF') {
@@ -87,10 +88,14 @@ export async function GET(request: Request) {
         redirectUrl = '/admin/health';
       }
 
+      const status = checkUserApprovalStatus(email);
+      const hasChildren = status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0);
+
       const response = NextResponse.json({
         isApproved: true,
         status: 'ACTIVE',
         role,
+        hasChildren,
         redirectUrl,
         profile,
       });
@@ -98,6 +103,11 @@ export async function GET(request: Request) {
       await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_role', role, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      if (hasChildren) {
+        await setSignedCookie(response, 'suongmai_has_children', 'true', { path: '/', maxAge: 86400, sameSite: 'lax' });
+      } else {
+        response.cookies.delete('suongmai_has_children');
+      }
 
       return response;
     }

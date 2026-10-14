@@ -291,7 +291,7 @@ export default function UserApprovalsPage() {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-sky-50 border border-sky-200 rounded-pill text-sky-700 text-xs font-bold mb-2">
             <UserCheck className="w-3.5 h-3.5" />
-            <span>Whitelist Approval Gate & RBAC 5 Cấp Độ</span>
+            <span>Duyệt phân quyền</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Danh sách yêu cầu truy cập xét duyệt</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -366,7 +366,7 @@ export default function UserApprovalsPage() {
               <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th className="py-3.5 px-4">Họ tên & Email Google</th>
                 <th className="py-3.5 px-4">Trạng thái</th>
-                <th className="py-3.5 px-4">Đề xuất Vai trò (RBAC)</th>
+                <th className="py-3.5 px-4">Đề xuất vai trò</th>
                 <th className="py-3.5 px-4 text-right">Hành động duyệt</th>
               </tr>
             </thead>

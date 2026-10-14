@@ -56,7 +56,7 @@ function PendingApprovalContent() {
         const role = data.role || 'PARENT';
         let targetUrl = data.redirectUrl || '/parent';
         if (role === 'TEACHER') {
-          targetUrl = '/teacher/lesson-plans/new';
+          targetUrl = '/teacher';
         } else if (role === 'PARENT') {
           targetUrl = '/parent';
         } else if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(role)) {
