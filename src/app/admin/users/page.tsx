@@ -192,7 +192,7 @@ export default function UsersManagementPage() {
             title="Xuất danh sách cán bộ, giáo viên và nhân viên ra file Excel (.csv)"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Xuất báo cáo GVNV</span>
+            <span>Xuất danh sách</span>
           </button>
 
           <Link
@@ -200,7 +200,7 @@ export default function UsersManagementPage() {
             className="px-4.5 py-2.5 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold text-xs rounded-pill shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto active:scale-95"
           >
             <UserCheck className="w-4 h-4" />
-            <span>Màn hình Duyệt phân quyền</span>
+            <span>Duyệt phân quyền</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
