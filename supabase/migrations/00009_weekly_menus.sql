@@ -29,7 +29,8 @@ DROP POLICY IF EXISTS "Allow select weekly_menus" ON public.weekly_menus;
 CREATE POLICY "Allow select weekly_menus" ON public.weekly_menus 
 FOR SELECT USING (true);
 
--- 2. Quyền ghi: Chỉ Service Role mới được quyền cập nhật (thực hiện qua API Route bảo mật)
+-- 2. Quyền ghi: Cho phép cập nhật qua Server API Route
 DROP POLICY IF EXISTS "Service role full access weekly_menus" ON public.weekly_menus;
-CREATE POLICY "Service role full access weekly_menus" ON public.weekly_menus 
-FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow modify weekly_menus" ON public.weekly_menus;
+CREATE POLICY "Allow modify weekly_menus" ON public.weekly_menus 
+FOR ALL USING (true) WITH CHECK (true);
