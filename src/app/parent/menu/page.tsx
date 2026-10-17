@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Utensils, AlertCircle, Calendar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
 import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAllergen } from '@/lib/utils/menuHelper';
 import { WeeklyMenu, DayOfWeek, MealCategory } from '@/lib/types/schema';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -13,7 +14,7 @@ export default function ParentMenuPage() {
   const defaultWeek = getCurrentMenuWeek();
   const defaultDay = getDayOfWeekEnum();
 
-  const [menuList, setMenuList] = useState<WeeklyMenu[]>(INITIAL_4WEEK_MENU);
+  const [menuList, setMenuList] = useState<WeeklyMenu[]>((defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU);
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(defaultDay);
   const [studentAllergies] = useState<string>('Hải sản (Tôm, Cua)'); // Test student allergies

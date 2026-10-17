@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import * as fs from 'fs';
-import * as path from 'path';
+import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
 import { WeeklyMenu } from '@/lib/types/schema';
 import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
 
@@ -9,6 +8,10 @@ export const dynamic = 'force-dynamic';
 
 declare global {
   var __SUONGMAI_WEEKLY_MENU__: WeeklyMenu[] | undefined;
+}
+
+if (!globalThis.__SUONGMAI_WEEKLY_MENU__) {
+  globalThis.__SUONGMAI_WEEKLY_MENU__ = (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU;
 }
 
 function getSupabaseClient() {
@@ -30,41 +33,6 @@ function getSupabaseClient() {
   });
 }
 
-function getMenuFilePath(): string {
-  return path.resolve(process.cwd(), 'src/lib/data/weekly_menu.json');
-}
-
-function readMenuFromFile(): WeeklyMenu[] | null {
-  try {
-    const filePath = getMenuFilePath();
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf8');
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed as WeeklyMenu[];
-      }
-    }
-  } catch (err) {
-    console.warn('Read weekly_menu.json notice:', err);
-  }
-  return null;
-}
-
-function writeMenuToFile(menu: WeeklyMenu[]): boolean {
-  try {
-    const filePath = getMenuFilePath();
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, JSON.stringify(menu, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.warn('Write weekly_menu.json notice:', err);
-    return false;
-  }
-}
-
 async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms = 2500): Promise<T> {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -82,7 +50,7 @@ export async function GET() {
     const supabase = getSupabaseClient();
     let menu: WeeklyMenu[] = [];
 
-    // 1. Try fetching from Supabase DB table with timeout
+    // 1. Fetch from Supabase DB table with timeout
     if (supabase) {
       try {
         const { data, error } = await withTimeout<any>(
@@ -90,7 +58,7 @@ export async function GET() {
             .from('weekly_menus')
             .select('*')
             .order('week_number', { ascending: true }),
-          2000
+          2500
         );
 
         if (!error && data && data.length > 0) {
@@ -104,47 +72,41 @@ export async function GET() {
             created_at: row.created_at,
           }));
           globalThis.__SUONGMAI_WEEKLY_MENU__ = menu;
-          return NextResponse.json({ success: true, count: menu.length, source: 'supabase', menu });
+          return NextResponse.json({
+            success: true,
+            count: menu.length,
+            source: 'supabase',
+            has_db: true,
+            menu,
+          });
         }
       } catch (dbErr) {
         // Table not yet migrated or query timed out
       }
     }
 
-    // 2. Try in-memory cache
-    if (globalThis.__SUONGMAI_WEEKLY_MENU__ && globalThis.__SUONGMAI_WEEKLY_MENU__.length > 0) {
-      return NextResponse.json({
-        success: true,
-        count: globalThis.__SUONGMAI_WEEKLY_MENU__.length,
-        source: 'memory_cache',
-        menu: globalThis.__SUONGMAI_WEEKLY_MENU__,
-      });
-    }
+    // 2. Return in-memory cache or default JSON fallback
+    const fallbackMenu =
+      globalThis.__SUONGMAI_WEEKLY_MENU__ && globalThis.__SUONGMAI_WEEKLY_MENU__.length > 0
+        ? globalThis.__SUONGMAI_WEEKLY_MENU__
+        : (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU;
 
-    // 3. Try reading from server JSON file
-    const fileMenu = readMenuFromFile();
-    if (fileMenu && fileMenu.length > 0) {
-      globalThis.__SUONGMAI_WEEKLY_MENU__ = fileMenu;
-      return NextResponse.json({
-        success: true,
-        count: fileMenu.length,
-        source: 'file_storage',
-        menu: fileMenu,
-      });
-    }
-
-    // 4. Default fallback to initial seed
-    globalThis.__SUONGMAI_WEEKLY_MENU__ = INITIAL_4WEEK_MENU;
     return NextResponse.json({
       success: true,
-      count: INITIAL_4WEEK_MENU.length,
-      source: 'initial_seed',
-      menu: INITIAL_4WEEK_MENU,
+      count: fallbackMenu.length,
+      source: 'fallback',
+      has_db: false,
+      menu: fallbackMenu,
     });
   } catch (err: any) {
     console.error('GET /api/admin/menu error:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Internal server error', menu: INITIAL_4WEEK_MENU },
+      {
+        success: false,
+        error: err?.message || 'Internal server error',
+        has_db: false,
+        menu: (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU,
+      },
       { status: 500 }
     );
   }
@@ -171,14 +133,12 @@ export async function POST(request: Request) {
       allergens: Array.isArray(m.allergens) ? m.allergens : [],
     }));
 
-    // 1. Update in-memory cache
+    // Update in-memory cache
     globalThis.__SUONGMAI_WEEKLY_MENU__ = sanitizedMenu;
 
-    // 2. Persist to server JSON file
-    writeMenuToFile(sanitizedMenu);
-
-    // 3. Try syncing to Supabase DB
+    // Sync to Supabase DB if table exists
     let dbSynced = false;
+    let dbErrorMessage: string | null = null;
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -196,25 +156,29 @@ export async function POST(request: Request) {
           supabase
             .from('weekly_menus')
             .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' }),
-          2000
+          3000
         );
 
         if (!upsertErr) {
           dbSynced = true;
         } else {
+          dbErrorMessage = upsertErr.message;
           console.warn('weekly_menus table upsert notice:', upsertErr.message);
         }
-      } catch (dbErr) {
-        // Migration may not have run on Supabase, but local storage succeeded
+      } catch (dbErr: any) {
+        dbErrorMessage = dbErr?.message || 'Database connection error';
         console.warn('weekly_menus sync notice (fallback active):', dbErr);
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Cập nhật thực đơn thành công',
+      message: dbSynced
+        ? 'Cập nhật thực đơn và đồng bộ CSDL Supabase thành công'
+        : 'Đã lưu vào bộ nhớ tạm hệ thống (CSDL Supabase chưa có bảng weekly_menus)',
       count: sanitizedMenu.length,
       db_synced: dbSynced,
+      db_error: dbErrorMessage,
       menu: sanitizedMenu,
     });
   } catch (err: any) {

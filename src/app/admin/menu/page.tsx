@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Utensils, Save, CheckCircle2, ChevronLeft, Edit3, Sparkles, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Utensils, Save, CheckCircle2, ChevronLeft, Edit3, Sparkles, Loader2, AlertCircle, RotateCcw, Database } from 'lucide-react';
 import Link from 'next/link';
+import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
 import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
 import { WeeklyMenu, DayOfWeek, MealCategory } from '@/lib/types/schema';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -10,12 +11,13 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 const LOCAL_STORAGE_KEY = 'suongmai_weekly_menu';
 
 export default function AdminMenuPage() {
-  const [menuList, setMenuList] = useState<WeeklyMenu[]>(INITIAL_4WEEK_MENU);
+  const [menuList, setMenuList] = useState<WeeklyMenu[]>((defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU);
   const [selectedWeek, setSelectedWeek] = useState<number>(2); // Default to Week 2 for TC-MENU-04 testing
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ hasDb: boolean; synced: boolean } | null>(null);
 
   // Load menu on mount from LocalStorage & Server API
   useEffect(() => {
@@ -38,10 +40,16 @@ export default function AdminMenuPage() {
         const res = await fetch('/api/admin/menu');
         if (res.ok) {
           const json = await res.json();
+          const hasDb = Boolean(json.has_db);
+          setDbStatus({ hasDb, synced: hasDb });
+
           if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
-            setMenuList(json.menu);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.menu));
+            // If server has live database data, or if client had no local edits yet, adopt server data
+            if (hasDb || !hasLocal) {
+              setMenuList(json.menu);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.menu));
+              }
             }
           }
         }
@@ -104,21 +112,21 @@ export default function AdminMenuPage() {
     });
   };
 
-  // Lưu thực đơn 3 tầng (LocalStorage -> Server File & Cache -> Supabase DB)
+  // Lưu thực đơn
   const handleSaveMenu = async () => {
     if (saving) return;
     setSaving(true);
     setErrorMessage(null);
     setSavedSuccess(false);
 
-    // 1. Lưu ngay vào LocalStorage phía Client (Chống mất dữ liệu tức thì)
+    // 1. Lưu ngay vào LocalStorage phía Client (Chống mất dữ liệu tức thì trên thiết bị này)
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(menuList));
       } catch (e) {}
     }
 
-    // 2. Gửi request POST lên Server API để lưu vĩnh viễn
+    // 2. Gửi request POST lên Server API để đồng bộ
     try {
       const res = await fetch('/api/admin/menu', {
         method: 'POST',
@@ -129,15 +137,16 @@ export default function AdminMenuPage() {
       const json = await res.json();
       if (res.ok && json.success) {
         setSavedSuccess(true);
-        setTimeout(() => setSavedSuccess(false), 3500);
+        setDbStatus({ hasDb: Boolean(json.db_synced), synced: Boolean(json.db_synced) });
+        setTimeout(() => setSavedSuccess(false), 4000);
       } else {
         setErrorMessage(json.error || 'Lỗi khi lưu dữ liệu lên máy chủ');
       }
     } catch (err: any) {
       console.error('Lỗi khi gọi API lưu thực đơn:', err);
-      // Dù API lỗi mạng, dữ liệu vẫn đã lưu an toàn trong LocalStorage
+      // Dù API lỗi, dữ liệu vẫn đã lưu an toàn trong LocalStorage máy khách
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3500);
+      setTimeout(() => setSavedSuccess(false), 4000);
     } finally {
       setSaving(false);
     }
@@ -179,11 +188,28 @@ export default function AdminMenuPage() {
       </div>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+        {/* Database Notice if Supabase table is not yet created */}
+        {dbStatus && !dbStatus.hasDb && (
+          <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs sm:text-sm flex items-start gap-3 shadow-sm">
+            <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Lưu ý về đồng bộ CSDL Toàn trường (Supabase):</p>
+              <p className="text-amber-800">
+                Thực đơn hiện đang lưu an toàn trên trình duyệt của bạn. Để đồng bộ vĩnh viễn trên đám mây cho mọi thiết bị của Phụ huynh và Giáo viên, Ban Quản Trị chỉ cần chạy câu lệnh SQL tạo bảng <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">weekly_menus</code> trong mục <strong>SQL Editor</strong> của Supabase Dashboard.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Success Alert */}
         {savedSuccess && (
           <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 font-bold text-sm flex items-center gap-2 shadow-sm animate-bounce">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>Đã lưu thành công! Toàn bộ thay đổi thực đơn đã được ghi nhận trên máy chủ và đồng bộ sang ứng dụng Phụ huynh.</span>
+            <span>
+              {dbStatus?.hasDb
+                ? 'Đã lưu thành công lên Cơ sở dữ liệu Supabase và đồng bộ sang toàn bộ ứng dụng Phụ huynh!'
+                : 'Đã lưu thành công vào bộ nhớ máy của bạn!'}
+            </span>
           </div>
         )}
 
