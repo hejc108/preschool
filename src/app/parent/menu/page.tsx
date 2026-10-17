@@ -4,19 +4,52 @@ import React, { useState } from 'react';
 import { ChevronLeft, Utensils, AlertCircle, Calendar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAllergen } from '@/lib/utils/menuHelper';
-import { DayOfWeek, MealCategory } from '@/lib/types/schema';
+import { WeeklyMenu, DayOfWeek, MealCategory } from '@/lib/types/schema';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+
+const LOCAL_STORAGE_KEY = 'suongmai_weekly_menu';
 
 export default function ParentMenuPage() {
   const defaultWeek = getCurrentMenuWeek();
   const defaultDay = getDayOfWeekEnum();
 
+  const [menuList, setMenuList] = useState<WeeklyMenu[]>(INITIAL_4WEEK_MENU);
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(defaultDay);
   const [studentAllergies] = useState<string>('Hải sản (Tôm, Cua)'); // Test student allergies
 
+  // Nạp thực đơn mới nhất từ máy chủ & LocalStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMenuList(parsed);
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function loadLiveMenu() {
+      try {
+        const res = await fetch('/api/admin/menu');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
+            setMenuList(json.menu);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching live menu for parents:', err);
+      }
+    }
+    loadLiveMenu();
+  }, []);
+
   // Filter menu items for selected week and day
-  const filteredMeals = INITIAL_4WEEK_MENU.filter(
+  const filteredMeals = menuList.filter(
     (m) => m.week_number === selectedWeek && m.day_of_week === selectedDay
   );
 
