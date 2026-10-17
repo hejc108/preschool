@@ -155,8 +155,8 @@ export default function AdminMenuPage() {
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý ma trận thực đơn 4 tuần (Admin / Bếp)</h1>
-            <p className="text-slate-500 text-sm mt-1">Chỉnh sửa trực tiếp (Inline Edit) & tự động đồng bộ sang ứng dụng Phụ huynh PWA</p>
+            <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý thực đơn tuần</h1>
+            <p className="text-slate-500 text-sm mt-1">Cập nhật món ăn các bữa trong tuần và tự động đồng bộ sang ứng dụng Phụ huynh</p>
           </div>
         </div>
 
@@ -202,7 +202,7 @@ export default function AdminMenuPage() {
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Utensils className="w-5 h-5 text-primary-700" />
-            <span className="font-bold text-slate-800 text-sm">Chọn tuần cấu hình:</span>
+            <span className="font-bold text-slate-800 text-sm">Chọn tuần:</span>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -222,20 +222,20 @@ export default function AdminMenuPage() {
           </div>
         </div>
 
-        {/* 4-Week Rotating Matrix Table (Inline Edit) - TC-MENU-04 */}
+        {/* Weekly Menu Table */}
         <div className="bg-white border border-slate-200 rounded-convent shadow-sm overflow-hidden">
           <div className="p-4 bg-rose-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h2 className="font-bold text-primary-900 text-sm flex items-center gap-2">
               <Edit3 className="w-4 h-4 text-primary-700" />
-              <span>Ma trận thực đơn tuần {selectedWeek} (chỉnh sửa trực tiếp món ăn)</span>
+              <span>Thực đơn tuần {selectedWeek}</span>
             </h2>
-            <span className="text-xs text-slate-500 font-normal">Chỉnh sửa trực tiếp ô món ăn và bấm &quot;Lưu thay đổi&quot;</span>
+            <span className="text-xs text-slate-500 font-normal">Nhập món ăn vào từng bữa và bấm &quot;Lưu thay đổi&quot;</span>
           </div>
 
           {loading ? (
             <div className="p-12 text-center space-y-3">
               <Loader2 className="w-8 h-8 text-primary-700 animate-spin mx-auto" />
-              <p className="text-xs text-slate-500 font-medium">Đang tải ma trận thực đơn từ hệ thống...</p>
+              <p className="text-xs text-slate-500 font-medium">Đang tải thực đơn tuần từ hệ thống...</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
