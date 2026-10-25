@@ -138,9 +138,7 @@ export default function AdminMenuPage() {
       }
     } catch (err: any) {
       console.error('Lỗi khi gọi API lưu thực đơn:', err);
-      // Dù API gặp trục trặc mạng, dữ liệu vẫn đã lưu an toàn trong LocalStorage máy khách
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3500);
+      setErrorMessage(err?.message || 'Không thể kết nối đến máy chủ để lưu thực đơn.');
     } finally {
       setSaving(false);
     }

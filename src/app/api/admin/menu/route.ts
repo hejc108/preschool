@@ -171,14 +171,26 @@ export async function POST(request: Request) {
       }
     }
 
+    if (!dbSynced) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: dbErrorMessage
+            ? `CSDL Supabase từ chối lưu: ${dbErrorMessage}`
+            : 'Không thể kết nối hoặc lưu dữ liệu vào CSDL Supabase.',
+          db_synced: false,
+          db_error: dbErrorMessage,
+          menu: sanitizedMenu,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      message: dbSynced
-        ? 'Cập nhật thực đơn và đồng bộ CSDL Supabase thành công'
-        : 'Đã lưu vào bộ nhớ tạm hệ thống (CSDL Supabase chưa có bảng weekly_menus)',
+      message: 'Cập nhật thực đơn và đồng bộ CSDL Supabase thành công',
       count: sanitizedMenu.length,
-      db_synced: dbSynced,
-      db_error: dbErrorMessage,
+      db_synced: true,
       menu: sanitizedMenu,
     });
   } catch (err: any) {
