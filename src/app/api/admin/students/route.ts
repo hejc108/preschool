@@ -3,19 +3,28 @@ import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-function getSupabaseClient() {
-  const url =
+const FALLBACK_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
+
+function getSupabaseClient(preferAnon = false) {
+  const rawUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
     'https://yrieuamibqjyaslprdeo.supabase.co';
+  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
 
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    '';
+  const rawKey = preferAnon
+    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+       process.env.SUPABASE_ANON_KEY ||
+       FALLBACK_ANON_KEY)
+    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+       process.env.SUPABASE_ANON_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+       process.env.SUPABASE_PUBLISHABLE_KEY ||
+       FALLBACK_ANON_KEY);
+
+  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
 
   if (!url || !key) return null;
   return createClient(url, key, {
@@ -116,10 +125,22 @@ export async function GET() {
     } catch (e) {}
 
     // 3. Fetch all students joined with classes
-    const { data: studentsData, error } = await supabase
+    let { data: studentsData, error } = await supabase
       .from('students')
       .select('*, classes(id, name)')
       .order('full_name', { ascending: true });
+
+    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
+      const anonClient = getSupabaseClient(true);
+      if (anonClient) {
+        const retry = await anonClient
+          .from('students')
+          .select('*, classes(id, name)')
+          .order('full_name', { ascending: true });
+        studentsData = retry.data;
+        error = retry.error;
+      }
+    }
 
     if (error) {
       console.error('Error querying students from Supabase:', error);
@@ -183,7 +204,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = getSupabaseClient();
+    let supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(
         { success: false, error: 'Database client credentials not configured' },
@@ -225,6 +246,20 @@ export async function POST(request: Request) {
       .insert(insertPayload)
       .select('*, classes(id, name)')
       .single();
+
+    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
+      const anonClient = getSupabaseClient(true);
+      if (anonClient) {
+        supabase = anonClient;
+        const retry = await supabase
+          .from('students')
+          .insert(insertPayload)
+          .select('*, classes(id, name)')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+    }
 
     if (error && error.message?.includes('citizen_id')) {
       const fallbackPayload = { ...insertPayload };
@@ -269,7 +304,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = getSupabaseClient();
+    let supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(
         { success: false, error: 'Database client credentials not configured' },
@@ -332,6 +367,21 @@ export async function PUT(request: Request) {
       .eq('id', id)
       .select('*, classes(id, name)')
       .single();
+
+    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
+      const anonClient = getSupabaseClient(true);
+      if (anonClient) {
+        supabase = anonClient;
+        const retry = await supabase
+          .from('students')
+          .update(updatePayload)
+          .eq('id', id)
+          .select('*, classes(id, name)')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+    }
 
     if (error && error.message?.includes('citizen_id')) {
       const fallbackPayload = { ...updatePayload };

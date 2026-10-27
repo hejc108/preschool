@@ -335,7 +335,7 @@ export default function StudentsDirectoryPage() {
     }
 
     try {
-      await fetch('/api/admin/students', {
+      const res = await fetch('/api/admin/students', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -350,6 +350,20 @@ export default function StudentsDirectoryPage() {
           is_non_regular: updatedStudent.is_non_regular,
         }),
       });
+      if (!res.ok) {
+        await supabase
+          .from('students')
+          .update({
+            citizen_id: normalizedCitizenId,
+            full_name: updatedStudent.full_name,
+            gender: updatedStudent.gender,
+            dob: updatedStudent.dob,
+            allergies: updatedStudent.allergies,
+            status: updatedStudent.status,
+            avatar_url: updatedStudent.avatar_url,
+          })
+          .eq('id', updatedStudent.id);
+      }
     } catch (err) {
       console.error('Error saving student edits:', err);
     }
