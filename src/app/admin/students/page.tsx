@@ -48,7 +48,20 @@ export default function StudentsDirectoryPage() {
         if (res.ok) {
           const json = await res.json();
           if (json.students && json.students.length > 0) {
-            setStudents(json.students as Student[]);
+            let localCitizenMap: Record<string, string | null> = {};
+            try {
+              const rawMap = localStorage.getItem('suongmai_student_citizen_ids_v1');
+              if (rawMap) localCitizenMap = JSON.parse(rawMap);
+            } catch (e) {}
+
+            const mergedStudents = (json.students as Student[]).map((s) => ({
+              ...s,
+              citizen_id:
+                s.citizen_id !== undefined && s.citizen_id !== null
+                  ? s.citizen_id
+                  : (localCitizenMap[s.id] !== undefined ? localCitizenMap[s.id] : null),
+            }));
+            setStudents(mergedStudents);
           }
           if (json.settings) {
             setGlobalAllowNonRegular(Boolean(json.settings.allow_school_admin_view_non_regular));
@@ -268,7 +281,8 @@ export default function StudentsDirectoryPage() {
 
     const matchesSearch =
       s.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.student_code.toLowerCase().includes(search.toLowerCase());
+      s.student_code.toLowerCase().includes(search.toLowerCase()) ||
+      Boolean(s.citizen_id && s.citizen_id.toLowerCase().includes(search.toLowerCase()));
 
     const matchesClass =
       classFilter === 'ALL'
@@ -298,13 +312,26 @@ export default function StudentsDirectoryPage() {
     e.preventDefault();
     if (!editStudent) return;
 
+    const normalizedCitizenId =
+      typeof editStudent.citizen_id === 'string' && editStudent.citizen_id.trim() !== ''
+        ? editStudent.citizen_id.trim()
+        : null;
+    const updatedStudent: Student = { ...editStudent, citizen_id: normalizedCitizenId };
+
+    try {
+      const rawMap = localStorage.getItem('suongmai_student_citizen_ids_v1');
+      const localCitizenMap: Record<string, string | null> = rawMap ? JSON.parse(rawMap) : {};
+      localCitizenMap[updatedStudent.id] = normalizedCitizenId;
+      localStorage.setItem('suongmai_student_citizen_ids_v1', JSON.stringify(localCitizenMap));
+    } catch (e) {}
+
     setStudents((prev) =>
-      prev.map((s) => (s.id === editStudent.id ? editStudent : s))
+      prev.map((s) => (s.id === updatedStudent.id ? updatedStudent : s))
     );
 
-    const index = INITIAL_STUDENTS.findIndex((s) => s.id === editStudent.id);
+    const index = INITIAL_STUDENTS.findIndex((s) => s.id === updatedStudent.id);
     if (index !== -1) {
-      INITIAL_STUDENTS[index] = editStudent;
+      INITIAL_STUDENTS[index] = updatedStudent;
     }
 
     try {
@@ -312,14 +339,15 @@ export default function StudentsDirectoryPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editStudent.id,
-          full_name: editStudent.full_name,
-          gender: editStudent.gender,
-          dob: editStudent.dob,
-          allergies: editStudent.allergies,
-          status: editStudent.status,
-          avatar_url: editStudent.avatar_url,
-          is_non_regular: editStudent.is_non_regular,
+          id: updatedStudent.id,
+          citizen_id: normalizedCitizenId,
+          full_name: updatedStudent.full_name,
+          gender: updatedStudent.gender,
+          dob: updatedStudent.dob,
+          allergies: updatedStudent.allergies,
+          status: updatedStudent.status,
+          avatar_url: updatedStudent.avatar_url,
+          is_non_regular: updatedStudent.is_non_regular,
         }),
       });
     } catch (err) {
@@ -481,6 +509,7 @@ export default function StudentsDirectoryPage() {
             <thead className="bg-sky-50 text-xs font-bold text-sky-900 tracking-wider border-b border-sky-100">
               <tr>
                 <th className="py-3.5 px-4">{t('admin.students.col_child_id')}</th>
+                <th className="py-3.5 px-4 min-w-[120px] whitespace-nowrap">Số định danh</th>
                 <th className="py-3.5 px-4">{t('admin.students.col_full_name')}</th>
                 <th className="py-3.5 px-4">{t('admin.students.col_class')}</th>
                 <th className="py-3.5 px-4">{t('admin.students.col_allergies')}</th>
@@ -491,7 +520,7 @@ export default function StudentsDirectoryPage() {
             <tbody className="divide-y divide-slate-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-500 font-medium">
+                  <td colSpan={7} className="text-center py-12 text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
                       <span>Đang đồng bộ hồ sơ học sinh từ cơ sở dữ liệu...</span>
@@ -500,7 +529,7 @@ export default function StudentsDirectoryPage() {
                 </tr>
               ) : paginatedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-slate-400">
+                  <td colSpan={7} className="text-center py-12 text-slate-400">
                     Không tìm thấy hồ sơ học sinh nào phù hợp với bộ lọc.
                   </td>
                 </tr>
@@ -513,6 +542,9 @@ export default function StudentsDirectoryPage() {
                     <tr key={s.id} className="hover:bg-sky-50/50 transition-colors">
                       <td className="py-4 px-4 font-mono font-bold text-sky-700 text-xs whitespace-nowrap">
                         {s.student_code}
+                      </td>
+                      <td className="py-4 px-4 font-mono text-slate-700 text-xs min-w-[120px] whitespace-nowrap">
+                        {s.citizen_id || '-'}
                       </td>
                       <td className="py-4 px-4 font-bold text-slate-900">
                         <div className="flex items-center gap-3">
@@ -597,7 +629,7 @@ export default function StudentsDirectoryPage() {
 
                           {/* 2. SỬA ICON BUTTON */}
                           <button
-                            onClick={() => setEditStudent({ ...s })}
+                            onClick={() => setEditStudent({ ...s, citizen_id: s.citizen_id || '' })}
                             className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-200 transition-colors shadow-xs"
                             title="Chỉnh sửa thông tin bé"
                           >
@@ -982,6 +1014,17 @@ export default function StudentsDirectoryPage() {
                       value={editStudent.full_name}
                       onChange={(e) => setEditStudent({ ...editStudent, full_name: e.target.value })}
                       className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-800 font-semibold focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Số định danh</label>
+                    <input
+                      type="text"
+                      placeholder="Nhập số định danh của bé"
+                      value={editStudent.citizen_id || ''}
+                      onChange={(e) => setEditStudent({ ...editStudent, citizen_id: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:outline-none focus:border-sky-500"
                     />
                   </div>
 

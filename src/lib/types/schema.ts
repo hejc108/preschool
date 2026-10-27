@@ -68,6 +68,7 @@ export interface AuthorizedPickup {
 export interface Student {
   id: string;
   student_code: string;
+  citizen_id?: string | null;
   full_name: string;
   gender: 'NAM' | 'NỮ';
   dob: string;
