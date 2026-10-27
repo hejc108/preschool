@@ -88,12 +88,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   const cleanEmail = (userEmail || '').toLowerCase().trim();
-  // CHỐT CHẶN 1 (STRICT EQUALITY): Chỉ SUPER_ADMIN hoặc email luciaxuan178@gmail.com / sadmin mới thấy menu nhạy cảm.
+  // CHỐT CHẶN 1 (STRICT EQUALITY): Chỉ SUPER_ADMIN hoặc tài khoản sadmin mới thấy menu nhạy cảm.
   // Khóa chặt: hejc108@gmail.com (Role: ADMIN / STAFF) tuyệt đối KHÔNG ĐƯỢC thấy menu này.
   const isSuperAdmin =
     cleanEmail !== 'hejc108@gmail.com' &&
+    cleanEmail !== 'luciaxuan178@gmail.com' &&
     (userRole === 'SUPER_ADMIN' ||
-      cleanEmail === 'luciaxuan178@gmail.com' ||
       cleanEmail === 'sadmin@suongmai.edu.vn');
 
   const settingsNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = [

@@ -112,12 +112,20 @@ export async function GET() {
     'parent.pending@gmail.com',
   ];
 
-  const sanitized = serverCache.filter((p) => {
-    const clean = (p.email || '').toLowerCase().trim();
-    if (!clean) return false;
-    if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
-    return true;
-  });
+  const sanitized = serverCache
+    .filter((p) => {
+      const clean = (p.email || '').toLowerCase().trim();
+      if (!clean) return false;
+      if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
+      return true;
+    })
+    .map((p) => {
+      const clean = (p.email || '').toLowerCase().trim();
+      if (clean === 'luciaxuan178@gmail.com' && p.role === 'SUPER_ADMIN') {
+        return { ...p, role: 'SCHOOL_ADMIN' as const };
+      }
+      return p;
+    });
 
   globalThis.__SUONGMAI_PROFILES_CACHE__ = sanitized;
   return NextResponse.json({

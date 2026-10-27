@@ -93,8 +93,8 @@ export async function middleware(request: NextRequest) {
 
     const isStrictSuperAdmin =
       emailCookie !== 'hejc108@gmail.com' &&
+      emailCookie !== 'luciaxuan178@gmail.com' &&
       (roleCookie === 'SUPER_ADMIN' ||
-       emailCookie === 'luciaxuan178@gmail.com' ||
        emailCookie === 'sadmin@suongmai.edu.vn');
 
     if (isSensitiveAdminRoute && !isStrictSuperAdmin) {

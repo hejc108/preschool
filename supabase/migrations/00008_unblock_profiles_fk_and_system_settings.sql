@@ -90,7 +90,8 @@ BEGIN
                 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'
             ),
             CASE 
-                WHEN incoming_email IN ('luciaxuan178@gmail.com', 'sadmin@suongmai.edu.vn') THEN 'SUPER_ADMIN'
+                WHEN incoming_email = 'sadmin@suongmai.edu.vn' THEN 'SUPER_ADMIN'
+                WHEN incoming_email = 'luciaxuan178@gmail.com' THEN 'SCHOOL_ADMIN'
                 ELSE 'GUEST'
             END,
             CASE 

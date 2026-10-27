@@ -189,8 +189,8 @@ export default function UserApprovalsPage() {
   const cleanEmail = currentUserEmail.toLowerCase().trim();
   const isSuperAdmin =
     cleanEmail !== 'hejc108@gmail.com' &&
+    cleanEmail !== 'luciaxuan178@gmail.com' &&
     (currentUserRole === 'SUPER_ADMIN' ||
-      cleanEmail === 'luciaxuan178@gmail.com' ||
       cleanEmail === 'sadmin@suongmai.edu.vn');
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {

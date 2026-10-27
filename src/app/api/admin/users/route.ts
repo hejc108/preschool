@@ -46,8 +46,8 @@ export async function GET(request: Request) {
 
     const isSuperAdmin =
       requesterEmail !== 'hejc108@gmail.com' &&
+      requesterEmail !== 'luciaxuan178@gmail.com' &&
       (requesterRole === 'SUPER_ADMIN' ||
-        requesterEmail === 'luciaxuan178@gmail.com' ||
         requesterEmail === 'sadmin@suongmai.edu.vn');
 
     // 2. Read global system settings
@@ -100,17 +100,29 @@ export async function GET(request: Request) {
     });
 
     // Merge live DB data
-    dbProfiles.forEach((dbP: any) => {
+    for (const dbP of dbProfiles) {
       const email = (dbP.email || '').toLowerCase().trim();
-      if (!email) return;
+      if (!email) continue;
 
       const existing = profileMap.get(email) || {};
+      let resolvedRole = dbP.role || existing.role || 'GUEST';
+      if (email === 'luciaxuan178@gmail.com' && dbP.role === 'SUPER_ADMIN') {
+        resolvedRole = 'SCHOOL_ADMIN';
+        if (supabase) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({ role: 'SCHOOL_ADMIN', updated_at: new Date().toISOString() })
+              .eq('email', 'luciaxuan178@gmail.com');
+          } catch (e) {}
+        }
+      }
       profileMap.set(email, {
         ...existing,
         ...dbP,
         id: dbP.id || existing.id,
         full_name: dbP.full_name || existing.full_name,
-        role: dbP.role || existing.role || 'GUEST',
+        role: resolvedRole,
         phone: dbP.phone || existing.phone,
         avatar_url: dbP.avatar_url || existing.avatar_url,
         approval_status: dbP.approval_status || existing.approval_status || 'PENDING',
@@ -118,7 +130,7 @@ export async function GET(request: Request) {
         is_temporary: dbP.is_temporary !== undefined ? Boolean(dbP.is_temporary) : Boolean(existing.is_temporary),
         created_at: dbP.created_at || existing.created_at,
       });
-    });
+    }
 
     const allUsers = Array.from(profileMap.values());
 

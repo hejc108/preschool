@@ -62,8 +62,8 @@ export default function AdminEmailSettingsPage() {
       const cleanEmail = email.toLowerCase().trim();
       const isSuper =
         cleanEmail !== 'hejc108@gmail.com' &&
+        cleanEmail !== 'luciaxuan178@gmail.com' &&
         (role === 'SUPER_ADMIN' ||
-          cleanEmail === 'luciaxuan178@gmail.com' ||
           cleanEmail === 'sadmin@suongmai.edu.vn');
 
       setIsSuperAdmin(isSuper);

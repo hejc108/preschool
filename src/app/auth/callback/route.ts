@@ -145,14 +145,19 @@ export async function GET(request: Request) {
         .eq('email', cleanEmail)
         .maybeSingle();
 
-      const isSuper = cleanEmail === 'luciaxuan178@gmail.com' || cleanEmail === 'sadmin@suongmai.edu.vn';
+      const isSuper = cleanEmail === 'sadmin@suongmai.edu.vn';
+      const isPrincipal = cleanEmail === 'luciaxuan178@gmail.com';
+      const resolvedExistingRole =
+        isPrincipal && existingDbProfile?.role === 'SUPER_ADMIN'
+          ? 'SCHOOL_ADMIN'
+          : existingDbProfile?.role;
       const profilePayload: any = {
         id: existingDbProfile?.id || userId || `u-gauth-${Date.now()}`,
         email: cleanEmail,
         full_name: resolvedName,
         avatar_url: resolvedAvatar,
-        role: existingDbProfile ? existingDbProfile.role : (isSuper ? 'SUPER_ADMIN' : 'GUEST'),
-        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSuper ? 'ACTIVE' : 'PENDING'),
+        role: resolvedExistingRole || (isSuper ? 'SUPER_ADMIN' : isPrincipal ? 'SCHOOL_ADMIN' : 'GUEST'),
+        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSuper || isPrincipal ? 'ACTIVE' : 'PENDING'),
         updated_at: new Date().toISOString(),
       };
 

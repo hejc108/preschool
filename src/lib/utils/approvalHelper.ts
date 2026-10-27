@@ -70,12 +70,20 @@ const DEPRECATED_MOCK_EMAILS = [
 ];
 
 export function sanitizeProfiles(list: Profile[]): Profile[] {
-  return list.filter((p) => {
-    const clean = (p.email || '').toLowerCase().trim();
-    if (!clean) return false;
-    if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
-    return true;
-  });
+  return list
+    .filter((p) => {
+      const clean = (p.email || '').toLowerCase().trim();
+      if (!clean) return false;
+      if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
+      return true;
+    })
+    .map((p) => {
+      const clean = (p.email || '').toLowerCase().trim();
+      if (clean === 'luciaxuan178@gmail.com' && p.role === 'SUPER_ADMIN') {
+        return { ...p, role: 'SCHOOL_ADMIN' };
+      }
+      return p;
+    });
 }
 
 /**

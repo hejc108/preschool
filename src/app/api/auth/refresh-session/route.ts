@@ -79,7 +79,10 @@ export async function POST(request: Request) {
     }
 
     if (profile.approval_status === 'ACTIVE') {
-      const targetRole = profile.role || 'PARENT';
+      const targetRole =
+        email === 'luciaxuan178@gmail.com' && profile.role === 'SUPER_ADMIN'
+          ? 'SCHOOL_ADMIN'
+          : (profile.role || 'PARENT');
       let redirectUrl = '/parent';
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
         redirectUrl = '/admin/dashboard';

@@ -170,7 +170,7 @@ async function runImport() {
     const roleTitle = cleanStr(row[4]) || 'Giáo viên';
     
     let systemRole = 'TEACHER';
-    if (roleTitle.includes('Hiệu Trưởng')) systemRole = 'SUPER_ADMIN';
+    if (roleTitle.includes('Hiệu Trưởng')) systemRole = 'SCHOOL_ADMIN';
     else if (roleTitle.includes('Phó Hiệu')) systemRole = 'ADMIN';
     else if (roleTitle.includes('Y tế') || roleTitle.includes('Kế Toán') || roleTitle.includes('Cấp dưỡng')) systemRole = 'STAFF';
 

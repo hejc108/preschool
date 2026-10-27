@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     const isStrictSuperAdmin =
       session === 'active' &&
       email !== 'hejc108@gmail.com' &&
-      (role === 'SUPER_ADMIN' || email === 'sadmin@suongmai.edu.vn' || email === 'luciaxuan178@gmail.com');
+      email !== 'luciaxuan178@gmail.com' &&
+      (role === 'SUPER_ADMIN' || email === 'sadmin@suongmai.edu.vn');
 
     if (!isStrictSuperAdmin) {
       return NextResponse.json(

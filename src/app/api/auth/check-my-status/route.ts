@@ -72,7 +72,10 @@ export async function GET(request: Request) {
     }
 
     const isApproved = profile.approval_status === 'ACTIVE';
-    const role = profile.role || 'PARENT';
+    const role =
+      email === 'luciaxuan178@gmail.com' && profile.role === 'SUPER_ADMIN'
+        ? 'SCHOOL_ADMIN'
+        : (profile.role || 'PARENT');
 
     if (isApproved) {
       let redirectUrl = '/parent';
