@@ -154,31 +154,47 @@ export function saveStoredProfiles(profiles: Profile[]): void {
   } catch (e) {}
 }
 
+let memoryRelationsCache: ParentStudentRelation[] = [...INITIAL_MOCK_RELATIONS];
+
 /**
- * Get parent-student relations
+ * Get parent-student relations (synced from Supabase DB)
  */
 export function getStoredRelations(): ParentStudentRelation[] {
-  if (typeof window === 'undefined') return INITIAL_MOCK_RELATIONS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_RELATIONS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_RELATIONS, JSON.stringify(INITIAL_MOCK_RELATIONS));
-      return INITIAL_MOCK_RELATIONS;
-    }
-    return JSON.parse(raw);
-  } catch (e) {
-    return INITIAL_MOCK_RELATIONS;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY_RELATIONS);
+    } catch (e) {}
+  }
+  return memoryRelationsCache;
+}
+
+/**
+ * Update in-memory parent-student relations cache
+ */
+export function saveStoredRelations(relations: ParentStudentRelation[]): void {
+  memoryRelationsCache = Array.isArray(relations) ? [...relations] : [];
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY_RELATIONS);
+    } catch (e) {}
   }
 }
 
 /**
- * Save parent-student relations
+ * Fetch live parent-student relations directly from Supabase via /api/users/approvals
  */
-export function saveStoredRelations(relations: ParentStudentRelation[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_RELATIONS, JSON.stringify(relations));
-  } catch (e) {}
+export async function fetchLiveRelationsFromSupabase(): Promise<ParentStudentRelation[]> {
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/users/approvals', { cache: 'no-store' });
+      const json = await res.json();
+      if (Array.isArray(json?.relations)) {
+        saveStoredRelations(json.relations);
+        return json.relations;
+      }
+    } catch (e) {}
+  }
+  return memoryRelationsCache;
 }
 
 /**
@@ -350,6 +366,9 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       try {
         const res = await fetch('/api/users/approvals', { cache: 'no-store' });
         const json = await res.json();
+        if (Array.isArray(json?.relations)) {
+          saveStoredRelations(json.relations);
+        }
         const list = Array.isArray(json)
           ? json
           : (json.profiles || json.data || json.users || json.pendingProfiles || []);
@@ -586,7 +605,7 @@ export async function approveStaffUser(email: string): Promise<Profile | null> {
 }
 
 /**
- * Approve user as Parent and link 1 or multiple students
+ * Approve user as Parent and sync linked students directly in Supabase DB
  */
 export async function approveParentUser(email: string, studentIds: string[]): Promise<{
   profile: Profile | null;
@@ -609,6 +628,8 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
     profile = profiles[idx];
   }
 
+  let serverRelations: ParentStudentRelation[] | null = null;
+
   if (typeof window !== 'undefined') {
     const res = await fetch('/api/users/approvals', {
       method: 'PUT',
@@ -617,11 +638,19 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
         email: cleanEmail,
         role: 'PARENT',
         approval_status: 'ACTIVE',
+        student_ids: studentIds,
       }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.success) {
-      throw new Error(json.message || json.error || 'Cập nhật CSDL thất bại. Kiểm tra SUPABASE_SERVICE_ROLE_KEY trên server.');
+      throw new Error(json.message || json.error || 'Cập nhật CSDL thất bại.');
+    }
+    if (Array.isArray(json.relations)) {
+      serverRelations = json.relations;
+      saveStoredRelations(json.relations);
+    }
+    if (json.profile && idx !== -1) {
+      profiles[idx] = { ...profiles[idx], ...json.profile };
     }
   }
 
@@ -643,40 +672,30 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
 
   saveStoredProfiles(profiles);
 
-  const relations = getStoredRelations();
-  const addedRelations: ParentStudentRelation[] = [];
-
-  for (const sId of studentIds) {
-    let resolvedName = 'Học sinh Sương Mai';
-    try {
-      const { data: st } = await supabase.from('students').select('full_name').eq('id', sId).single();
-      if (st?.full_name) resolvedName = st.full_name;
-    } catch (e) {}
-
-    const relIdx = relations.findIndex(
-      (r) => r.parent_email?.toLowerCase().trim() === cleanEmail && r.student_id === sId
+  if (serverRelations) {
+    const parentSpecific = serverRelations.filter(
+      (r) => r.parent_email?.toLowerCase().trim() === cleanEmail
     );
-
-    if (relIdx !== -1 && relations[relIdx]) {
-      relations[relIdx].is_verified = true;
-      addedRelations.push(relations[relIdx]);
-    } else {
-      const newRel: ParentStudentRelation = {
-        id: `rel-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        parent_id: profile.id,
-        parent_email: cleanEmail,
-        student_id: sId,
-        student_name: resolvedName,
-        is_verified: true,
-        created_at: new Date().toISOString(),
-      };
-      relations.push(newRel);
-      addedRelations.push(newRel);
-    }
+    return { profile, relations: parentSpecific };
   }
 
-  saveStoredRelations(relations);
-  return { profile, relations: addedRelations };
+  // Fallback sync if running outside browser
+  const otherRelations = getStoredRelations().filter(
+    (r) => r.parent_email?.toLowerCase().trim() !== cleanEmail
+  );
+  const syncedForParent: ParentStudentRelation[] = studentIds.map((sId) => ({
+    id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    parent_id: profile.id,
+    parent_email: cleanEmail,
+    student_id: sId,
+    student_name: 'Học sinh Sương Mai',
+    is_verified: true,
+    created_at: new Date().toISOString(),
+  }));
+
+  const combined = [...otherRelations, ...syncedForParent];
+  saveStoredRelations(combined);
+  return { profile, relations: syncedForParent };
 }
 
 /**

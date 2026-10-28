@@ -28,6 +28,7 @@ import { INITIAL_STUDENTS, INITIAL_CLASSES, supabase } from '@/lib/supabase/clie
 import {
   getStoredProfiles,
   getStoredRelations,
+  saveStoredRelations,
   approveTeacherUser,
   approveStaffUser,
   approveParentUser,
@@ -38,10 +39,21 @@ import {
 } from '@/lib/utils/approvalHelper';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
+function normalizeVietnamese(str: string): string {
+  return (str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
 export default function UserApprovalsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [relations, setRelations] = useState<ParentStudentRelation[]>([]);
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
   const [classes] = useState(INITIAL_CLASSES);
 
   const [search, setSearch] = useState('');
@@ -57,9 +69,45 @@ export default function UserApprovalsPage() {
   // Multi-student selection modal for parent linking
   const [parentModalUser, setParentModalUser] = useState<Profile | null>(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentSearch, setStudentSearch] = useState<string>('');
+  const [isSubmittingParent, setIsSubmittingParent] = useState<boolean>(false);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [debugInfo, setDebugInfo] = useState<{ hasServiceRoleKey?: boolean; dbProfilesCount?: number; dbError?: string | null } | null>(null);
+
+  const loadStudents = useCallback(async () => {
+    setLoadingStudents(true);
+    try {
+      const res = await fetch('/api/admin/students', { cache: 'no-store' });
+      const json = await res.json();
+      const list: Student[] = Array.isArray(json)
+        ? json
+        : (json.students || json.data || []);
+
+      if (Array.isArray(list) && list.length > 0) {
+        setStudents(list);
+        setLoadingStudents(false);
+        return;
+      }
+
+      // Fallback query if API route returns empty
+      const { data, error } = await supabase
+        .from('students')
+        .select('*, classes(id, name)')
+        .order('full_name', { ascending: true });
+      if (data && !error && data.length > 0) {
+        const mapped = data.map((row: any) => ({
+          ...row,
+          class_name: row.classes?.name || row.class_name || 'Mầm',
+        })) as Student[];
+        setStudents(mapped);
+      }
+    } catch (e) {
+      console.error('[loadStudents] Error loading students:', e);
+    } finally {
+      setLoadingStudents(false);
+    }
+  }, []);
 
   const refreshData = useCallback(async () => {
     try {
@@ -68,13 +116,19 @@ export default function UserApprovalsPage() {
       if (json.debug) {
         setDebugInfo(json.debug);
       }
+      if (Array.isArray(json.relations)) {
+        saveStoredRelations(json.relations);
+        setRelations(json.relations);
+      } else {
+        setRelations(getStoredRelations());
+      }
+
       const rawList = Array.isArray(json)
         ? json
         : (json.profiles || json.data || json.users || json.pendingProfiles || []);
 
       if (rawList && rawList.length > 0) {
         setProfiles(rawList);
-        setRelations(getStoredRelations());
 
         const initialRoles: Record<string, UserRole> = {};
         const initialClasses: Record<string, string> = {};
@@ -142,21 +196,8 @@ export default function UserApprovalsPage() {
   }, [classes]);
 
   useEffect(() => {
-    async function loadStudents() {
-      try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .order('full_name', { ascending: true });
-        if (data && !error && data.length > 0) {
-          setStudents(data as Student[]);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
     loadStudents();
-  }, []);
+  }, [loadStudents]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -262,12 +303,16 @@ export default function UserApprovalsPage() {
 
   const handleOpenParentModal = (user: Profile) => {
     setParentModalUser(user);
+    setStudentSearch('');
+    if (students.length === 0) {
+      loadStudents();
+    }
     // Find existing relations for this parent email
     const existing = relations
-      .filter((r) => r.parent_email.toLowerCase().trim() === user.email.toLowerCase().trim())
+      .filter((r) => r.parent_email.toLowerCase().trim() === user.email.toLowerCase().trim() && r.is_verified)
       .map((r) => r.student_id);
 
-    setSelectedStudentIds(existing.length > 0 ? existing : (students[0]?.id ? [students[0].id] : []));
+    setSelectedStudentIds(existing);
   };
 
   const handleToggleStudentSelection = (studentId: string) => {
@@ -278,18 +323,32 @@ export default function UserApprovalsPage() {
 
   const handleConfirmParentApproval = async () => {
     if (!parentModalUser) return;
-    if (selectedStudentIds.length === 0) {
+
+    const existingCount = relations.filter(
+      (r) => r.parent_email.toLowerCase().trim() === parentModalUser.email.toLowerCase().trim() && r.is_verified
+    ).length;
+
+    if (selectedStudentIds.length === 0 && existingCount === 0) {
       showToast('Vui lòng chọn ít nhất 1 học sinh để gán cho phụ huynh!', 'error');
       return;
     }
 
+    setIsSubmittingParent(true);
     try {
       await approveParentUser(parentModalUser.email, selectedStudentIds);
       await refreshData();
       setParentModalUser(null);
-      showToast(`Đã duyệt phụ huynh ${parentModalUser.full_name} và liên kết ${selectedStudentIds.length} bé thành công!`);
+      if (selectedStudentIds.length > 0) {
+        showToast(
+          `Đã duyệt phụ huynh ${parentModalUser.full_name} và đồng bộ liên kết ${selectedStudentIds.length} bé trên Supabase!`
+        );
+      } else {
+        showToast(`Đã gỡ toàn bộ hồ sơ con liên kết của phụ huynh ${parentModalUser.full_name}!`);
+      }
     } catch (err: any) {
       showToast(err.message || 'Phê duyệt Phụ huynh thất bại!', 'error');
+    } finally {
+      setIsSubmittingParent(false);
     }
   };
 
@@ -551,17 +610,50 @@ export default function UserApprovalsPage() {
                             <option value="SCHOOL_ADMIN">Quản trị trường (Admin)</option>
                           </select>
 
-                          {/* Role detail badge */}
+                          {/* Role detail badge: Badge [Tên bé - Lớp] + Nút [✏️ Sửa con liên kết] */}
                           {selectedRole === 'PARENT' && (
-                            <p className="text-[11px] text-slate-500">
+                            <div className="space-y-1.5 pt-0.5">
                               {userRelations.length > 0 ? (
-                                <span className="text-emerald-700 font-medium">
-                                  Đã liên kết {userRelations.length} bé ({userRelations.map((r) => r.student_name).join(', ')})
-                                </span>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {userRelations.map((r) => {
+                                    const matchedStudent = students.find((s) => s.id === r.student_id);
+                                    const childName = matchedStudent?.full_name || r.student_name || 'Học sinh';
+                                    const childClass = matchedStudent?.class_name || r.class_name || 'Mầm';
+                                    return (
+                                      <span
+                                        key={r.id || r.student_id}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
+                                      >
+                                        <Baby className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span>
+                                          {childName} - Lớp {childClass}
+                                        </span>
+                                      </span>
+                                    );
+                                  })}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenParentModal(p)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-all cursor-pointer shadow-2xs"
+                                  >
+                                    <span>✏️ Sửa con liên kết</span>
+                                  </button>
+                                </div>
                               ) : (
-                                <span className="text-amber-700 font-medium">(Chưa liên kết bé nào)</span>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                    Chưa liên kết bé nào
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenParentModal(p)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-all cursor-pointer"
+                                  >
+                                    <span>🔗 Chọn bé</span>
+                                  </button>
+                                </div>
                               )}
-                            </p>
+                            </div>
                           )}
 
                           {selectedRole === 'TEACHER' && (
@@ -612,14 +704,16 @@ export default function UserApprovalsPage() {
                               <>
                                 <button
                                   onClick={() => handleOpenParentModal(p)}
-                                  className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                                  className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                 >
                                   <Baby className="w-3.5 h-3.5 text-sky-600" />
-                                  <span>[🔗 Gán hồ sơ con]</span>
+                                  <span>
+                                    {userRelations.length > 0 ? '[✏️ Sửa con liên kết]' : '[🔗 Gán hồ sơ con]'}
+                                  </span>
                                 </button>
                                 <button
                                   onClick={() => handleOpenParentModal(p)}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                 >
                                   <Check className="w-3.5 h-3.5" />
                                   <span>[✓ Duyệt]</span>
@@ -714,7 +808,7 @@ export default function UserApprovalsPage() {
               </div>
               <button
                 onClick={() => setParentModalUser(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -728,66 +822,156 @@ export default function UserApprovalsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Danh sách học sinh đang theo học tại trường (Tích chọn):
-                </label>
-                <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
-                  {students.map((s) => {
-                    const isChecked = selectedStudentIds.includes(s.id);
-                    return (
-                      <div
-                        key={s.id}
-                        onClick={() => handleToggleStudentSelection(s.id)}
-                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                          isChecked
-                            ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-400'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {}}
-                            className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500"
-                          />
-                          <img
-                            src={s.avatar_url || 'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80'}
-                            alt={s.full_name}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200"
-                          />
-                          <div>
-                            <p className="font-bold text-slate-900 text-xs">{s.full_name}</p>
-                            <p className="text-[11px] text-slate-500 font-mono">
-                              Mã: {s.student_code} • Lớp {s.class_name || 'Mầm'}
-                            </p>
-                          </div>
-                        </div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Danh sách học sinh đang theo học tại trường (Tích chọn):
+                  </label>
+                  <span className="text-[11px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg border border-sky-200">
+                    Đã chọn: {selectedStudentIds.length} / {students.length} bé
+                  </span>
+                </div>
 
-                        {isChecked && (
-                          <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md">
-                            Đã chọn
+                {/* Ô tìm kiếm nhanh học sinh */}
+                <div className="relative mb-2.5">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    placeholder="Tìm tên bé, mã học sinh (SM-2026-...) hoặc lớp..."
+                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl py-2 pl-9 pr-8 text-xs text-slate-800 placeholder-slate-400 focus:outline-none shadow-2xs transition-colors"
+                  />
+                  {studentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setStudentSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Hiển thị nhanh các bé đang được tích chọn */}
+                {selectedStudentIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2.5 p-2 bg-sky-50/70 border border-sky-200 rounded-xl">
+                    {selectedStudentIds.map((id) => {
+                      const st = students.find((s) => s.id === id);
+                      const fallbackRel = relations.find((r) => r.student_id === id);
+                      const name = st?.full_name || fallbackRel?.student_name || 'Học sinh';
+                      const cls = st?.class_name || fallbackRel?.class_name || 'Mầm';
+                      return (
+                        <span
+                          key={id}
+                          onClick={() => handleToggleStudentSelection(id)}
+                          title="Nhấn để bỏ chọn bé này"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-sky-600 text-white cursor-pointer hover:bg-rose-600 transition-colors"
+                        >
+                          <span>
+                            {name} - Lớp {cls}
                           </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                          <X className="w-3 h-3" />
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50/50">
+                  {loadingStudents ? (
+                    <div className="py-8 text-center text-xs text-slate-500 font-medium">
+                      Đang tải danh sách 191 học sinh từ hệ thống...
+                    </div>
+                  ) : (
+                    (() => {
+                      const q = normalizeVietnamese(studentSearch);
+                      const filteredModalStudents = students.filter((s) => {
+                        if (!q) return true;
+                        const nameMatch = normalizeVietnamese(s.full_name).includes(q);
+                        const codeMatch = normalizeVietnamese(s.student_code).includes(q);
+                        const classMatch = normalizeVietnamese(s.class_name || '').includes(q);
+                        const citizenMatch = normalizeVietnamese(s.citizen_id || '').includes(q);
+                        return nameMatch || codeMatch || classMatch || citizenMatch;
+                      });
+
+                      if (filteredModalStudents.length === 0) {
+                        return (
+                          <div className="py-8 text-center text-xs text-slate-400">
+                            Không tìm thấy học sinh nào khớp với từ khóa &quot;{studentSearch}&quot;.
+                          </div>
+                        );
+                      }
+
+                      return filteredModalStudents.map((s) => {
+                        const isChecked = selectedStudentIds.includes(s.id);
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => handleToggleStudentSelection(s.id)}
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-400'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                              />
+                              <img
+                                src={
+                                  s.avatar_url ||
+                                  'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80'
+                                }
+                                alt={s.full_name}
+                                className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
+                              />
+                              <div>
+                                <p className="font-bold text-slate-900 text-xs">
+                                  {s.full_name} - Lớp {s.class_name || 'Mầm'}
+                                </p>
+                                <p className="text-[11px] text-slate-500 font-mono">
+                                  Mã: {s.student_code}
+                                  {s.citizen_id ? ` • Số ĐD: ${s.citizen_id}` : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            {isChecked && (
+                              <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md shrink-0">
+                                Đã chọn
+                              </span>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()
+                  )}
                 </div>
               </div>
 
               <div className="pt-2 flex items-center gap-3">
                 <button
+                  disabled={isSubmittingParent}
                   onClick={() => setParentModalUser(null)}
-                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all"
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
+                  disabled={isSubmittingParent}
                   onClick={handleConfirmParentApproval}
-                  className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>[✓ Xác nhận & Duyệt Phụ huynh]</span>
+                  <span>
+                    {isSubmittingParent
+                      ? 'Đang lưu vào Supabase...'
+                      : '[✓ Xác nhận & Duyệt Phụ huynh]'}
+                  </span>
                 </button>
               </div>
             </div>

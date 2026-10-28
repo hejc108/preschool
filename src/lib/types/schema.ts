@@ -22,6 +22,9 @@ export interface ParentStudentRelation {
   parent_email: string;
   student_id: string;
   student_name?: string;
+  student_code?: string;
+  class_name?: string;
+  relationship?: string;
   is_verified: boolean;
   created_at?: string;
 }

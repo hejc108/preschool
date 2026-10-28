@@ -58,8 +58,9 @@ export default function ParentPwaPage() {
   const [wrongRoleNotice, setWrongRoleNotice] = useState<boolean>(false);
   const [isTeacherUser, setIsTeacherUser] = useState<boolean>(false);
   const [userRole, setUserRole] = useState<string>('');
+  const [liveRelations, setLiveRelations] = useState<ParentStudentRelation[]>([]);
 
-  // Read logged in parent email and relations
+  // Read logged in parent email and relations from Supabase
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -70,12 +71,12 @@ export default function ParentPwaPage() {
       let emailFound = '';
       let roleFound = '';
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-      if (match) emailFound = decodeURIComponent(match[1]);
+      if (match) emailFound = decodeURIComponent(match[1]).split('.')[0] || decodeURIComponent(match[1]);
 
       const roleMatch = document.cookie.match(/suongmai_user_role=([^;]+)/);
-      if (roleMatch) roleFound = decodeURIComponent(roleMatch[1]);
+      if (roleMatch) roleFound = decodeURIComponent(roleMatch[1]).split('.')[0] || decodeURIComponent(roleMatch[1]);
 
-      if (!emailFound) {
+      if (!emailFound || !emailFound.includes('@')) {
         const saved = localStorage.getItem('suongmai_auth_user');
         if (saved) {
           try {
@@ -94,16 +95,20 @@ export default function ParentPwaPage() {
       if (emailFound) {
         setParentEmail(emailFound);
         setIsAuthenticated(true);
-        const rels = getStoredRelations().filter(
-          (r) => (r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim()) && r.is_verified
-        );
-        if (rels.length === 0) {
-          setActiveParentIndex(0); // Show empty state if user has 0 linked kids
-        } else if (rels.length === 1) {
-          setActiveParentIndex(1);
-        } else {
-          setActiveParentIndex(2);
-        }
+        fetchLiveProfilesFromSupabase().then(() => {
+          const allRels = getStoredRelations();
+          setLiveRelations(allRels);
+          const rels = allRels.filter(
+            (r) => r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim() && r.is_verified
+          );
+          if (rels.length === 0) {
+            setActiveParentIndex(0);
+          } else if (rels.length === 1) {
+            setActiveParentIndex(1);
+          } else {
+            setActiveParentIndex(2);
+          }
+        });
       } else {
         setIsAuthenticated(false);
       }
@@ -143,11 +148,15 @@ export default function ParentPwaPage() {
       await fetchLiveProfilesFromSupabase();
       if (typeof window !== 'undefined') {
         const email = parentEmail || 'parent@gmail.com';
-        const rels = getStoredRelations().filter(
-          (r) => (r.parent_email.toLowerCase().trim() === email.toLowerCase().trim()) && r.is_verified
+        const allRels = getStoredRelations();
+        setLiveRelations(allRels);
+        const rels = allRels.filter(
+          (r) => r.parent_email.toLowerCase().trim() === email.toLowerCase().trim() && r.is_verified
         );
         if (rels.length > 0) {
           setActiveParentIndex(rels.length >= 2 ? 2 : 1);
+        } else {
+          setActiveParentIndex(0);
         }
       }
     } catch (e) {
@@ -162,6 +171,15 @@ export default function ParentPwaPage() {
   React.useEffect(() => {
     async function loadRealStudents() {
       try {
+        const res = await fetch('/api/admin/students', { cache: 'no-store' });
+        const json = await res.json();
+        const list: Student[] = Array.isArray(json)
+          ? json
+          : (json.students || json.data || []);
+        if (Array.isArray(list) && list.length > 0) {
+          setRealStudents(list);
+          return;
+        }
         const { data, error } = await supabase
           .from('students')
           .select('*')
@@ -179,8 +197,23 @@ export default function ParentPwaPage() {
   const parentChildren: ParentChild[] = React.useMemo(() => {
     if (activeParentIndex === 0) return [];
 
-    const targetSlice = realStudents.slice(0, activeParentIndex);
-    return targetSlice.map((s) => ({
+    const cleanParentEmail = (parentEmail || '').toLowerCase().trim();
+    const myRels = cleanParentEmail
+      ? liveRelations.filter(
+          (r) => r.parent_email?.toLowerCase().trim() === cleanParentEmail && r.is_verified
+        )
+      : [];
+
+    let targetStudents: Student[] = [];
+    if (myRels.length > 0) {
+      const linkedIds = new Set(myRels.map((r) => r.student_id));
+      targetStudents = realStudents.filter((s) => linkedIds.has(s.id));
+    }
+    if (targetStudents.length === 0) {
+      targetStudents = realStudents.slice(0, activeParentIndex);
+    }
+
+    return targetStudents.map((s) => ({
       id: s.id,
       full_name: s.full_name,
       class_name: s.class_name || 'Mầm',
@@ -200,7 +233,7 @@ export default function ParentPwaPage() {
         s.avatar_url ||
         'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80',
     }));
-  }, [activeParentIndex, realStudents]);
+  }, [activeParentIndex, realStudents, parentEmail, liveRelations]);
 
   // Selected Child State
   const [selectedChildId, setSelectedChildId] = useState<string>('');
