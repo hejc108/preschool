@@ -250,12 +250,13 @@ export default function TeacherPwaPage() {
   const [selectedIntakeLevel, setSelectedIntakeLevel] = useState<'HALF' | 'REFUSED'>('HALF');
   const [selectedTags, setSelectedTags] = useState<string[]>(['#Biếng_ăn']);
 
-  // Fetch live students for the assigned active class from Supabase
+  // Fetch live students for the assigned active class from Supabase & merge today's attendance/activities
   useEffect(() => {
     async function fetchClassStudents() {
       if (!activeClass) return;
       setLoadingStudents(true);
       try {
+        let baseStudents: any[] = [];
         const { data, error } = await supabase
           .from('students')
           .select('*')
@@ -263,44 +264,64 @@ export default function TeacherPwaPage() {
           .order('full_name', { ascending: true });
 
         if (data && !error && data.length > 0) {
-          const mapped = data.map((s: any) => ({
-            ...s,
-            attendance: 'PRESENT' as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
-            checkedOut: false,
-            checkoutReason: '',
-          }));
-          setStudents(mapped);
-          setNewMedStudentId(mapped[0]?.id || '');
-          setSelectedStudentForMeal(mapped[0]?.id || '');
+          baseStudents = data;
         } else {
           // Fallback via /api/admin/students
           const res = await fetch('/api/admin/students');
           if (res.ok) {
             const json = await res.json();
             if (json.students) {
-              const matched = json.students.filter(
+              baseStudents = json.students.filter(
                 (s: any) =>
                   s.class_id === activeClass.id ||
                   s.class_name?.toLowerCase().trim() === activeClass.name.toLowerCase().trim()
               );
-              if (matched.length > 0) {
-                const mapped = matched.map((s: any) => ({
-                  ...s,
-                  attendance: 'PRESENT' as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
-                  checkedOut: false,
-                  checkoutReason: '',
-                }));
-                setStudents(mapped);
-                setNewMedStudentId(mapped[0]?.id || '');
-                setSelectedStudentForMeal(mapped[0]?.id || '');
-              } else {
-                setStudents([]);
-              }
             }
-          } else {
-            setStudents([]);
           }
         }
+
+        if (baseStudents.length === 0) {
+          setStudents([]);
+          return;
+        }
+
+        // Fetch today's real attendance, medications, and meal exceptions from Supabase
+        const studentIds = baseStudents.map((s) => s.id).join(',');
+        let attendanceMap = new Map<string, any>();
+        try {
+          const actRes = await fetch(`/api/daily-activities?student_ids=${encodeURIComponent(studentIds)}`);
+          if (actRes.ok) {
+            const actJson = await actRes.json();
+            if (Array.isArray(actJson.attendance)) {
+              actJson.attendance.forEach((a: any) => attendanceMap.set(a.student_id, a));
+            }
+            if (Array.isArray(actJson.medications) && actJson.medications.length > 0) {
+              setMedications(actJson.medications);
+            }
+            if (Array.isArray(actJson.meal_exceptions) && actJson.meal_exceptions.length > 0) {
+              setMealExceptions(actJson.meal_exceptions);
+            }
+          }
+        } catch (err) {
+          console.warn('Could not load daily activities for class:', err);
+        }
+
+        const mapped = baseStudents.map((s: any) => {
+          const att = attendanceMap.get(s.id);
+          let uiStatus: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT' = 'PRESENT';
+          if (att?.status === 'PRESENT_LATE') uiStatus = 'PRESENT_LATE';
+          else if (att?.status === 'ABSENT_EXCUSED' || att?.status === 'ABSENT_UNEXCUSED') uiStatus = 'ABSENT';
+          return {
+            ...s,
+            attendance: uiStatus,
+            checkedOut: Boolean(att?.checked_out_at),
+            checkoutReason: att?.checkout_reason || '',
+          };
+        });
+
+        setStudents(mapped);
+        setNewMedStudentId(mapped[0]?.id || '');
+        setSelectedStudentForMeal(mapped[0]?.id || '');
       } catch (e) {
         console.error('Error fetching class students:', e);
       } finally {
@@ -404,16 +425,36 @@ export default function TeacherPwaPage() {
 
   // --- ACTIONS & HANDLERS ---
 
+  const syncAttendanceToDb = async (records: Array<{ student_id: string; status: string }>) => {
+    try {
+      await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPSERT_ATTENDANCE',
+          records,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to sync attendance to Supabase:', e);
+    }
+  };
+
   const handleSelectAllPresent = () => {
     if (isKitchenLocked) return;
-    setStudents((prev) =>
-      prev.map((s) => {
-        const hasAbsence = absences.some((a) => a.student_id === s.id && a.status === 'SUBMITTED_VALID');
-        return {
-          ...s,
-          attendance: hasAbsence ? 'ABSENT' : 'PRESENT',
-        };
-      })
+    const updated = students.map((s) => {
+      const hasAbsence = absences.some((a) => a.student_id === s.id && a.status === 'SUBMITTED_VALID');
+      return {
+        ...s,
+        attendance: (hasAbsence ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
+      };
+    });
+    setStudents(updated);
+    syncAttendanceToDb(
+      updated.map((s) => ({
+        student_id: s.id,
+        status: s.attendance === 'ABSENT' ? 'ABSENT_EXCUSED' : s.attendance,
+      }))
     );
   };
 
@@ -422,6 +463,12 @@ export default function TeacherPwaPage() {
     setStudents((prev) =>
       prev.map((s) => (s.id === id ? { ...s, attendance: status } : s))
     );
+    syncAttendanceToDb([
+      {
+        student_id: id,
+        status: status === 'ABSENT' ? 'ABSENT_UNEXCUSED' : status,
+      },
+    ]);
   };
 
   const handleAcknowledgeAbsence = (absenceId: string) => {
@@ -430,16 +477,22 @@ export default function TeacherPwaPage() {
     );
   };
 
-  const handleDispatchToKitchen = () => {
+  const handleDispatchToKitchen = async () => {
     setIsKitchenLocked(true);
+    await syncAttendanceToDb(
+      students.map((s) => ({
+        student_id: s.id,
+        status: s.attendance === 'ABSENT' ? 'ABSENT_UNEXCUSED' : s.attendance,
+      }))
+    );
     const presentCount = students.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length;
     alert(`⚡ ${t('teacher.dispatched_done')}\n\n• ${t('common.child')}: ${presentCount}/${students.length}`);
   };
 
-  const handleAddMedication = (e: React.FormEvent) => {
+  const handleAddMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === newMedStudentId);
-    const newMed: MedicationRequest = {
+    const tempMed: MedicationRequest = {
       id: `m-${Date.now()}`,
       student_id: newMedStudentId,
       student_name: student?.full_name || 'Bé',
@@ -450,20 +503,55 @@ export default function TeacherPwaPage() {
       instructions: newMedNotes,
       status: 'PENDING',
     };
-    setMedications([newMed, ...medications]);
+    setMedications([tempMed, ...medications]);
     setShowAddMedModal(false);
     setNewMedName('');
     setNewMedDosage('');
     setNewMedNotes('');
+
+    try {
+      const res = await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_MEDICATION',
+          student_id: tempMed.student_id,
+          time_slot: tempMed.time_slot,
+          medication_name: tempMed.medication_name,
+          dosage: tempMed.dosage,
+          instructions: tempMed.instructions,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.medication) {
+          setMedications((prev) => prev.map((m) => (m.id === tempMed.id ? json.medication : m)));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save medication to DB:', err);
+    }
   };
 
-  const handleAdministerMed = (medId: string) => {
+  const handleAdministerMed = async (medId: string) => {
     setMedications((prev) =>
       prev.map((m) => (m.id === medId ? { ...m, status: 'ADMINISTERED' } : m))
     );
+    try {
+      await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADMINISTER_MEDICATION',
+          id: medId,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to administer medication in DB:', err);
+    }
   };
 
-  const handleSaveMealException = (e: React.FormEvent) => {
+  const handleSaveMealException = async (e: React.FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === selectedStudentForMeal);
     const newEx: MealException = {
@@ -477,6 +565,21 @@ export default function TeacherPwaPage() {
       created_at: new Date().toISOString(),
     };
     setMealExceptions([newEx, ...mealExceptions]);
+    try {
+      await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_MEAL_EXCEPTION',
+          student_id: selectedStudentForMeal,
+          meal_type: 'LUNCH',
+          intake_level: selectedIntakeLevel,
+          reason_tags: selectedTags,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to save meal exception to DB:', err);
+    }
     alert(`${t('teacher.btn_save_meal_exception')}: ${student?.full_name}`);
   };
 
@@ -488,20 +591,47 @@ export default function TeacherPwaPage() {
     }
   };
 
-  const handleMassCheckout = () => {
+  const handleMassCheckout = async () => {
     setStudents((prev) => prev.map((s) => ({ ...s, checkedOut: true })));
+    try {
+      await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CHECKOUT',
+          student_ids: students.map((s) => s.id),
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to mass checkout in DB:', err);
+    }
     alert(`✅ ${t('teacher.checkout_done')}`);
   };
 
-  const handleSaveLateCheckout = () => {
+  const handleSaveLateCheckout = async () => {
     if (!lateStudentId) return;
+    const targetId = lateStudentId;
+    const targetReason = lateReason;
     setStudents((prev) =>
       prev.map((s) =>
-        s.id === lateStudentId ? { ...s, checkedOut: true, checkoutReason: lateReason } : s
+        s.id === targetId ? { ...s, checkedOut: true, checkoutReason: targetReason } : s
       )
     );
     setShowLateCheckoutModal(false);
     setLateStudentId(null);
+    try {
+      await fetch('/api/daily-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CHECKOUT',
+          student_ids: [targetId],
+          checkout_reason: targetReason,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to save late checkout in DB:', err);
+    }
   };
 
   if (!isAuthenticated) {

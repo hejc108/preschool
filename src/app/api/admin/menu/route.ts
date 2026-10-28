@@ -14,18 +14,24 @@ if (!globalThis.__SUONGMAI_WEEKLY_MENU__) {
   globalThis.__SUONGMAI_WEEKLY_MENU__ = (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU;
 }
 
-function getSupabaseClient() {
+const FALLBACK_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
+
+function getSupabaseClient(forceAnon = false) {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
     'https://yrieuamibqjyaslprdeo.supabase.co';
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    '';
+  const key = forceAnon
+    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      FALLBACK_ANON_KEY
+    : process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      FALLBACK_ANON_KEY;
 
   if (!url || !key) return null;
   return createClient(url, key, {
@@ -33,7 +39,7 @@ function getSupabaseClient() {
   });
 }
 
-async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms = 2500): Promise<T> {
+async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms = 4000): Promise<T> {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('Timeout')), ms);
@@ -47,19 +53,34 @@ async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms
 
 export async function GET() {
   try {
-    const supabase = getSupabaseClient();
+    let supabase = getSupabaseClient(false);
     let menu: WeeklyMenu[] = [];
 
-    // 1. Fetch from Supabase DB table with timeout
+    // 1. Fetch from Supabase DB table with timeout & Anon Key fallback
     if (supabase) {
       try {
-        const { data, error } = await withTimeout<any>(
+        let { data, error } = await withTimeout<any>(
           supabase
             .from('weekly_menus')
             .select('*')
             .order('week_number', { ascending: true }),
-          2500
+          4000
         );
+
+        if (error && (error.message?.includes('Invalid API key') || error.message?.includes('JWT'))) {
+          supabase = getSupabaseClient(true);
+          if (supabase) {
+            const retry = await withTimeout<any>(
+              supabase
+                .from('weekly_menus')
+                .select('*')
+                .order('week_number', { ascending: true }),
+              4000
+            );
+            data = retry.data;
+            error = retry.error;
+          }
+        }
 
         if (!error && data && data.length > 0) {
           menu = data.map((row: any) => ({
@@ -136,10 +157,9 @@ export async function POST(request: Request) {
     // Update in-memory cache
     globalThis.__SUONGMAI_WEEKLY_MENU__ = sanitizedMenu;
 
-    // Sync to Supabase DB if table exists
     let dbSynced = false;
     let dbErrorMessage: string | null = null;
-    const supabase = getSupabaseClient();
+    let supabase = getSupabaseClient(false);
     if (supabase) {
       try {
         const rows = sanitizedMenu.map((m) => ({
@@ -152,12 +172,25 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         }));
 
-        const { error: upsertErr } = await withTimeout<any>(
+        let { error: upsertErr } = await withTimeout<any>(
           supabase
             .from('weekly_menus')
             .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' }),
-          3000
+          4000
         );
+
+        if (upsertErr && (upsertErr.message?.includes('Invalid API key') || upsertErr.message?.includes('JWT'))) {
+          supabase = getSupabaseClient(true);
+          if (supabase) {
+            const retry = await withTimeout<any>(
+              supabase
+                .from('weekly_menus')
+                .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' }),
+              4000
+            );
+            upsertErr = retry.error;
+          }
+        }
 
         if (!upsertErr) {
           dbSynced = true;

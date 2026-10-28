@@ -14,32 +14,22 @@ export default function ParentMenuPage() {
   const defaultWeek = getCurrentMenuWeek();
   const defaultDay = getDayOfWeekEnum();
 
-  const [menuList, setMenuList] = useState<WeeklyMenu[]>((defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU);
+  const [menuList, setMenuList] = useState<WeeklyMenu[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(defaultDay);
-  const [studentAllergies] = useState<string>('Hải sản (Tôm, Cua)'); // Test student allergies
+  const [studentAllergies] = useState<string>('Không');
 
-  // Nạp thực đơn mới nhất từ máy chủ & LocalStorage
+  // Nạp thực đơn mới nhất trực tiếp từ CSDL Supabase qua API
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setMenuList(parsed);
-          }
-        }
-      } catch (e) {}
-    }
-
     async function loadLiveMenu() {
       try {
-        const res = await fetch('/api/admin/menu');
+        const res = await fetch('/api/admin/menu', { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
-          if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
+          if (json.has_db && Array.isArray(json.menu) && json.menu.length > 0) {
             setMenuList(json.menu);
+          } else {
+            setMenuList([]);
           }
         }
       } catch (err) {
@@ -150,7 +140,7 @@ export default function ParentMenuPage() {
         <div className="space-y-3">
           {mealCategories.map((cat) => {
             const meal = filteredMeals.find((m) => m.meal_type === cat.key);
-            const dishName = meal ? meal.dish_name : 'Theo kế hoạch nhà bếp';
+            const dishName = meal ? meal.dish_name : 'Nhà trường đang cập nhật thực đơn';
             const dishAllergens = meal?.allergens;
             const allergenCheck = checkDishAllergen(dishName, dishAllergens, studentAllergies);
 

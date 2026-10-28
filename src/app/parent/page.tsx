@@ -8,10 +8,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
-import { AbsenceRequest, AuthorizedPickup, Student, ParentStudentRelation } from '@/lib/types/schema';
+import { AbsenceRequest, AuthorizedPickup, Student, ParentStudentRelation, WeeklyMenu } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAllergen } from '@/lib/utils/menuHelper';
+import { getCurrentMenuWeek, getDayOfWeekEnum, checkDishAllergen } from '@/lib/utils/menuHelper';
 import { INITIAL_HEALTH_RECORDS, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { saveStoredRelations } from '@/lib/utils/approvalHelper';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
@@ -26,7 +26,23 @@ export interface ParentChild {
   avatar_initials: string;
   attendance_status: string;
   checked_in_time: string;
+  checked_out_time?: string;
+  checkout_reason?: string;
   avatar_url: string;
+}
+
+function formatTimeVN(isoString?: string | null): string {
+  if (!isoString) return '';
+  try {
+    return new Date(isoString).toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Ho_Chi_Minh',
+    });
+  } catch {
+    return '';
+  }
 }
 
 export default function ParentPwaPage() {
@@ -43,6 +59,12 @@ export default function ParentPwaPage() {
   const [liveRelations, setLiveRelations] = useState<ParentStudentRelation[]>([]);
   const [realStudents, setRealStudents] = useState<Student[]>([]);
 
+  // Live Daily Activities & Menu from Supabase
+  const [dailyAttendanceMap, setDailyAttendanceMap] = useState<Record<string, any>>({});
+  const [dailyMedications, setDailyMedications] = useState<any[]>([]);
+  const [dailyMealExceptions, setDailyMealExceptions] = useState<any[]>([]);
+  const [liveMenuList, setLiveMenuList] = useState<WeeklyMenu[]>([]);
+
   const loadParentData = useCallback(async (rawEmail: string) => {
     const cleanEmail = parseSignedCookieClient(rawEmail).toLowerCase().trim();
     if (!cleanEmail) {
@@ -51,10 +73,11 @@ export default function ParentPwaPage() {
     }
 
     try {
-      const [statusRes, approvalsRes, studentsRes] = await Promise.all([
+      const [statusRes, approvalsRes, studentsRes, menuRes] = await Promise.all([
         fetch(`/api/auth/check-my-status?email=${encodeURIComponent(cleanEmail)}`, { cache: 'no-store' }).catch(() => null),
         fetch('/api/users/approvals', { cache: 'no-store' }).catch(() => null),
         fetch('/api/admin/students', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/admin/menu', { cache: 'no-store' }).catch(() => null),
       ]);
 
       let mergedRelations: ParentStudentRelation[] = [];
@@ -96,7 +119,41 @@ export default function ParentPwaPage() {
         }
       }
 
+      if (menuRes && menuRes.ok) {
+        const menuJson = await menuRes.json().catch(() => ({}));
+        if (menuJson?.has_db && Array.isArray(menuJson.menu)) {
+          setLiveMenuList(menuJson.menu);
+        } else {
+          setLiveMenuList([]);
+        }
+      }
+
       setLiveRelations(mergedRelations);
+
+      // Fetch real today's attendance & care activities from Supabase for linked students
+      const linkedStudentIds = mergedRelations.map((r) => r.student_id).filter(Boolean);
+      if (linkedStudentIds.length > 0) {
+        try {
+          const actRes = await fetch(
+            `/api/daily-activities?student_ids=${encodeURIComponent(linkedStudentIds.join(','))}`,
+            { cache: 'no-store' }
+          );
+          if (actRes.ok) {
+            const actJson = await actRes.json();
+            const attMap: Record<string, any> = {};
+            if (Array.isArray(actJson.attendance)) {
+              actJson.attendance.forEach((a: any) => {
+                attMap[a.student_id] = a;
+              });
+            }
+            setDailyAttendanceMap(attMap);
+            setDailyMedications(Array.isArray(actJson.medications) ? actJson.medications : []);
+            setDailyMealExceptions(Array.isArray(actJson.meal_exceptions) ? actJson.meal_exceptions : []);
+          }
+        } catch (actErr) {
+          console.warn('[ParentPwaPage] Error fetching daily activities:', actErr);
+        }
+      }
     } catch (e) {
       console.warn('[ParentPwaPage] Error loading parent data:', e);
     } finally {
@@ -232,6 +289,11 @@ export default function ParentPwaPage() {
         st?.avatar_url ||
         'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80';
 
+      const attRecord = dailyAttendanceMap[rel.student_id];
+      const attendanceStatus = attRecord?.status || 'NOT_RECORDED';
+      const checkedInTime = attRecord?.checked_in_at ? formatTimeVN(attRecord.checked_in_at) : '';
+      const checkedOutTime = attRecord?.checked_out_at ? formatTimeVN(attRecord.checked_out_at) : '';
+
       return {
         id: rel.student_id,
         full_name: fullName,
@@ -246,12 +308,14 @@ export default function ParentPwaPage() {
           .join('')
           .slice(-2)
           .toUpperCase(),
-        attendance_status: 'PRESENT',
-        checked_in_time: '07:45',
+        attendance_status: attendanceStatus,
+        checked_in_time: checkedInTime,
+        checked_out_time: checkedOutTime,
+        checkout_reason: attRecord?.checkout_reason || '',
         avatar_url: avatarUrl,
       };
     });
-  }, [realStudents, parentEmail, liveRelations]);
+  }, [realStudents, parentEmail, liveRelations, dailyAttendanceMap]);
 
   // Selected Child State
   const [selectedChildId, setSelectedChildId] = useState<string>('');
@@ -345,12 +409,116 @@ export default function ParentPwaPage() {
     ? absences.filter((a) => a.student_id === selectedChild.id || a.student_name === selectedChild.full_name)
     : [];
 
-  // 4-Week Rotating Menu Logic for Today
+  // 4-Week Rotating Menu Logic for Today (from Supabase weekly_menus)
   const currentWeekNum = getCurrentMenuWeek();
   const currentDayOfWeek = getDayOfWeekEnum();
-  const todayMeals = INITIAL_4WEEK_MENU.filter(
-    (m) => m.week_number === currentWeekNum && m.day_of_week === currentDayOfWeek
-  );
+  const mealOrder: Record<string, number> = {
+    BREAKFAST: 1,
+    LUNCH_MAIN: 2,
+    LUNCH_SOUP: 3,
+    DESSERT: 4,
+    AFTERNOON_SNACK: 5,
+  };
+  const todayMeals = liveMenuList
+    .filter((m) => m.week_number === currentWeekNum && m.day_of_week === currentDayOfWeek)
+    .sort((a, b) => (mealOrder[a.meal_type] || 99) - (mealOrder[b.meal_type] || 99));
+
+  // Build real timeline events for selectedChild from Supabase records
+  const selectedChildTimelineEvents = React.useMemo(() => {
+    if (!selectedChild) return [];
+    const events: Array<{
+      id: string;
+      time: string;
+      title: string;
+      subtitle: string;
+      type: 'CHECKIN' | 'ABSENT' | 'MEDICATION' | 'MEAL' | 'CHECKOUT';
+    }> = [];
+
+    if (
+      selectedChild.attendance_status === 'PRESENT' ||
+      selectedChild.attendance_status === 'PRESENT_LATE'
+    ) {
+      events.push({
+        id: `att-in-${selectedChild.id}`,
+        time: selectedChild.checked_in_time || '07:30',
+        title: `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`,
+        subtitle: `${selectedChild.teacher_name}${
+          selectedChild.attendance_status === 'PRESENT_LATE' ? ' • Điểm danh đến muộn' : ''
+        }`,
+        type: 'CHECKIN',
+      });
+    } else if (
+      selectedChild.attendance_status === 'ABSENT_EXCUSED' ||
+      selectedChild.attendance_status === 'ABSENT_UNEXCUSED'
+    ) {
+      events.push({
+        id: `att-abs-${selectedChild.id}`,
+        time: selectedChild.checked_in_time || '08:00',
+        title: 'Ghi nhận nghỉ học hôm nay',
+        subtitle: `${selectedChild.teacher_name} • ${
+          selectedChild.attendance_status === 'ABSENT_EXCUSED' ? 'Nghỉ có phép' : 'Vắng mặt'
+        }`,
+        type: 'ABSENT',
+      });
+    }
+
+    const childMeds = dailyMedications.filter((m) => m.student_id === selectedChild.id);
+    childMeds.forEach((med) => {
+      events.push({
+        id: `med-${med.id}`,
+        time: med.administered_at
+          ? formatTimeVN(med.administered_at)
+          : med.time_slot === 'SLOT_1130'
+          ? '11:30'
+          : '14:30',
+        title:
+          med.status === 'ADMINISTERED'
+            ? t('teacher.administer_done')
+            : 'Phiếu dặn thuốc (Chờ cho uống)',
+        subtitle: `${selectedChild.teacher_name} • ${med.medication_name} (${med.dosage})${
+          med.instructions ? ` - ${med.instructions}` : ''
+        }`,
+        type: 'MEDICATION',
+      });
+    });
+
+    const childMeals = dailyMealExceptions.filter((me) => me.student_id === selectedChild.id);
+    childMeals.forEach((me) => {
+      events.push({
+        id: `meal-${me.id}`,
+        time: formatTimeVN(me.created_at) || '12:00',
+        title: `Ghi chú bữa ăn (${
+          me.meal_type === 'BREAKFAST'
+            ? 'Bữa sáng'
+            : me.meal_type === 'SNACK'
+            ? 'Bữa xế'
+            : 'Bữa trưa'
+        })`,
+        subtitle: `${me.intake_level === 'HALF' ? 'Ăn 1/2 suất (50%)' : 'Bé bỏ ăn'}${
+          Array.isArray(me.reason_tags) && me.reason_tags.length > 0
+            ? ` • ${me.reason_tags.join(', ')}`
+            : ''
+        }`,
+        type: 'MEAL',
+      });
+    });
+
+    if (selectedChild.checked_out_time) {
+      events.push({
+        id: `att-out-${selectedChild.id}`,
+        time: selectedChild.checked_out_time,
+        title: `Đã đón bé về lúc ${selectedChild.checked_out_time}`,
+        subtitle: `${selectedChild.teacher_name}${
+          selectedChild.checkout_reason
+            ? ` • ${selectedChild.checkout_reason}`
+            : ' • Bàn giao an toàn cho phụ huynh'
+        }`,
+        type: 'CHECKOUT',
+      });
+    }
+
+    return events;
+  }, [selectedChild, dailyMedications, dailyMealExceptions, t]);
 
   // Latest Health Record for Selected Child
   const latestHealth = selectedChild
@@ -563,9 +731,22 @@ export default function ParentPwaPage() {
             <span>{selectedChild.full_name}</span>
             <span className="text-xs px-2 py-0.5 bg-sky-100 text-sky-800 rounded-pill font-mono">{selectedChild.class_name}</span>
           </h2>
-          <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1 font-semibold">
-            <CheckCircle2 className="w-3.5 h-3.5" /> {t('parent.checked_in_msg')} {selectedChild.checked_in_time}
-          </p>
+          {selectedChild.attendance_status === 'PRESENT' || selectedChild.attendance_status === 'PRESENT_LATE' ? (
+            <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1 font-semibold">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {selectedChild.checked_out_time
+                ? `Đã đón về lúc ${selectedChild.checked_out_time}`
+                : `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`}
+            </p>
+          ) : selectedChild.attendance_status === 'ABSENT_EXCUSED' || selectedChild.attendance_status === 'ABSENT_UNEXCUSED' ? (
+            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1 font-semibold">
+              <AlertCircle className="w-3.5 h-3.5" /> Nghỉ học hôm nay
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 font-medium">
+              <Clock className="w-3.5 h-3.5 text-slate-400" /> Chưa điểm danh hôm nay
+            </p>
+          )}
         </div>
 
         <button
@@ -623,7 +804,7 @@ export default function ParentPwaPage() {
       {/* --- SECTION 2: CARE TIMELINE FEED & WIDGETS --- */}
       {activeNav === 'TIMELINE' && (
         <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          {/* 1. KHỐI TRẠNG THÁI & DÒNG THỜI GIAN TRONG NGÀY (DAILY TIMELINE - ƯU TIÊN HÀNG ĐẦU) */}
+          {/* 1. KHỐI TRẠNG THÁI & DÒNG THỜI GIAN TRONG NGÀY (DAILY TIMELINE - DỮ LIỆU THẬT TỪ SUPABASE) */}
           <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-4 shadow-sm text-slate-800">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
@@ -632,46 +813,49 @@ export default function ParentPwaPage() {
               </h3>
             </div>
 
-            <div className="space-y-4 relative pl-5 border-l-2 border-slate-200 text-xs">
-              {/* Event 1: Điểm danh đến lớp */}
-              <div className="relative">
-                <div className="absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full bg-emerald-600 border-2 border-white flex items-center justify-center">
-                  <Check className="w-2 h-2 text-white stroke-[3]" />
+            {selectedChildTimelineEvents.length === 0 ? (
+              <div className="py-8 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-xl space-y-2">
+                <div className="w-10 h-10 rounded-full bg-sky-50 text-sky-500 flex items-center justify-center mx-auto">
+                  <Clock className="w-5 h-5" />
                 </div>
-                <span className="font-mono text-[10px] text-slate-400 font-bold block">{selectedChild.checked_in_time}</span>
-                <h4 className="font-bold text-slate-900 text-sm mt-0.5">{t('parent.checked_in_msg')} {selectedChild.checked_in_time}</h4>
-                <p className="text-slate-600 mt-0.5">{selectedChild.teacher_name}</p>
+                <p className="text-xs font-semibold text-slate-600">
+                  Chưa có hoạt động mới trong ngày hôm nay
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Các mốc điểm danh, ăn uống và chăm sóc của bé sẽ tự động cập nhật khi cô giáo ghi nhận tại lớp.
+                </p>
               </div>
-
-              {/* Event 2: Dặn thuốc / Chăm sóc */}
-              <div className="relative">
-                <div className="absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full bg-sky-600 border-2 border-white flex items-center justify-center">
-                  <Heart className="w-2 h-2 text-white fill-white" />
-                </div>
-                <span className="font-mono text-[10px] text-sky-600 font-bold block">11:35</span>
-                <h4 className="font-bold text-sky-900 text-sm mt-0.5">{t('teacher.administer_done')}</h4>
-                <p className="text-slate-600 mt-0.5">{selectedChild.teacher_name} • Siro Astex (5ml).</p>
+            ) : (
+              <div className="space-y-4 relative pl-5 border-l-2 border-slate-200 text-xs">
+                {selectedChildTimelineEvents.map((ev) => (
+                  <div key={ev.id} className="relative">
+                    <div
+                      className={`absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center ${
+                        ev.type === 'CHECKIN' || ev.type === 'CHECKOUT'
+                          ? 'bg-emerald-600'
+                          : ev.type === 'MEDICATION'
+                          ? 'bg-sky-600'
+                          : ev.type === 'MEAL'
+                          ? 'bg-amber-500'
+                          : 'bg-rose-500'
+                      }`}
+                    >
+                      {ev.type === 'CHECKIN' || ev.type === 'CHECKOUT' ? (
+                        <Check className="w-2 h-2 text-white stroke-[3]" />
+                      ) : ev.type === 'MEDICATION' ? (
+                        <Heart className="w-2 h-2 text-white fill-white" />
+                      ) : null}
+                    </div>
+                    <span className="font-mono text-[10px] text-slate-400 font-bold block">{ev.time}</span>
+                    <h4 className="font-bold text-slate-900 text-sm mt-0.5">{ev.title}</h4>
+                    <p className="text-slate-600 mt-0.5">{ev.subtitle}</p>
+                  </div>
+                ))}
               </div>
-
-              {/* Event 3: Bữa ăn trưa */}
-              <div className="relative">
-                <div className="absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center" />
-                <span className="font-mono text-[10px] text-amber-600 font-bold block">12:00</span>
-                <h4 className="font-bold text-slate-900 text-sm mt-0.5">Bữa Ăn Trưa</h4>
-                <p className="text-slate-600 mt-0.5">Ăn hết suất (100%)</p>
-              </div>
-
-              {/* Event 4: Giờ ngủ trưa */}
-              <div className="relative">
-                <div className="absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full bg-cyan-600 border-2 border-white flex items-center justify-center" />
-                <span className="font-mono text-[10px] text-cyan-600 font-bold block">14:00</span>
-                <h4 className="font-bold text-slate-900 text-sm mt-0.5">Giờ Ngủ Trưa</h4>
-                <p className="text-slate-600 mt-0.5">Nghỉ trưa: 12:15 – 14:00</p>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* 2. KHỐI THỰC ĐƠN HÔM NAY (NẰM NGAY BÊN DƯỚI TIMELINE) */}
+          {/* 2. KHỐI THỰC ĐƠN HÔM NAY (NẰM NGAY BÊN DƯỚI TIMELINE - DỮ LIỆU THẬT TỪ SUPABASE) */}
           <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2 text-sky-900 font-bold text-xs">
@@ -683,37 +867,45 @@ export default function ParentPwaPage() {
               </Link>
             </div>
 
-            <div className="space-y-2 text-xs">
-              {todayMeals.slice(0, 4).map((meal) => {
-                const allergenCheck = checkDishAllergen(meal.dish_name, meal.allergens, selectedChild.allergies);
-                return (
-                  <div key={meal.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">
-                        {meal.meal_type === 'BREAKFAST'
-                          ? 'Bữa sáng'
-                          : meal.meal_type === 'LUNCH_MAIN'
-                          ? 'Trưa - Món mặn'
-                          : meal.meal_type === 'LUNCH_SOUP'
-                          ? 'Trưa - Món canh'
-                          : meal.meal_type === 'DESSERT'
-                          ? 'Tráng miệng'
-                          : 'Bữa xế'}
-                      </span>
-                      <span className="font-bold text-slate-800 text-xs">{meal.dish_name}</span>
-                    </div>
+            {todayMeals.length === 0 ? (
+              <div className="py-6 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
+                <p className="text-xs font-semibold text-slate-500">
+                  Nhà trường đang cập nhật thực đơn
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 text-xs">
+                {todayMeals.map((meal) => {
+                  const allergenCheck = checkDishAllergen(meal.dish_name, meal.allergens, selectedChild.allergies);
+                  return (
+                    <div key={meal.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                          {meal.meal_type === 'BREAKFAST'
+                            ? 'Bữa sáng'
+                            : meal.meal_type === 'LUNCH_MAIN'
+                            ? 'Trưa - Món mặn'
+                            : meal.meal_type === 'LUNCH_SOUP'
+                            ? 'Trưa - Món canh'
+                            : meal.meal_type === 'DESSERT'
+                            ? 'Tráng miệng'
+                            : 'Bữa xế'}
+                        </span>
+                        <span className="font-bold text-slate-800 text-xs">{meal.dish_name}</span>
+                      </div>
 
-                    {/* Allergen Warning Badge */}
-                    {allergenCheck.hasAllergen && (
-                      <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1 animate-pulse">
-                        <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
-                        <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {/* Allergen Warning Badge */}
+                      {allergenCheck.hasAllergen && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1 animate-pulse">
+                          <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                          <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 3. KHỐI THEO DÕI SỨC KHỎE (GROWTH TRACKER - NẰM DƯỚI THỰC ĐƠN) */}
