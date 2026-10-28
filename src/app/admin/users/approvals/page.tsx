@@ -49,6 +49,22 @@ function normalizeVietnamese(str: string): string {
     .trim();
 }
 
+function normalizeSelectableRole(role?: string | null): UserRole {
+  if (
+    role === 'TEACHER' ||
+    role === 'STAFF' ||
+    role === 'SCHOOL_ADMIN' ||
+    role === 'SUPER_ADMIN'
+  ) {
+    return role;
+  }
+  return 'PARENT';
+}
+
+function getProfileRowKey(p: Pick<Profile, 'id' | 'email'>): string {
+  return (p.email || p.id || '').toLowerCase().trim();
+}
+
 export default function UserApprovalsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [relations, setRelations] = useState<ParentStudentRelation[]>([]);
@@ -61,7 +77,7 @@ export default function UserApprovalsPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [currentUserRole, setCurrentUserRole] = useState<string>('');
 
-  // Selected role & assigned class state per user row
+  // Selected role & assigned class state per user row (keyed by normalized email)
   const [rowRoles, setRowRoles] = useState<Record<string, UserRole>>({});
   const [rowClasses, setRowClasses] = useState<Record<string, string>>({});
   const [rowClassIds, setRowClassIds] = useState<Record<string, string[]>>({});
@@ -109,6 +125,42 @@ export default function UserApprovalsPage() {
     }
   }, []);
 
+  const syncRowStateFromProfiles = useCallback(
+    (list: Profile[]) => {
+      const initialRoles: Record<string, UserRole> = {};
+      const initialClasses: Record<string, string> = {};
+      const initialClassIds: Record<string, string[]> = {};
+
+      list.forEach((p: Profile) => {
+        const key = getProfileRowKey(p);
+        initialRoles[key] = normalizeSelectableRole(p.role);
+        initialClasses[key] = p.assigned_class_id || classes[0]?.id || 'c-mam';
+
+        const cIds: string[] = [];
+        if (p.assigned_class_name) {
+          const names = p.assigned_class_name.split(',').map((n) => n.trim().toLowerCase());
+          classes.forEach((c) => {
+            if (names.includes(c.name.toLowerCase())) {
+              cIds.push(c.id);
+            }
+          });
+        }
+        if (cIds.length === 0 && p.assigned_class_id) {
+          cIds.push(p.assigned_class_id);
+        }
+        if (cIds.length === 0 && classes[0]?.id) {
+          cIds.push(classes[0].id);
+        }
+        initialClassIds[key] = cIds;
+      });
+
+      setRowRoles(initialRoles);
+      setRowClasses(initialClasses);
+      setRowClassIds(initialClassIds);
+    },
+    [classes]
+  );
+
   const refreshData = useCallback(async () => {
     try {
       const res = await fetch('/api/users/approvals', { cache: 'no-store' });
@@ -129,34 +181,7 @@ export default function UserApprovalsPage() {
 
       if (rawList && rawList.length > 0) {
         setProfiles(rawList);
-
-        const initialRoles: Record<string, UserRole> = {};
-        const initialClasses: Record<string, string> = {};
-        const initialClassIds: Record<string, string[]> = {};
-        rawList.forEach((p: Profile) => {
-          initialRoles[p.id] = p.role || 'PARENT';
-          initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c1';
-
-          const cIds: string[] = [];
-          if (p.assigned_class_name) {
-            const names = p.assigned_class_name.split(',').map((n) => n.trim().toLowerCase());
-            classes.forEach((c) => {
-              if (names.includes(c.name.toLowerCase())) {
-                cIds.push(c.id);
-              }
-            });
-          }
-          if (cIds.length === 0 && p.assigned_class_id) {
-            cIds.push(p.assigned_class_id);
-          }
-          if (cIds.length === 0 && classes[0]?.id) {
-            cIds.push(classes[0].id);
-          }
-          initialClassIds[p.id] = cIds;
-        });
-        setRowRoles((prev) => ({ ...initialRoles, ...prev }));
-        setRowClasses((prev) => ({ ...initialClasses, ...prev }));
-        setRowClassIds((prev) => ({ ...initialClassIds, ...prev }));
+        syncRowStateFromProfiles(rawList);
         return;
       }
     } catch (e) {}
@@ -164,36 +189,8 @@ export default function UserApprovalsPage() {
     const list = await fetchLiveProfilesFromSupabase();
     setProfiles(list);
     setRelations(getStoredRelations());
-
-    // Init row state
-    const initialRoles: Record<string, UserRole> = {};
-    const initialClasses: Record<string, string> = {};
-    const initialClassIds: Record<string, string[]> = {};
-    list.forEach((p) => {
-      initialRoles[p.id] = p.role || 'PARENT';
-      initialClasses[p.id] = p.assigned_class_id || classes[0]?.id || 'c-mam';
-
-      const cIds: string[] = [];
-      if (p.assigned_class_name) {
-        const names = p.assigned_class_name.split(',').map((n) => n.trim().toLowerCase());
-        classes.forEach((c) => {
-          if (names.includes(c.name.toLowerCase())) {
-            cIds.push(c.id);
-          }
-        });
-      }
-      if (cIds.length === 0 && p.assigned_class_id) {
-        cIds.push(p.assigned_class_id);
-      }
-      if (cIds.length === 0 && classes[0]?.id) {
-        cIds.push(classes[0].id);
-      }
-      initialClassIds[p.id] = cIds;
-    });
-    setRowRoles((prev) => ({ ...initialRoles, ...prev }));
-    setRowClasses((prev) => ({ ...initialClasses, ...prev }));
-    setRowClassIds((prev) => ({ ...initialClassIds, ...prev }));
-  }, [classes]);
+    syncRowStateFromProfiles(list);
+  }, [syncRowStateFromProfiles]);
 
   useEffect(() => {
     loadStudents();
@@ -240,20 +237,21 @@ export default function UserApprovalsPage() {
   };
 
   // --- ACTIONS ---
-  const handleToggleTeacherClass = (profileId: string, classId: string) => {
+  const handleToggleTeacherClass = (rowKey: string, classId: string) => {
     setRowClassIds((prev) => {
-      const current = prev[profileId] || [];
+      const current = prev[rowKey] || [];
       const updated = current.includes(classId)
         ? current.filter((id) => id !== classId)
         : [...current, classId];
-      return { ...prev, [profileId]: updated };
+      return { ...prev, [rowKey]: updated };
     });
   };
 
   const handleApproveTeacher = async (user: Profile) => {
     try {
+      const rowKey = getProfileRowKey(user);
       const selectedIds =
-        rowClassIds[user.id] || (rowClasses[user.id] ? [rowClasses[user.id]] : [classes[0]?.id || '']);
+        rowClassIds[rowKey] || (rowClasses[rowKey] ? [rowClasses[rowKey]] : [classes[0]?.id || '']);
       if (selectedIds.length === 0) {
         showToast('Vui lòng chọn ít nhất 1 lớp phụ trách cho giáo viên!', 'error');
         return;
@@ -272,8 +270,9 @@ export default function UserApprovalsPage() {
         }),
       });
 
-      // 2. Kích hoạt quyền Giáo viên
+      // 2. Kích hoạt quyền Giáo viên (tự động xóa liên kết Phụ huynh cũ nếu có)
       await approveTeacherUser(user.email, selectedIds[0], classNames);
+      setRowRoles((prev) => ({ ...prev, [rowKey]: 'TEACHER' }));
       await refreshData();
       showToast(`Đã kích hoạt quyền Giáo viên cho ${user.full_name} (${classNames})!`);
     } catch (err: any) {
@@ -283,7 +282,9 @@ export default function UserApprovalsPage() {
 
   const handleApproveStaff = async (user: Profile) => {
     try {
+      const rowKey = getProfileRowKey(user);
       await approveStaffUser(user.email);
+      setRowRoles((prev) => ({ ...prev, [rowKey]: 'STAFF' }));
       await refreshData();
       showToast(`Đã kích hoạt quyền Cán bộ Bếp / Y tế cho ${user.full_name}!`);
     } catch (err: any) {
@@ -293,7 +294,9 @@ export default function UserApprovalsPage() {
 
   const handlePromoteSchoolAdmin = async (user: Profile) => {
     try {
+      const rowKey = getProfileRowKey(user);
       await promoteToSchoolAdmin(user.email, currentUserEmail);
+      setRowRoles((prev) => ({ ...prev, [rowKey]: 'SCHOOL_ADMIN' }));
       await refreshData();
       showToast(`Đã nâng quyền Quản trị trường (School Admin) cho ${user.full_name}!`);
     } catch (err: any) {
@@ -302,6 +305,8 @@ export default function UserApprovalsPage() {
   };
 
   const handleOpenParentModal = (user: Profile) => {
+    const rowKey = getProfileRowKey(user);
+    setRowRoles((prev) => ({ ...prev, [rowKey]: 'PARENT' }));
     setParentModalUser(user);
     setStudentSearch('');
     if (students.length === 0) {
@@ -335,7 +340,9 @@ export default function UserApprovalsPage() {
 
     setIsSubmittingParent(true);
     try {
+      const rowKey = getProfileRowKey(parentModalUser);
       await approveParentUser(parentModalUser.email, selectedStudentIds);
+      setRowRoles((prev) => ({ ...prev, [rowKey]: 'PARENT' }));
       await refreshData();
       setParentModalUser(null);
       if (selectedStudentIds.length > 0) {
@@ -539,17 +546,17 @@ export default function UserApprovalsPage() {
                 </tr>
               ) : (
                 filteredProfiles.map((p) => {
+                  const rowKey = getProfileRowKey(p);
                   const status = p.approval_status || 'PENDING';
                   const userRelations = relations.filter(
                     (r) => r.parent_email.toLowerCase().trim() === p.email.toLowerCase().trim() && r.is_verified
                   );
-                  const selectedRole = rowRoles[p.id] || p.role || 'PARENT';
-                  const selectedClassId = rowClasses[p.id] || p.assigned_class_id || 'c1';
+                  const selectedRole = normalizeSelectableRole(rowRoles[rowKey] || p.role);
 
                   const isSuperAdminAccount = p.role === 'SUPER_ADMIN' || p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn';
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={rowKey} className="hover:bg-slate-50/70 transition-colors">
                       {/* Name & Email */}
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
@@ -600,7 +607,7 @@ export default function UserApprovalsPage() {
                             disabled={isSuperAdminAccount}
                             value={selectedRole}
                             onChange={(e) =>
-                              setRowRoles((prev) => ({ ...prev, [p.id]: e.target.value as UserRole }))
+                              setRowRoles((prev) => ({ ...prev, [rowKey]: e.target.value as UserRole }))
                             }
                             className="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-sky-500 cursor-pointer"
                           >
@@ -663,12 +670,12 @@ export default function UserApprovalsPage() {
                               </span>
                               <div className="flex flex-wrap gap-1">
                                 {classes.map((c) => {
-                                  const isSelected = (rowClassIds[p.id] || []).includes(c.id);
+                                  const isSelected = (rowClassIds[rowKey] || []).includes(c.id);
                                   return (
                                     <button
                                       key={c.id}
                                       type="button"
-                                      onClick={() => handleToggleTeacherClass(p.id, c.id)}
+                                      onClick={() => handleToggleTeacherClass(rowKey, c.id)}
                                       className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
                                         isSelected
                                           ? 'bg-amber-500 text-slate-950 border-amber-600 font-extrabold'
@@ -698,25 +705,27 @@ export default function UserApprovalsPage() {
                         {isSuperAdminAccount ? (
                           <span className="text-xs text-indigo-700 font-bold italic">Tài khoản Super Admin Cố Định</span>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
                             {/* Parent Actions */}
                             {selectedRole === 'PARENT' && (
                               <>
+                                {userRelations.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenParentModal(p)}
+                                    className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                  >
+                                    <Baby className="w-3.5 h-3.5 text-sky-600" />
+                                    <span>[✏️ Sửa con liên kết]</span>
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => handleOpenParentModal(p)}
-                                  className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-                                >
-                                  <Baby className="w-3.5 h-3.5 text-sky-600" />
-                                  <span>
-                                    {userRelations.length > 0 ? '[✏️ Sửa con liên kết]' : '[🔗 Gán hồ sơ con]'}
-                                  </span>
-                                </button>
-                                <button
+                                  type="button"
                                   onClick={() => handleOpenParentModal(p)}
                                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                                 >
                                   <Check className="w-3.5 h-3.5" />
-                                  <span>[✓ Duyệt]</span>
+                                  <span>[👨‍👩‍👧 Gán bé &amp; Duyệt]</span>
                                 </button>
                               </>
                             )}
@@ -724,19 +733,21 @@ export default function UserApprovalsPage() {
                             {/* Teacher Actions */}
                             {selectedRole === 'TEACHER' && (
                               <button
+                                type="button"
                                 onClick={() => handleApproveTeacher(p)}
-                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5" />
-                                <span>[✓ Kích hoạt]</span>
+                                <span>[👩‍🏫 Duyệt Giáo viên]</span>
                               </button>
                             )}
 
                             {/* Staff Actions */}
                             {selectedRole === 'STAFF' && (
                               <button
+                                type="button"
                                 onClick={() => handleApproveStaff(p)}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm"
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5" />
                                 <span>[✓ Kích hoạt]</span>
@@ -746,11 +757,12 @@ export default function UserApprovalsPage() {
                             {/* School Admin Actions */}
                             {selectedRole === 'SCHOOL_ADMIN' && (
                               <button
+                                type="button"
                                 disabled={!isSuperAdmin}
                                 onClick={() => handlePromoteSchoolAdmin(p)}
                                 className={`px-3 py-1.5 text-white font-semibold text-[11px] rounded-xl transition-all flex items-center gap-1 shadow-sm ${
                                   isSuperAdmin
-                                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700'
+                                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 cursor-pointer'
                                     : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                                 }`}
                               >
@@ -762,6 +774,7 @@ export default function UserApprovalsPage() {
                             {/* Reject / Block Button */}
                             {status !== 'REJECTED' && (
                               <button
+                                type="button"
                                 onClick={() => handleReject(p)}
                                 title="Từ chối / Chặn truy cập"
                                 className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 font-semibold text-[11px] rounded-xl transition-all border border-slate-200 flex items-center gap-1 cursor-pointer"
@@ -773,6 +786,7 @@ export default function UserApprovalsPage() {
 
                             {/* Generic Delete User Button */}
                             <button
+                              type="button"
                               onClick={() => handleDeleteUser(p)}
                               title="Xóa vĩnh viễn tài khoản khỏi hệ thống"
                               className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 font-semibold text-[11px] rounded-xl transition-all border border-rose-200 flex items-center gap-1 cursor-pointer"

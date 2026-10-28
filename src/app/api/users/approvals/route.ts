@@ -241,6 +241,12 @@ export async function GET() {
   });
 }
 
+function ensureValidUuid(candidate?: string): string {
+  if (candidate && UUID_REGEX.test(String(candidate))) return String(candidate);
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12);
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -255,21 +261,10 @@ export async function POST(request: Request) {
     const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
     const existing = serverCache.find((p) => p.email.toLowerCase().trim() === email);
 
-    if (existing) {
-      return NextResponse.json({
-        success: true,
-        profile: existing,
-        message: 'Tài khoản đã tồn tại',
-      });
-    }
-
     const isSadmin = email === 'sadmin@suongmai.edu.vn';
-    const generatedId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `u-gauth-${Date.now()}`;
+    const generatedId = ensureValidUuid(existing?.id);
 
-    const newProfile: Profile = {
+    const newProfile: Profile = existing || {
       id: generatedId,
       email,
       full_name: fullName || (isSadmin ? 'Quản Trị Tối Cao (Super Admin)' : email.split('@')[0]),
@@ -281,8 +276,10 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
     };
 
-    serverCache.push(newProfile);
-    globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
+    if (!existing) {
+      serverCache.push(newProfile);
+      globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
+    }
 
     try {
       let supabaseClient = getSupabaseClient(false);
@@ -306,15 +303,22 @@ export async function POST(request: Request) {
         }
 
         if (!dbExisting && supabaseClient) {
-          await supabaseClient.from('profiles').insert({
-            id: newProfile.id,
+          const insertPayload = {
+            id: ensureValidUuid(newProfile.id),
             email: newProfile.email,
             full_name: newProfile.full_name,
             role: newProfile.role,
             approval_status: newProfile.approval_status,
             avatar_url: newProfile.avatar_url,
             created_at: newProfile.created_at,
-          });
+          };
+          let { error: insErr } = await supabaseClient.from('profiles').insert(insertPayload);
+          if (insErr && isApiKeyError(insErr)) {
+            supabaseClient = getSupabaseClient(true);
+            if (supabaseClient) {
+              await supabaseClient.from('profiles').insert(insertPayload);
+            }
+          }
         }
       }
     } catch (e: any) {
@@ -339,106 +343,126 @@ export async function PUT(request: Request) {
     const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
     const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
 
-    let targetProfile: any;
-    const generatedId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `u-${Date.now()}`;
+    let supabaseClient = getSupabaseClient(false);
+    let existingDbProfile: any = null;
 
-    if (idx === -1) {
-      targetProfile = {
-        id: generatedId,
-        full_name: body.full_name || email.split('@')[0],
-        email,
-        role: body.role || 'PARENT',
-        approval_status: body.approval_status || 'ACTIVE',
-        assigned_class_id: body.assigned_class_id,
-        assigned_class_name: body.assigned_class_name,
-        created_at: new Date().toISOString(),
-      };
-      serverCache.push(targetProfile);
-    } else {
-      if (body.approval_status) serverCache[idx].approval_status = body.approval_status;
-      if (body.role) serverCache[idx].role = body.role;
-      if (body.assigned_class_id !== undefined) serverCache[idx].assigned_class_id = body.assigned_class_id;
-      if (body.assigned_class_name !== undefined) serverCache[idx].assigned_class_name = body.assigned_class_name;
-      targetProfile = serverCache[idx];
+    if (supabaseClient) {
+      let { data: foundRow, error: findErr } = await supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (findErr && isApiKeyError(findErr)) {
+        supabaseClient = getSupabaseClient(true);
+        if (supabaseClient) {
+          const retry = await supabaseClient
+            .from('profiles')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+          foundRow = retry.data;
+        }
+      }
+      existingDbProfile = foundRow;
     }
 
+    const resolvedId = ensureValidUuid(existingDbProfile?.id || (idx !== -1 ? serverCache[idx].id : undefined));
+    const resolvedRole = body.role || existingDbProfile?.role || (idx !== -1 ? serverCache[idx].role : 'PARENT');
+    const resolvedStatus =
+      body.approval_status || existingDbProfile?.approval_status || (idx !== -1 ? serverCache[idx].approval_status : 'ACTIVE');
+
+    // Clean two-way transition: if switching to PARENT, clear teacher class assignment; if switching to TEACHER/STAFF, keep or update class assignment
+    const resolvedClassId =
+      resolvedRole === 'PARENT' || resolvedRole === 'STAFF'
+        ? null
+        : body.assigned_class_id !== undefined
+        ? body.assigned_class_id
+        : existingDbProfile?.assigned_class_id ?? (idx !== -1 ? serverCache[idx].assigned_class_id : null);
+
+    const resolvedClassName =
+      resolvedRole === 'PARENT' || resolvedRole === 'STAFF'
+        ? null
+        : body.assigned_class_name !== undefined
+        ? body.assigned_class_name
+        : existingDbProfile?.assigned_class_name ?? (idx !== -1 ? serverCache[idx].assigned_class_name : null);
+
+    let targetProfile: any = {
+      ...(idx !== -1 ? serverCache[idx] : {}),
+      ...(existingDbProfile || {}),
+      id: resolvedId,
+      full_name:
+        body.full_name ||
+        existingDbProfile?.full_name ||
+        (idx !== -1 ? serverCache[idx].full_name : email.split('@')[0]),
+      email,
+      role: resolvedRole,
+      approval_status: resolvedStatus,
+      assigned_class_id: resolvedClassId,
+      assigned_class_name: resolvedClassName,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (idx === -1) {
+      serverCache.push(targetProfile);
+    } else {
+      serverCache[idx] = targetProfile;
+    }
     globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
-    let supabaseClient = getSupabaseClient(false);
     let relations: ParentStudentRelation[] = globalThis.__SUONGMAI_RELATIONS_CACHE__ || [];
 
     if (supabaseClient) {
       try {
-        const updatePayload: any = {
+        const upsertPayload: any = {
+          id: resolvedId,
+          email: targetProfile.email,
+          full_name: targetProfile.full_name,
           role: targetProfile.role,
           approval_status: targetProfile.approval_status,
+          assigned_class_id: targetProfile.assigned_class_id,
+          assigned_class_name: targetProfile.assigned_class_name,
           updated_at: new Date().toISOString(),
         };
-        if (targetProfile.assigned_class_id !== undefined) {
-          updatePayload.assigned_class_id = targetProfile.assigned_class_id;
-        }
-        if (targetProfile.assigned_class_name !== undefined) {
-          updatePayload.assigned_class_name = targetProfile.assigned_class_name;
-        }
 
-        let { data: updateData, error: updateErr } = await supabaseClient
+        let { data: upsertedData, error: upsertErr } = await supabaseClient
           .from('profiles')
-          .update(updatePayload)
-          .eq('email', email)
+          .upsert(upsertPayload, { onConflict: 'email' })
           .select();
 
-        if (updateErr && isApiKeyError(updateErr)) {
+        if (upsertErr && isApiKeyError(upsertErr)) {
           supabaseClient = getSupabaseClient(true);
           if (supabaseClient) {
             const retry = await supabaseClient
               .from('profiles')
-              .update(updatePayload)
-              .eq('email', email)
+              .upsert(upsertPayload, { onConflict: 'email' })
               .select();
-            updateData = retry.data;
-            updateErr = retry.error;
+            upsertedData = retry.data;
+            upsertErr = retry.error;
           }
         }
 
-        let resolvedGuardianId =
-          updateData && updateData.length > 0 ? updateData[0].id : targetProfile.id;
-
-        if ((updateErr || !updateData || updateData.length === 0) && supabaseClient) {
-          const validUuid = UUID_REGEX.test(String(targetProfile.id))
-            ? targetProfile.id
-            : typeof crypto !== 'undefined' && crypto.randomUUID
-              ? crypto.randomUUID()
-              : targetProfile.id;
-
-          const { data: upsertedData } = await supabaseClient
-            .from('profiles')
-            .upsert(
-              {
-                id: validUuid,
-                email: targetProfile.email,
-                full_name: targetProfile.full_name,
-                role: targetProfile.role,
-                approval_status: targetProfile.approval_status,
-                assigned_class_id: targetProfile.assigned_class_id,
-                assigned_class_name: targetProfile.assigned_class_name,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'email' }
-            )
-            .select();
-
-          if (upsertedData && upsertedData.length > 0) {
-            resolvedGuardianId = upsertedData[0].id;
-            targetProfile.id = resolvedGuardianId;
-          }
-        } else if (updateData && updateData.length > 0) {
-          targetProfile = { ...targetProfile, ...updateData[0] };
+        if (upsertErr) {
+          console.error('[APPROVE PUT ERROR] Failed to upsert profile in Supabase:', upsertErr.message);
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Không thể lưu vai trò vào Supabase: ${upsertErr.message}`,
+            },
+            { status: 500 }
+          );
         }
 
-        // Sync parent-student relations in Supabase public.student_guardians when student_ids is provided
+        const resolvedGuardianId =
+          upsertedData && upsertedData.length > 0 ? upsertedData[0].id : resolvedId;
+
+        if (upsertedData && upsertedData.length > 0) {
+          targetProfile = { ...targetProfile, ...upsertedData[0] };
+          const cacheIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
+          if (cacheIdx !== -1) serverCache[cacheIdx] = targetProfile;
+        }
+
+        // CASE 1: Transition to PARENT -> Sync student_guardians with selected student_ids
         if (Array.isArray(body.student_ids) && supabaseClient && UUID_REGEX.test(String(resolvedGuardianId))) {
           const uniqueStudentIds = Array.from(
             new Set(
@@ -448,7 +472,7 @@ export async function PUT(request: Request) {
             )
           );
 
-          // Step 1: Delete all existing links for this guardian (handles unchecking students)
+          // Step 1: Delete all existing links for this guardian
           const { error: delError } = await supabaseClient
             .from('student_guardians')
             .delete()
@@ -482,6 +506,18 @@ export async function PUT(request: Request) {
               );
             }
           }
+        }
+        // CASE 2: Transition from PARENT -> TEACHER / STAFF (when clear_student_links is true or role != PARENT)
+        else if (
+          (resolvedRole === 'TEACHER' || resolvedRole === 'STAFF') &&
+          body.clear_student_links !== false &&
+          supabaseClient &&
+          UUID_REGEX.test(String(resolvedGuardianId))
+        ) {
+          await supabaseClient
+            .from('student_guardians')
+            .delete()
+            .eq('guardian_id', resolvedGuardianId);
         }
 
         // Refresh relations list from Supabase after sync

@@ -279,11 +279,27 @@ export function checkUserApprovalStatus(email: string): {
   };
 }
 
+function generateUuidV4(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function isUuid(val?: string | null): boolean {
+  return Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
+}
+
 /**
  * Register or record Google Login user into pending list if not exists
  */
 export function registerGoogleUserIfMissing(email: string, fullName?: string, avatarUrl?: string): Profile {
   const cleanEmail = email.toLowerCase().trim();
+  const generatedId = generateUuidV4();
 
   // Sync to globalThis server memory cache if running on node server
   if (typeof globalThis !== 'undefined') {
@@ -293,7 +309,7 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
     const existingCache = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
     if (!existingCache) {
       const newCacheProfile: Profile = {
-        id: `u-gauth-${Date.now()}`,
+        id: generatedId,
         email: cleanEmail,
         full_name: fullName || cleanEmail.split('@')[0],
         role: 'GUEST',
@@ -306,14 +322,18 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
   }
 
   const profiles = getStoredProfiles();
-  let existing = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
+  const existing = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
 
   if (existing) {
+    if (!isUuid(existing.id)) {
+      existing.id = generatedId;
+      saveStoredProfiles(profiles);
+    }
     return existing;
   }
 
   const newProfile: Profile = {
-    id: `u-gauth-${Date.now()}`,
+    id: generatedId,
     email: cleanEmail,
     full_name: fullName || cleanEmail.split('@')[0],
     role: 'GUEST',
@@ -406,7 +426,7 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
     }
 
     // Always guarantee sadmin@suongmai.edu.vn is SUPER_ADMIN + ACTIVE
-    let sadminIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
+    const sadminIdx = merged.findIndex((p) => p.email?.toLowerCase().trim() === 'sadmin@suongmai.edu.vn');
     if (sadminIdx === -1) {
       merged.unshift({
         id: 'u-super-admin-sadmin',
@@ -468,6 +488,12 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
     if (!res.ok || !json.success) {
       throw new Error(json.message || json.error || 'Cập nhật CSDL thất bại. Kiểm tra SUPABASE_SERVICE_ROLE_KEY trên server.');
     }
+    if (Array.isArray(json.relations)) {
+      saveStoredRelations(json.relations);
+    }
+    if (json.profile && idx !== -1) {
+      profiles[idx] = { ...profiles[idx], ...json.profile };
+    }
   }
 
   if (idx !== -1 && profiles[idx]) {
@@ -475,7 +501,7 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
     profiles[idx].approval_status = 'ACTIVE';
   } else {
     const fallback: Profile = {
-      id: `u-${Date.now()}`,
+      id: generateUuidV4(),
       email: cleanEmail,
       full_name: cleanEmail.split('@')[0],
       role: 'SCHOOL_ADMIN',
@@ -524,6 +550,12 @@ export async function approveTeacherUser(email: string, classId?: string, classN
     if (!res.ok || !json.success) {
       throw new Error(json.message || json.error || 'Cập nhật CSDL thất bại. Kiểm tra SUPABASE_SERVICE_ROLE_KEY trên server.');
     }
+    if (Array.isArray(json.relations)) {
+      saveStoredRelations(json.relations);
+    }
+    if (json.profile && idx !== -1) {
+      profiles[idx] = { ...profiles[idx], ...json.profile };
+    }
   }
 
   if (idx !== -1 && profiles[idx]) {
@@ -533,7 +565,7 @@ export async function approveTeacherUser(email: string, classId?: string, classN
     if (className) profiles[idx].assigned_class_name = className;
   } else {
     const fallback: Profile = {
-      id: `u-${Date.now()}`,
+      id: generateUuidV4(),
       email: cleanEmail,
       full_name: cleanEmail.split('@')[0],
       role: 'TEACHER',
@@ -545,6 +577,12 @@ export async function approveTeacherUser(email: string, classId?: string, classN
     profiles.push(fallback);
     idx = profiles.length - 1;
   }
+
+  // Remove any stale parent-student relations locally when switching to TEACHER
+  const cleanedRelations = getStoredRelations().filter(
+    (r) => r.parent_email?.toLowerCase().trim() !== cleanEmail
+  );
+  saveStoredRelations(cleanedRelations);
 
   saveStoredProfiles(profiles);
   return profiles[idx];
@@ -582,14 +620,22 @@ export async function approveStaffUser(email: string): Promise<Profile | null> {
     if (!res.ok || !json.success) {
       throw new Error(json.message || json.error || 'Cập nhật CSDL thất bại. Kiểm tra SUPABASE_SERVICE_ROLE_KEY trên server.');
     }
+    if (Array.isArray(json.relations)) {
+      saveStoredRelations(json.relations);
+    }
+    if (json.profile && idx !== -1) {
+      profiles[idx] = { ...profiles[idx], ...json.profile };
+    }
   }
 
   if (idx !== -1 && profiles[idx]) {
     profiles[idx].role = 'STAFF';
     profiles[idx].approval_status = 'ACTIVE';
+    profiles[idx].assigned_class_id = undefined;
+    profiles[idx].assigned_class_name = undefined;
   } else {
     const fallback: Profile = {
-      id: `u-${Date.now()}`,
+      id: generateUuidV4(),
       email: cleanEmail,
       full_name: cleanEmail.split('@')[0],
       role: 'STAFF',
@@ -657,10 +703,12 @@ export async function approveParentUser(email: string, studentIds: string[]): Pr
   if (idx !== -1 && profiles[idx]) {
     profiles[idx].role = 'PARENT';
     profiles[idx].approval_status = 'ACTIVE';
+    profiles[idx].assigned_class_id = undefined;
+    profiles[idx].assigned_class_name = undefined;
     profile = profiles[idx];
   } else {
     profile = {
-      id: `u-${Date.now()}`,
+      id: generateUuidV4(),
       email: cleanEmail,
       full_name: cleanEmail.split('@')[0],
       role: 'PARENT',
