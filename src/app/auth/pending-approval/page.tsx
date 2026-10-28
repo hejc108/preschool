@@ -5,22 +5,21 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldAlert, LogOut, RefreshCw } from 'lucide-react';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { supabase } from '@/lib/supabase/client';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 function PendingApprovalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const emailParam = searchParams?.get('email') || '';
+  const emailParam = parseSignedCookieClient(searchParams?.get('email') || '');
 
   const [email, setEmail] = useState<string>(emailParam);
 
-  // Sync cookie email if parameter missing or save email to cookie if present
+  // Sync cookie email if parameter missing
   useEffect(() => {
-    if (email && typeof window !== 'undefined') {
-      document.cookie = `suongmai_user_email=${encodeURIComponent(email)}; path=/; max-age=86400; SameSite=Lax`;
-    } else if (!email && typeof window !== 'undefined') {
+    if (!email && typeof window !== 'undefined') {
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
       if (match) {
-        const clean = decodeURIComponent(match[1]);
+        const clean = parseSignedCookieClient(match[1]);
         setEmail(clean);
       } else {
         const saved = localStorage.getItem('suongmai_auth_user');

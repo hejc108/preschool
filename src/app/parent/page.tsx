@@ -1,19 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   Heart, Calendar, Clock, CheckCircle2, ChevronLeft, Plus, 
   Shield, Sparkles, FileText, Phone, Check, UserCheck, AlertCircle, X,
   Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
-import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS } from '@/lib/supabase/client';
+import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
 import { AbsenceRequest, AuthorizedPickup, Student, ParentStudentRelation } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { getCurrentMenuWeek, getDayOfWeekEnum, INITIAL_4WEEK_MENU, checkDishAllergen } from '@/lib/utils/menuHelper';
 import { INITIAL_HEALTH_RECORDS, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
-import { getStoredRelations, fetchLiveProfilesFromSupabase } from '@/lib/utils/approvalHelper';
+import { saveStoredRelations } from '@/lib/utils/approvalHelper';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 export interface ParentChild {
   id: string;
@@ -28,39 +29,82 @@ export interface ParentChild {
   avatar_url: string;
 }
 
-// Parent Profiles for Testing Data Isolation & Selector Logic
-const MOCK_PARENT_PROFILES = [
-  {
-    id: 'p0',
-    name: 'Phụ huynh P0 (Chưa gán con - Empty State)',
-  },
-  {
-    id: 'p1',
-    name: 'Phụ huynh P1 (1 con duy nhất)',
-  },
-  {
-    id: 'p2',
-    name: 'Phụ huynh P2 (Multi-child 2 con)',
-  },
-];
-
-import { supabase } from '@/lib/supabase/client';
-
 export default function ParentPwaPage() {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
 
-  // Test Mode Toggle for Parent P0 (0 child), P1 (1 child) vs P2 (2 children)
-  const [activeParentIndex, setActiveParentIndex] = useState<number>(2); // Defaults to P2
   const [parentEmail, setParentEmail] = useState<string>('');
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [isLoadingRelations, setIsLoadingRelations] = useState<boolean>(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [wrongRoleNotice, setWrongRoleNotice] = useState<boolean>(false);
   const [isTeacherUser, setIsTeacherUser] = useState<boolean>(false);
   const [userRole, setUserRole] = useState<string>('');
   const [liveRelations, setLiveRelations] = useState<ParentStudentRelation[]>([]);
+  const [realStudents, setRealStudents] = useState<Student[]>([]);
 
-  // Read logged in parent email and relations from Supabase
+  const loadParentData = useCallback(async (rawEmail: string) => {
+    const cleanEmail = parseSignedCookieClient(rawEmail).toLowerCase().trim();
+    if (!cleanEmail) {
+      setIsLoadingRelations(false);
+      return;
+    }
+
+    try {
+      const [statusRes, approvalsRes, studentsRes] = await Promise.all([
+        fetch(`/api/auth/check-my-status?email=${encodeURIComponent(cleanEmail)}`, { cache: 'no-store' }).catch(() => null),
+        fetch('/api/users/approvals', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/admin/students', { cache: 'no-store' }).catch(() => null),
+      ]);
+
+      let mergedRelations: ParentStudentRelation[] = [];
+
+      if (statusRes && statusRes.ok) {
+        const statusJson = await statusRes.json().catch(() => ({}));
+        if (statusJson?.role) {
+          setUserRole(statusJson.role);
+          if (String(statusJson.role).includes('TEACHER')) {
+            setIsTeacherUser(true);
+          }
+        }
+        if (Array.isArray(statusJson?.linkedStudents) && statusJson.linkedStudents.length > 0) {
+          mergedRelations = statusJson.linkedStudents;
+        }
+      }
+
+      if (approvalsRes && approvalsRes.ok) {
+        const approvalsJson = await approvalsRes.json().catch(() => ({}));
+        if (Array.isArray(approvalsJson?.relations) && approvalsJson.relations.length > 0) {
+          saveStoredRelations(approvalsJson.relations);
+          const forParent = approvalsJson.relations.filter(
+            (r: ParentStudentRelation) =>
+              r.parent_email?.toLowerCase().trim() === cleanEmail && r.is_verified
+          );
+          if (forParent.length > 0) {
+            mergedRelations = forParent;
+          }
+        }
+      }
+
+      if (studentsRes && studentsRes.ok) {
+        const studentsJson = await studentsRes.json().catch(() => ({}));
+        const list: Student[] = Array.isArray(studentsJson)
+          ? studentsJson
+          : (studentsJson.students || studentsJson.data || []);
+        if (Array.isArray(list) && list.length > 0) {
+          setRealStudents(list);
+        }
+      }
+
+      setLiveRelations(mergedRelations);
+    } catch (e) {
+      console.warn('[ParentPwaPage] Error loading parent data:', e);
+    } finally {
+      setIsLoadingRelations(false);
+    }
+  }, []);
+
+  // Read logged in parent email using parseSignedCookieClient and fetch relations from Supabase
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -71,49 +115,56 @@ export default function ParentPwaPage() {
       let emailFound = '';
       let roleFound = '';
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-      if (match) emailFound = decodeURIComponent(match[1]).split('.')[0] || decodeURIComponent(match[1]);
+      if (match) emailFound = parseSignedCookieClient(match[1]);
 
       const roleMatch = document.cookie.match(/suongmai_user_role=([^;]+)/);
-      if (roleMatch) roleFound = decodeURIComponent(roleMatch[1]).split('.')[0] || decodeURIComponent(roleMatch[1]);
+      if (roleMatch) roleFound = parseSignedCookieClient(roleMatch[1]);
 
       if (!emailFound || !emailFound.includes('@')) {
         const saved = localStorage.getItem('suongmai_auth_user');
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            if (parsed.email) emailFound = parsed.email;
-            if (parsed.role) roleFound = parsed.role;
+            if (parsed.email) emailFound = parseSignedCookieClient(parsed.email);
+            if (parsed.role) roleFound = parseSignedCookieClient(parsed.role);
           } catch (e) {}
         }
       }
+
       if (roleFound) {
         setUserRole(roleFound);
         if (roleFound.includes('TEACHER')) {
           setIsTeacherUser(true);
         }
       }
-      if (emailFound) {
-        setParentEmail(emailFound);
+
+      if (emailFound && emailFound.includes('@')) {
+        const cleanEmail = emailFound.toLowerCase().trim();
+        setParentEmail(cleanEmail);
         setIsAuthenticated(true);
-        fetchLiveProfilesFromSupabase().then(() => {
-          const allRels = getStoredRelations();
-          setLiveRelations(allRels);
-          const rels = allRels.filter(
-            (r) => r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim() && r.is_verified
-          );
-          if (rels.length === 0) {
-            setActiveParentIndex(0);
-          } else if (rels.length === 1) {
-            setActiveParentIndex(1);
-          } else {
-            setActiveParentIndex(2);
-          }
-        });
+        loadParentData(cleanEmail);
       } else {
-        setIsAuthenticated(false);
+        // Fallback: check active Supabase Auth session
+        supabase.auth
+          .getUser()
+          .then(({ data }) => {
+            if (data?.user?.email) {
+              const cleanEmail = data.user.email.toLowerCase().trim();
+              setParentEmail(cleanEmail);
+              setIsAuthenticated(true);
+              loadParentData(cleanEmail);
+            } else {
+              setIsAuthenticated(false);
+              setIsLoadingRelations(false);
+            }
+          })
+          .catch(() => {
+            setIsAuthenticated(false);
+            setIsLoadingRelations(false);
+          });
       }
     }
-  }, []);
+  }, [loadParentData]);
 
   const handleInPlaceGoogleLogin = async () => {
     setIsLoggingIn(true);
@@ -145,95 +196,62 @@ export default function ParentPwaPage() {
   const handleRefreshParentRelations = async () => {
     setRefreshing(true);
     try {
-      await fetchLiveProfilesFromSupabase();
-      if (typeof window !== 'undefined') {
-        const email = parentEmail || 'parent@gmail.com';
-        const allRels = getStoredRelations();
-        setLiveRelations(allRels);
-        const rels = allRels.filter(
-          (r) => r.parent_email.toLowerCase().trim() === email.toLowerCase().trim() && r.is_verified
-        );
-        if (rels.length > 0) {
-          setActiveParentIndex(rels.length >= 2 ? 2 : 1);
-        } else {
-          setActiveParentIndex(0);
-        }
+      let targetEmail = parentEmail;
+      if (!targetEmail && typeof window !== 'undefined') {
+        const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
+        if (match) targetEmail = parseSignedCookieClient(match[1]);
+      }
+      if (targetEmail) {
+        setParentEmail(targetEmail.toLowerCase().trim());
+        await loadParentData(targetEmail);
       }
     } catch (e) {
       console.warn('Error refreshing parent relations:', e);
     } finally {
-      setTimeout(() => setRefreshing(false), 500);
+      setTimeout(() => setRefreshing(false), 400);
     }
   };
 
-  const [realStudents, setRealStudents] = useState<Student[]>([]);
-
-  React.useEffect(() => {
-    async function loadRealStudents() {
-      try {
-        const res = await fetch('/api/admin/students', { cache: 'no-store' });
-        const json = await res.json();
-        const list: Student[] = Array.isArray(json)
-          ? json
-          : (json.students || json.data || []);
-        if (Array.isArray(list) && list.length > 0) {
-          setRealStudents(list);
-          return;
-        }
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .order('full_name', { ascending: true });
-        if (data && !error && data.length > 0) {
-          setRealStudents(data as Student[]);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    loadRealStudents();
-  }, []);
-
   const parentChildren: ParentChild[] = React.useMemo(() => {
-    if (activeParentIndex === 0) return [];
-
-    const cleanParentEmail = (parentEmail || '').toLowerCase().trim();
+    const cleanParentEmail = parseSignedCookieClient(parentEmail || '').toLowerCase().trim();
     const myRels = cleanParentEmail
       ? liveRelations.filter(
           (r) => r.parent_email?.toLowerCase().trim() === cleanParentEmail && r.is_verified
         )
-      : [];
+      : liveRelations;
 
-    let targetStudents: Student[] = [];
-    if (myRels.length > 0) {
-      const linkedIds = new Set(myRels.map((r) => r.student_id));
-      targetStudents = realStudents.filter((s) => linkedIds.has(s.id));
-    }
-    if (targetStudents.length === 0) {
-      targetStudents = realStudents.slice(0, activeParentIndex);
-    }
+    if (myRels.length === 0) return [];
 
-    return targetStudents.map((s) => ({
-      id: s.id,
-      full_name: s.full_name,
-      class_name: s.class_name || 'Mầm',
-      teacher_name: `Giáo viên lớp ${s.class_name || 'Mầm'}`,
-      student_code: s.student_code,
-      allergies: s.allergies || 'Không',
-      avatar_initials: s.full_name
-        .split(' ')
-        .filter(Boolean)
-        .map((w) => w[0])
-        .join('')
-        .slice(-2)
-        .toUpperCase(),
-      attendance_status: 'PRESENT',
-      checked_in_time: '07:45',
-      avatar_url:
-        s.avatar_url ||
-        'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80',
-    }));
-  }, [activeParentIndex, realStudents, parentEmail, liveRelations]);
+    return myRels.map((rel) => {
+      const st = realStudents.find((s) => s.id === rel.student_id);
+      const fullName = st?.full_name || rel.student_name || 'Học sinh Sương Mai';
+      const className = st?.class_name || rel.class_name || 'Mầm';
+      const studentCode = st?.student_code || rel.student_code || '';
+      const allergies = st?.allergies || 'Không';
+      const avatarUrl =
+        st?.avatar_url ||
+        'https://images.unsplash.com/photo-1543332164-6e82f355badc?w=150&auto=format&fit=crop&q=80';
+
+      return {
+        id: rel.student_id,
+        full_name: fullName,
+        class_name: className,
+        teacher_name: `Giáo viên lớp ${className}`,
+        student_code: studentCode,
+        allergies,
+        avatar_initials: fullName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w[0])
+          .join('')
+          .slice(-2)
+          .toUpperCase(),
+        attendance_status: 'PRESENT',
+        checked_in_time: '07:45',
+        avatar_url: avatarUrl,
+      };
+    });
+  }, [realStudents, parentEmail, liveRelations]);
 
   // Selected Child State
   const [selectedChildId, setSelectedChildId] = useState<string>('');
@@ -397,6 +415,25 @@ export default function ParentPwaPage() {
     );
   }
 
+  // --- LOADING STATE WHILE FETCHING RELATIONS FROM SUPABASE ---
+  if (isLoadingRelations) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
+        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-8 text-center shadow-lg space-y-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-sky-50 border border-sky-200 rounded-2xl text-sky-600 shadow-2xs">
+            <RefreshCw className="w-7 h-7 animate-spin" />
+          </div>
+          <h2 className="text-base font-bold text-slate-800">
+            Đang tải hồ sơ liên kết của bé...
+          </h2>
+          <p className="text-xs text-slate-500">
+            Hệ thống đang đồng bộ dữ liệu Sổ liên lạc từ Trường Mầm Non Sương Mai.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // --- EMPTY STATE FOR UNLINKED PARENTS (Section III.2 Technical Directive) ---
   if (!selectedChild || parentChildren.length === 0) {
     return (
@@ -431,37 +468,6 @@ export default function ParentPwaPage() {
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             <span>[ 🔄 Kiểm tra lại ]</span>
           </button>
-
-          {/* QC Mode Selector Bar */}
-          <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500">
-            <span className="font-semibold block mb-1">Chế độ kiểm thử (QC Selector):</span>
-            <div className="flex items-center justify-center gap-1.5">
-              <button
-                onClick={() => setActiveParentIndex(0)}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  activeParentIndex === 0 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                P0 (Chưa gán bé)
-              </button>
-              <button
-                onClick={() => setActiveParentIndex(1)}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  activeParentIndex === 1 ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                P1 (1 bé)
-              </button>
-              <button
-                onClick={() => setActiveParentIndex(2)}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  activeParentIndex === 2 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                P2 (2 bé)
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -480,42 +486,6 @@ export default function ParentPwaPage() {
           </button>
         </div>
       )}
-      {/* Test Scenario Switcher Bar (For QC Verification of TC-AUTH-01 vs TC-AUTH-02 vs P0) */}
-      <div className="p-2 bg-slate-800 text-white text-[11px] flex items-center justify-between">
-        <span className="font-semibold text-slate-300">QC Test Account Mode:</span>
-        <div className="flex gap-1">
-          <button
-            onClick={() => setActiveParentIndex(0)}
-            className={`px-2 py-0.5 rounded font-bold transition-all ${
-              activeParentIndex === 0 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
-            }`}
-          >
-            P0 (0 bé)
-          </button>
-          <button
-            onClick={() => {
-              setActiveParentIndex(1);
-              if (realStudents[0]?.id) setSelectedChildId(realStudents[0].id);
-            }}
-            className={`px-2 py-0.5 rounded font-bold transition-all ${
-              activeParentIndex === 1 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
-            }`}
-          >
-            P1 (1 bé)
-          </button>
-          <button
-            onClick={() => {
-              setActiveParentIndex(2);
-              if (realStudents[0]?.id) setSelectedChildId(realStudents[0].id);
-            }}
-            className={`px-2 py-0.5 rounded font-bold transition-all ${
-              activeParentIndex === 2 ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300 hover:text-white'
-            }`}
-          >
-            P2 (2 bé)
-          </button>
-        </div>
-      </div>
 
       {/* Mobile Top Header */}
       <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
