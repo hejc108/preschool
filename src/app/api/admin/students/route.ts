@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isNonRegularStudent } from '@/lib/utils/studentClassification';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -172,6 +173,8 @@ export async function GET() {
           ? s.citizen_id
           : (citizenIdsMap[s.id] !== undefined ? citizenIdsMap[s.id] : null);
 
+      const isNonReg = isNonRegularStudent(s, friendlyClassName);
+
       return {
         id: s.id,
         student_code: s.student_code || s.code || '',
@@ -184,7 +187,8 @@ export async function GET() {
         allergies: s.allergies || 'Không',
         status: s.status || 'ACTIVE',
         avatar_url: s.avatar_url || '',
-        is_non_regular: Boolean(s.is_non_regular),
+        is_non_regular: isNonReg,
+        is_official: !isNonReg,
         parents: s.parents || [],
         authorized_pickups: s.authorized_pickups || [],
         created_at: s.created_at,

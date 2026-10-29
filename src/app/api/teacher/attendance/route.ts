@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isNonRegularStudent } from '@/lib/utils/studentClassification';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -212,6 +213,8 @@ export async function GET(request: Request) {
         uiStatus = 'ABSENT';
       }
 
+      const isNonReg = isNonRegularStudent(s, targetClassName || s.class_name);
+
       return {
         id: s.id,
         student_code: s.student_code || s.code || '',
@@ -229,8 +232,13 @@ export async function GET(request: Request) {
         checkedInAt: att?.checked_in_at || null,
         checkedOutAt: att?.checked_out_at || null,
         checkoutReason: att?.checkout_reason || '',
+        is_official: !isNonReg,
+        is_non_regular: isNonReg,
       };
     });
+
+    const officialStudents = mappedStudents.filter((s) => s.is_official);
+    const unofficialStudents = mappedStudents.filter((s) => s.is_non_regular);
 
     return NextResponse.json(
       {
@@ -239,7 +247,11 @@ export async function GET(request: Request) {
         class_name: targetClassName,
         date,
         total: mappedStudents.length,
+        total_official: officialStudents.length,
+        total_unofficial: unofficialStudents.length,
         students: mappedStudents,
+        official_students: officialStudents,
+        unofficial_students: unofficialStudents,
         medications: medicationRecords,
         meal_exceptions: mealExceptionRecords,
       },

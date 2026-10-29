@@ -81,6 +81,7 @@ export interface Student {
   status: 'ACTIVE' | 'GRADUATED' | 'WITHDRAWN';
   avatar_url?: string;
   is_non_regular?: boolean;
+  is_official?: boolean;
   parents?: ParentContact[];
   authorized_pickups?: AuthorizedPickup[];
   created_at?: string;

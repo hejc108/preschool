@@ -432,8 +432,9 @@ async function runImport() {
         gender: s.gender === 'MALE' ? 'NAM' : 'NỮ',
         dob: s.dob || '2024-01-01',
         class_id: classMap.get(s.class_name) || null,
-        allergies: 'Không có',
-        status: 'ACTIVE'
+        allergies: 'Không',
+        status: 'ACTIVE',
+        is_non_regular: s.is_non_regular
       };
       conflictCol = 'student_code';
     }

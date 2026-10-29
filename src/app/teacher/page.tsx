@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   CheckCircle2, HeartPulse, Utensils, Lock, 
   ChevronLeft, Plus, Sparkles, Check, AlertCircle, LogOut, 
@@ -15,6 +15,7 @@ import {
 } from '@/lib/supabase/client';
 import { MedicationRequest, MealException, AbsenceRequest, Student, ParentContact, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { hasRealAllergy, translateAllergy, isNonRegularStudent } from '@/lib/utils/studentClassification';
 
 export interface AssignedClass {
   id: string;
@@ -25,6 +26,8 @@ export interface TeacherStudent extends Student {
   attendance: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT';
   checkedOut: boolean;
   checkoutReason: string;
+  is_official?: boolean;
+  is_non_regular?: boolean;
 }
 
 export interface ClassCacheData {
@@ -38,18 +41,6 @@ import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations, s
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 import { supabase } from '@/lib/supabase/client';
-
-function translateAllergy(allergy: string | undefined | null, language: string): string {
-  if (!allergy || allergy === 'Không' || allergy === 'None') {
-    return language === 'en' ? 'Normal (No allergies)' : 'Bình thường (Không dị ứng)';
-  }
-  if (language === 'en') {
-    if (allergy.includes('Hải sản')) return 'Seafood (Shrimp, Crab)';
-    if (allergy.includes('Sữa bò')) return 'Cow\'s milk (Lactose)';
-    if (allergy.includes('Đậu phụng') || allergy.includes('Đậu phộng')) return 'Peanuts';
-  }
-  return allergy;
-}
 
 function translateReasonTag(tag: string, language: string): string {
   if (language !== 'en') return tag;
@@ -83,6 +74,17 @@ export default function TeacherPwaPage() {
 
   // Attendance & SWR Cache State
   const [students, setStudents] = useState<TeacherStudent[]>([]);
+
+  // Sĩ số chính thức (đúng định mức 170 bé) & Học sinh ngoài danh sách (21 bé bổ sung)
+  const officialStudents = useMemo(
+    () => students.filter((s) => s.is_official !== false && !s.is_non_regular),
+    [students]
+  );
+  const nonRegularStudents = useMemo(
+    () => students.filter((s) => s.is_official === false || s.is_non_regular),
+    [students]
+  );
+
   const [isKitchenLocked, setIsKitchenLocked] = useState(false);
   const [absences, setAbsences] = useState<AbsenceRequest[]>(INITIAL_ABSENCE_REQUESTS);
 
@@ -194,12 +196,17 @@ export default function TeacherPwaPage() {
           }
         }
 
-        const mapped: TeacherStudent[] = baseStudents.map((s: any) => ({
-          ...s,
-          attendance: 'PRESENT' as const,
-          checkedOut: false,
-          checkoutReason: '',
-        }));
+        const mapped: TeacherStudent[] = baseStudents.map((s: any) => {
+          const isNonReg = isNonRegularStudent(s, targetClass.name);
+          return {
+            ...s,
+            attendance: 'PRESENT' as const,
+            checkedOut: false,
+            checkoutReason: '',
+            is_official: !isNonReg,
+            is_non_regular: isNonReg,
+          };
+        });
 
         const fallbackEntry: ClassCacheData = {
           students: mapped,
@@ -651,8 +658,8 @@ export default function TeacherPwaPage() {
         status: s.attendance === 'ABSENT' ? 'ABSENT_UNEXCUSED' : s.attendance,
       }))
     );
-    const presentCount = students.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length;
-    alert(`⚡ ${t('teacher.dispatched_done')}\n\n• ${t('common.child')}: ${presentCount}/${students.length}`);
+    const officialPresentCount = officialStudents.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length;
+    alert(`⚡ ${t('teacher.dispatched_done')}\n\n• ${t('common.child')}: ${officialPresentCount}/${officialStudents.length}`);
   };
 
   const handleAddMedication = async (e: React.FormEvent) => {
@@ -1085,7 +1092,7 @@ export default function TeacherPwaPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-600 font-bold">{t('teacher.class_headcount')}</span>
               <span className="px-2 py-0.5 bg-rose-50 text-primary-800 border border-rose-200 rounded-full font-extrabold text-xs">
-                {students.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length} / {students.length}
+                {officialStudents.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length} / {officialStudents.length}
               </span>
             </div>
 
@@ -1145,75 +1152,199 @@ export default function TeacherPwaPage() {
               Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {students.map((student) => (
-                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {student.avatar_url ? (
-                        <img
-                          src={student.avatar_url}
-                          alt={student.full_name}
-                          className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
-                          {student.full_name.charAt(0)}
+            <div className="space-y-4">
+              {/* 1. Official Students (100% matched to class quota) */}
+              <div className="space-y-2.5">
+                {officialStudents.map((student) => {
+                  const hasMedToday = medications.some((m) => m.student_id === student.id);
+                  const hasAllergy = hasRealAllergy(student.allergies);
+
+                  return (
+                    <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {student.avatar_url ? (
+                            <img
+                              src={student.avatar_url}
+                              alt={student.full_name}
+                              className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
+                              {student.full_name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                            <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
-                        <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
+
+                        {/* Medical & Allergy Badges */}
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+                          {hasMedToday && (
+                            <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold flex items-center gap-1">
+                              💊 {language === 'en' ? 'Medication' : 'Có dặn thuốc'}
+                            </span>
+                          )}
+                          {hasAllergy && (
+                            <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
+                              ⚠️ {translateAllergy(student.allergies, language)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        <button
+                          onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
+                          disabled={isKitchenLocked}
+                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                            student.attendance === 'PRESENT'
+                              ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {t('teacher.btn_present')}
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
+                          disabled={isKitchenLocked}
+                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                            student.attendance === 'PRESENT_LATE'
+                              ? 'bg-secondary-600 text-white shadow-sm font-bold'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {t('teacher.btn_late')}
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
+                          disabled={isKitchenLocked}
+                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                            student.attendance === 'ABSENT'
+                              ? 'bg-rose-500 text-white shadow-sm font-bold'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {t('teacher.btn_absent')}
+                        </button>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
 
-                    {student.allergies !== 'Không' && student.allergies !== 'None' && (
-                      <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
-                        ⚠️ {translateAllergy(student.allergies, language)}
-                      </span>
-                    )}
+              {/* 2. Non-Regular / Supplemental Students Section (Completely segregated from official count) */}
+              {nonRegularStudents.length > 0 && (
+                <div className="pt-4 border-t-2 border-dashed border-amber-200 space-y-3">
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 flex items-start gap-2.5">
+                    <span className="text-base leading-none mt-0.5">📋</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900 flex items-center gap-2">
+                        <span>Danh sách ngoài quy chế / bổ sung</span>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-[10px] font-extrabold">
+                          {nonRegularStudents.length} bé
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-amber-700/90 mt-0.5">
+                        Học sinh tiếp nhận bổ sung, theo dõi chuyên cần riêng và <strong>không tính vào sĩ số báo ăn chính thức</strong> của lớp.
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
-                  <div className="grid grid-cols-3 gap-1.5 pt-1">
-                    <button
-                      onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
-                      disabled={isKitchenLocked}
-                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                        student.attendance === 'PRESENT'
-                          ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                      }`}
-                    >
-                      {t('teacher.btn_present')}
-                    </button>
+                  <div className="space-y-2.5">
+                    {nonRegularStudents.map((student) => {
+                      const hasMedToday = medications.some((m) => m.student_id === student.id);
+                      const hasAllergy = hasRealAllergy(student.allergies);
 
-                    <button
-                      onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
-                      disabled={isKitchenLocked}
-                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                        student.attendance === 'PRESENT_LATE'
-                          ? 'bg-secondary-600 text-white shadow-sm font-bold'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                      }`}
-                    >
-                      {t('teacher.btn_late')}
-                    </button>
+                      return (
+                        <div key={student.id} className="p-3.5 bg-amber-50/30 border border-amber-200/60 rounded-2xl space-y-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {student.avatar_url ? (
+                                <img
+                                  src={student.avatar_url}
+                                  alt={student.full_name}
+                                  className="w-10 h-10 rounded-full border-2 border-amber-200 object-cover shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                  {student.full_name.charAt(0)}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">
+                                    Bổ sung
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
 
-                    <button
-                      onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
-                      disabled={isKitchenLocked}
-                      className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                        student.attendance === 'ABSENT'
-                          ? 'bg-rose-500 text-white shadow-sm font-bold'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                      }`}
-                    >
-                      {t('teacher.btn_absent')}
-                    </button>
+                            {/* Medical & Allergy Badges */}
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+                              {hasMedToday && (
+                                <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold flex items-center gap-1">
+                                  💊 {language === 'en' ? 'Medication' : 'Có dặn thuốc'}
+                                </span>
+                              )}
+                              {hasAllergy && (
+                                <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
+                                  ⚠️ {translateAllergy(student.allergies, language)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5 pt-1">
+                            <button
+                              onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
+                              disabled={isKitchenLocked}
+                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                                student.attendance === 'PRESENT'
+                                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {t('teacher.btn_present')}
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
+                              disabled={isKitchenLocked}
+                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                                student.attendance === 'PRESENT_LATE'
+                                  ? 'bg-secondary-600 text-white shadow-sm font-bold'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {t('teacher.btn_late')}
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
+                              disabled={isKitchenLocked}
+                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                                student.attendance === 'ABSENT'
+                                  ? 'bg-rose-500 text-white shadow-sm font-bold'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {t('teacher.btn_absent')}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -1522,48 +1653,120 @@ export default function TeacherPwaPage() {
               Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {students.map((student) => (
-                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
-                  <div className="flex items-center gap-3">
-                    {student.avatar_url ? (
-                      <img
-                        src={student.avatar_url}
-                        alt={student.full_name}
-                        className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        {student.full_name.charAt(0)}
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{student.full_name}</h4>
-                      <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
-                      {student.checkoutReason && (
-                        <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+            <div className="space-y-4">
+              {/* 1. Official Students (100% quota) */}
+              <div className="space-y-2.5">
+                {officialStudents.map((student) => (
+                  <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {student.avatar_url ? (
+                        <img
+                          src={student.avatar_url}
+                          alt={student.full_name}
+                          className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          {student.full_name.charAt(0)}
+                        </div>
                       )}
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                        <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
+                        {student.checkoutReason && (
+                          <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {student.checkedOut ? (
+                      <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
+                        <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setLateStudentId(student.id);
+                          setShowLateCheckoutModal(true);
+                        }}
+                        className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>{t('teacher.checkout_late')}</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* 2. Non-Regular / Supplemental Students Section */}
+              {nonRegularStudents.length > 0 && (
+                <div className="pt-4 border-t-2 border-dashed border-amber-200 space-y-3">
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 flex items-start gap-2.5">
+                    <span className="text-base leading-none mt-0.5">📋</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900 flex items-center gap-2">
+                        <span>Danh sách trả trẻ ngoài quy chế / bổ sung</span>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-[10px] font-extrabold">
+                          {nonRegularStudents.length} bé
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-amber-700/90 mt-0.5">
+                        Xác nhận bàn giao học sinh tiếp nhận ngoài danh sách chính thức.
+                      </p>
                     </div>
                   </div>
 
-                  {student.checkedOut ? (
-                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setLateStudentId(student.id);
-                        setShowLateCheckoutModal(true);
-                      }}
-                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>{t('teacher.checkout_late')}</span>
-                    </button>
-                  )}
+                  <div className="space-y-2.5">
+                    {nonRegularStudents.map((student) => (
+                      <div key={student.id} className="p-3.5 bg-amber-50/30 border border-amber-200/60 rounded-convent flex items-center justify-between text-xs shadow-2xs">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {student.avatar_url ? (
+                            <img
+                              src={student.avatar_url}
+                              alt={student.full_name}
+                              className="w-10 h-10 rounded-full border-2 border-amber-200 object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                              {student.full_name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
+                              <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">
+                                Bổ sung
+                              </span>
+                            </div>
+                            {student.checkoutReason && (
+                              <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {student.checkedOut ? (
+                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
+                            <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setLateStudentId(student.id);
+                              setShowLateCheckoutModal(true);
+                            }}
+                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>{t('teacher.checkout_late')}</span>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
