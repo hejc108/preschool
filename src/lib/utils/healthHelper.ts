@@ -44,5 +44,7 @@ export function getGrowthStatusDisplay(status: GrowthStatus): { text: string; bg
 }
 
 // INITIAL HEALTH RECORDS
-export const INITIAL_HEALTH_RECORDS: HealthRecord[] = [];
+// INITIAL HEALTH RECORDS NẠP TỰ ĐỘNG TỪ 5 FILE EXCEL (168 HỒ SƠ)
+import healthCatalogData from '../data/health_catalog.json';
+export const INITIAL_HEALTH_RECORDS: HealthRecord[] = healthCatalogData as HealthRecord[];
 
