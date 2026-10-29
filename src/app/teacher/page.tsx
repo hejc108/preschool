@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   CheckCircle2, HeartPulse, Utensils, Lock, 
   ChevronLeft, Plus, Sparkles, Check, AlertCircle, LogOut, 
@@ -25,6 +25,13 @@ export interface TeacherStudent extends Student {
   attendance: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT';
   checkedOut: boolean;
   checkoutReason: string;
+}
+
+export interface ClassCacheData {
+  students: TeacherStudent[];
+  medications: MedicationRequest[];
+  mealExceptions: MealException[];
+  timestamp: number;
 }
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations, saveStoredProfiles } from '@/lib/utils/approvalHelper';
@@ -74,6 +81,198 @@ export default function TeacherPwaPage() {
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [hasParentAccess, setHasParentAccess] = useState<boolean>(false);
 
+  // Attendance & SWR Cache State
+  const [students, setStudents] = useState<TeacherStudent[]>([]);
+  const [isKitchenLocked, setIsKitchenLocked] = useState(false);
+  const [absences, setAbsences] = useState<AbsenceRequest[]>(INITIAL_ABSENCE_REQUESTS);
+
+  // Medication State
+  const [medications, setMedications] = useState<MedicationRequest[]>(INITIAL_MEDICATIONS);
+  const [showAddMedModal, setShowAddMedModal] = useState(false);
+  const [newMedStudentId, setNewMedStudentId] = useState('');
+  const [newMedSlot, setNewMedSlot] = useState<'SLOT_1130' | 'SLOT_1430'>('SLOT_1130');
+  const [newMedName, setNewMedName] = useState('');
+  const [newMedDosage, setNewMedDosage] = useState('');
+  const [newMedNotes, setNewMedNotes] = useState('');
+
+  // Meal Exceptions State
+  const [mealExceptions, setMealExceptions] = useState<MealException[]>(INITIAL_MEAL_EXCEPTIONS);
+  const [selectedStudentForMeal, setSelectedStudentForMeal] = useState('');
+  const [selectedIntakeLevel, setSelectedIntakeLevel] = useState<'HALF' | 'REFUSED'>('HALF');
+  const [selectedTags, setSelectedTags] = useState<string[]>(['#Biếng_ăn']);
+
+  // In-Memory SWR Cache for classes
+  const [classDataCache, setClassDataCache] = useState<Record<string, ClassCacheData>>({});
+  const classDataCacheRef = useRef<Record<string, ClassCacheData>>({});
+  useEffect(() => {
+    classDataCacheRef.current = classDataCache;
+  }, [classDataCache]);
+
+  const activeClassRef = useRef<AssignedClass | null>(activeClass);
+  useEffect(() => {
+    activeClassRef.current = activeClass;
+  }, [activeClass]);
+
+  // Synchronous cache updater for current active class to prevent stale data on rapid tab switching
+  const updateActiveCache = (updater: (prevEntry: ClassCacheData) => ClassCacheData) => {
+    if (!activeClass) return;
+    const cid = activeClass.id;
+    setClassDataCache((prev) => {
+      const current = prev[cid] || {
+        students: [],
+        medications: [],
+        mealExceptions: [],
+        timestamp: Date.now(),
+      };
+      const updated = updater(current);
+      classDataCacheRef.current[cid] = updated;
+      return { ...prev, [cid]: updated };
+    });
+  };
+
+  // SWR Fetcher: Fetches fresh data for target class from optimized Server API
+  const fetchClassData = async (targetClass: AssignedClass, isBackground = false) => {
+    const isCached = Boolean(classDataCacheRef.current[targetClass.id]);
+    if (!isCached && !isBackground) {
+      setLoadingStudents(true);
+    }
+
+    try {
+      const res = await fetch(
+        `/api/teacher/attendance?class_id=${encodeURIComponent(targetClass.id)}&class_name=${encodeURIComponent(targetClass.name)}`,
+        { cache: 'no-store' }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        const freshStudents: TeacherStudent[] = json.students || [];
+        const freshMeds: MedicationRequest[] = json.medications || [];
+        const freshMeals: MealException[] = json.meal_exceptions || [];
+
+        const cacheEntry: ClassCacheData = {
+          students: freshStudents,
+          medications: freshMeds,
+          mealExceptions: freshMeals,
+          timestamp: Date.now(),
+        };
+
+        setClassDataCache((prev) => ({
+          ...prev,
+          [targetClass.id]: cacheEntry,
+        }));
+        classDataCacheRef.current[targetClass.id] = cacheEntry;
+
+        if (activeClassRef.current?.id === targetClass.id) {
+          setStudents(freshStudents);
+          if (freshMeds.length > 0) setMedications(freshMeds);
+          if (freshMeals.length > 0) setMealExceptions(freshMeals);
+          if (freshStudents.length > 0) {
+            setNewMedStudentId((prev) => prev || freshStudents[0].id);
+            setSelectedStudentForMeal((prev) => prev || freshStudents[0].id);
+          }
+        }
+        return cacheEntry;
+      } else {
+        // Fallback: direct Supabase fetch
+        let baseStudents: any[] = [];
+        const { data } = await supabase
+          .from('students')
+          .select('*')
+          .eq('class_id', targetClass.id)
+          .order('full_name', { ascending: true });
+
+        if (data && data.length > 0) {
+          baseStudents = data;
+        } else {
+          const sRes = await fetch('/api/admin/students', { cache: 'no-store' });
+          if (sRes.ok) {
+            const sJson = await sRes.json();
+            baseStudents = (sJson.students || []).filter(
+              (s: any) =>
+                s.class_id === targetClass.id ||
+                s.class_name?.toLowerCase().trim() === targetClass.name.toLowerCase().trim()
+            );
+          }
+        }
+
+        const mapped: TeacherStudent[] = baseStudents.map((s: any) => ({
+          ...s,
+          attendance: 'PRESENT' as const,
+          checkedOut: false,
+          checkoutReason: '',
+        }));
+
+        const fallbackEntry: ClassCacheData = {
+          students: mapped,
+          medications: [],
+          mealExceptions: [],
+          timestamp: Date.now(),
+        };
+        setClassDataCache((prev) => ({ ...prev, [targetClass.id]: fallbackEntry }));
+        classDataCacheRef.current[targetClass.id] = fallbackEntry;
+        if (activeClassRef.current?.id === targetClass.id) {
+          setStudents(mapped);
+        }
+        return fallbackEntry;
+      }
+    } catch (e) {
+      console.warn('[TeacherSWR] Error fetching class data:', e);
+    } finally {
+      if (activeClassRef.current?.id === targetClass.id) {
+        setLoadingStudents(false);
+      }
+    }
+  };
+
+  // Instant SWR Switch (<0.1s switch, zero lag, no 0/0 screen)
+  const handleSelectClass = (c: AssignedClass) => {
+    if (activeClass?.id === c.id) return;
+
+    setActiveClass(c);
+    setAssignedClassName(c.name);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('suongmai_teacher_active_class_id', c.id);
+    }
+
+    // A. Check in-memory cache:
+    const cached = classDataCacheRef.current[c.id];
+    if (cached) {
+      // 0s instant render, no loading spinner, no "0/0" blank screen!
+      setStudents(cached.students);
+      setMedications(cached.medications);
+      setMealExceptions(cached.mealExceptions);
+      setLoadingStudents(false);
+      if (cached.students.length > 0) {
+        setNewMedStudentId(cached.students[0].id);
+        setSelectedStudentForMeal(cached.students[0].id);
+      }
+    } else {
+      // Only show loading on very first open
+      setStudents([]);
+      setLoadingStudents(true);
+    }
+
+    // B. Revalidate fresh data from Supabase in background
+    fetchClassData(c, Boolean(cached));
+  };
+
+  // Initial class load
+  useEffect(() => {
+    if (!activeClass) return;
+    const isCached = Boolean(classDataCacheRef.current[activeClass.id]);
+    fetchClassData(activeClass, isCached);
+  }, [activeClass]);
+
+  // Background Preload: Silently warm up cache for other assigned classes
+  useEffect(() => {
+    if (assignedClasses.length > 1) {
+      assignedClasses.forEach((cls) => {
+        if (!classDataCacheRef.current[cls.id]) {
+          fetchClassData(cls, true);
+        }
+      });
+    }
+  }, [assignedClasses]);
+
   const handleLogout = async () => {
     try {
       if (supabase && supabase.auth) await supabase.auth.signOut();
@@ -107,18 +306,20 @@ export default function TeacherPwaPage() {
 
   const loadTeacherAssignments = async (email: string) => {
     try {
-      const res = await fetch(`/api/admin/teacher-assignments?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`/api/teacher/classes?email=${encodeURIComponent(email)}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
-        if (json.assignments && json.assignments.length > 0) {
-          const list: AssignedClass[] = json.assignments.map((a: any) => ({
+        if (json.classes && json.classes.length > 0) {
+          const list: AssignedClass[] = json.classes.map((a: any) => ({
             id: a.class_id,
             name: a.class_name,
           }));
           setAssignedClasses(list);
           setIsClassAssigned(true);
 
-          // Directive 3: Check sessionStorage for remembered active class
+          // Check sessionStorage for remembered active class
           const savedClassId =
             typeof window !== 'undefined'
               ? sessionStorage.getItem('suongmai_teacher_active_class_id')
@@ -132,7 +333,7 @@ export default function TeacherPwaPage() {
         }
       }
     } catch (e) {
-      console.warn('API teacher-assignments notice:', e);
+      console.warn('API teacher classes notice:', e);
     }
 
     // Fallback: Check profile
@@ -161,19 +362,6 @@ export default function TeacherPwaPage() {
         setActiveClass(chosen);
         setAssignedClassName(chosen.name);
       }
-    }
-  };
-
-  const handleSelectClass = (c: AssignedClass) => {
-    if (activeClass?.id === c.id) return;
-    // Directive 2: Empty student list and show loading indicator (No Stale Data)
-    setStudents([]);
-    setLoadingStudents(true);
-    setActiveClass(c);
-    setAssignedClassName(c.name);
-    // Directive 3: Remember in sessionStorage
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('suongmai_teacher_active_class_id', c.id);
     }
   };
 
@@ -339,107 +527,6 @@ export default function TeacherPwaPage() {
     }
   };
 
-  // Attendance State
-  const [students, setStudents] = useState<TeacherStudent[]>([]);
-  const [isKitchenLocked, setIsKitchenLocked] = useState(false);
-  const [absences, setAbsences] = useState<AbsenceRequest[]>(INITIAL_ABSENCE_REQUESTS);
-
-  // Medication State
-  const [medications, setMedications] = useState<MedicationRequest[]>(INITIAL_MEDICATIONS);
-  const [showAddMedModal, setShowAddMedModal] = useState(false);
-  const [newMedStudentId, setNewMedStudentId] = useState('');
-  const [newMedSlot, setNewMedSlot] = useState<'SLOT_1130' | 'SLOT_1430'>('SLOT_1130');
-  const [newMedName, setNewMedName] = useState('');
-  const [newMedDosage, setNewMedDosage] = useState('');
-  const [newMedNotes, setNewMedNotes] = useState('');
-
-  // Meal Exceptions State
-  const [mealExceptions, setMealExceptions] = useState<MealException[]>(INITIAL_MEAL_EXCEPTIONS);
-  const [selectedStudentForMeal, setSelectedStudentForMeal] = useState('');
-  const [selectedIntakeLevel, setSelectedIntakeLevel] = useState<'HALF' | 'REFUSED'>('HALF');
-  const [selectedTags, setSelectedTags] = useState<string[]>(['#Biếng_ăn']);
-
-  // Fetch live students for the assigned active class from Supabase & merge today's attendance/activities
-  useEffect(() => {
-    async function fetchClassStudents() {
-      if (!activeClass) return;
-      setLoadingStudents(true);
-      try {
-        let baseStudents: any[] = [];
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .eq('class_id', activeClass.id)
-          .order('full_name', { ascending: true });
-
-        if (data && !error && data.length > 0) {
-          baseStudents = data;
-        } else {
-          // Fallback via /api/admin/students
-          const res = await fetch('/api/admin/students');
-          if (res.ok) {
-            const json = await res.json();
-            if (json.students) {
-              baseStudents = json.students.filter(
-                (s: any) =>
-                  s.class_id === activeClass.id ||
-                  s.class_name?.toLowerCase().trim() === activeClass.name.toLowerCase().trim()
-              );
-            }
-          }
-        }
-
-        if (baseStudents.length === 0) {
-          setStudents([]);
-          return;
-        }
-
-        // Fetch today's real attendance, medications, and meal exceptions from Supabase
-        const studentIds = baseStudents.map((s) => s.id).join(',');
-        let attendanceMap = new Map<string, any>();
-        try {
-          const actRes = await fetch(`/api/daily-activities?student_ids=${encodeURIComponent(studentIds)}`);
-          if (actRes.ok) {
-            const actJson = await actRes.json();
-            if (Array.isArray(actJson.attendance)) {
-              actJson.attendance.forEach((a: any) => attendanceMap.set(a.student_id, a));
-            }
-            if (Array.isArray(actJson.medications) && actJson.medications.length > 0) {
-              setMedications(actJson.medications);
-            }
-            if (Array.isArray(actJson.meal_exceptions) && actJson.meal_exceptions.length > 0) {
-              setMealExceptions(actJson.meal_exceptions);
-            }
-          }
-        } catch (err) {
-          console.warn('Could not load daily activities for class:', err);
-        }
-
-        const mapped = baseStudents.map((s: any) => {
-          const att = attendanceMap.get(s.id);
-          let uiStatus: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT' = 'PRESENT';
-          if (att?.status === 'PRESENT_LATE') uiStatus = 'PRESENT_LATE';
-          else if (att?.status === 'ABSENT_EXCUSED' || att?.status === 'ABSENT_UNEXCUSED') uiStatus = 'ABSENT';
-          return {
-            ...s,
-            attendance: uiStatus,
-            checkedOut: Boolean(att?.checked_out_at),
-            checkoutReason: att?.checkout_reason || '',
-          };
-        });
-
-        setStudents(mapped);
-        setNewMedStudentId(mapped[0]?.id || '');
-        setSelectedStudentForMeal(mapped[0]?.id || '');
-      } catch (e) {
-        console.error('Error fetching class students:', e);
-      } finally {
-        setLoadingStudents(false);
-      }
-    }
-    fetchClassStudents();
-  }, [activeClass]);
-
   // Late Checkout State
   const [showLateCheckoutModal, setShowLateCheckoutModal] = useState(false);
   const [lateStudentId, setLateStudentId] = useState<string | null>(null);
@@ -498,7 +585,7 @@ export default function TeacherPwaPage() {
 
   const syncAttendanceToDb = async (records: Array<{ student_id: string; status: string }>) => {
     try {
-      await fetch('/api/daily-activities', {
+      await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -521,6 +608,10 @@ export default function TeacherPwaPage() {
       };
     });
     setStudents(updated);
+    updateActiveCache((entry) => ({
+      ...entry,
+      students: updated,
+    }));
     syncAttendanceToDb(
       updated.map((s) => ({
         student_id: s.id,
@@ -534,6 +625,10 @@ export default function TeacherPwaPage() {
     setStudents((prev) =>
       prev.map((s) => (s.id === id ? { ...s, attendance: status } : s))
     );
+    updateActiveCache((entry) => ({
+      ...entry,
+      students: entry.students.map((s) => (s.id === id ? { ...s, attendance: status } : s)),
+    }));
     syncAttendanceToDb([
       {
         student_id: id,
@@ -575,13 +670,17 @@ export default function TeacherPwaPage() {
       status: 'PENDING',
     };
     setMedications([tempMed, ...medications]);
+    updateActiveCache((entry) => ({
+      ...entry,
+      medications: [tempMed, ...entry.medications],
+    }));
     setShowAddMedModal(false);
     setNewMedName('');
     setNewMedDosage('');
     setNewMedNotes('');
 
     try {
-      const res = await fetch('/api/daily-activities', {
+      const res = await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -597,6 +696,10 @@ export default function TeacherPwaPage() {
         const json = await res.json();
         if (json.medication) {
           setMedications((prev) => prev.map((m) => (m.id === tempMed.id ? json.medication : m)));
+          updateActiveCache((entry) => ({
+            ...entry,
+            medications: entry.medications.map((m) => (m.id === tempMed.id ? json.medication : m)),
+          }));
         }
       }
     } catch (err) {
@@ -608,8 +711,12 @@ export default function TeacherPwaPage() {
     setMedications((prev) =>
       prev.map((m) => (m.id === medId ? { ...m, status: 'ADMINISTERED' } : m))
     );
+    updateActiveCache((entry) => ({
+      ...entry,
+      medications: entry.medications.map((m) => (m.id === medId ? { ...m, status: 'ADMINISTERED' } : m)),
+    }));
     try {
-      await fetch('/api/daily-activities', {
+      await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -636,8 +743,12 @@ export default function TeacherPwaPage() {
       created_at: new Date().toISOString(),
     };
     setMealExceptions([newEx, ...mealExceptions]);
+    updateActiveCache((entry) => ({
+      ...entry,
+      mealExceptions: [newEx, ...entry.mealExceptions],
+    }));
     try {
-      await fetch('/api/daily-activities', {
+      await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -663,9 +774,14 @@ export default function TeacherPwaPage() {
   };
 
   const handleMassCheckout = async () => {
-    setStudents((prev) => prev.map((s) => ({ ...s, checkedOut: true })));
+    const updated = students.map((s) => ({ ...s, checkedOut: true }));
+    setStudents(updated);
+    updateActiveCache((entry) => ({
+      ...entry,
+      students: updated,
+    }));
     try {
-      await fetch('/api/daily-activities', {
+      await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -683,15 +799,18 @@ export default function TeacherPwaPage() {
     if (!lateStudentId) return;
     const targetId = lateStudentId;
     const targetReason = lateReason;
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.id === targetId ? { ...s, checkedOut: true, checkoutReason: targetReason } : s
-      )
+    const updated = students.map((s) =>
+      s.id === targetId ? { ...s, checkedOut: true, checkoutReason: targetReason } : s
     );
+    setStudents(updated);
+    updateActiveCache((entry) => ({
+      ...entry,
+      students: updated,
+    }));
     setShowLateCheckoutModal(false);
     setLateStudentId(null);
     try {
-      await fetch('/api/daily-activities', {
+      await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

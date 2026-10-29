@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -184,20 +191,23 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      total: students.length,
-      students,
-      classes: classesData || [],
-      settings: {
-        allow_school_admin_view_non_regular: allowNonRegular,
+    return NextResponse.json(
+      {
+        success: true,
+        total: students.length,
+        students,
+        classes: classesData || [],
+        settings: {
+          allow_school_admin_view_non_regular: allowNonRegular,
+        },
       },
-    });
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('GET /api/admin/students exception:', err);
     return NextResponse.json(
       { success: false, error: err?.message || 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

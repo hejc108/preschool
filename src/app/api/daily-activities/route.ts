@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -105,19 +112,22 @@ export async function GET(request: Request) {
       mealRes = retry.mealRes;
     }
 
-    return NextResponse.json({
-      success: true,
-      date,
-      attendance: attRes.data || [],
-      medications: (medRes.data || []).map((m: any) => ({
-        ...m,
-        student_name: m.students?.full_name || m.student_name || 'Bé',
-      })),
-      meal_exceptions: (mealRes.data || []).map((me: any) => ({
-        ...me,
-        student_name: me.students?.full_name || me.student_name || 'Bé',
-      })),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        date,
+        attendance: attRes.data || [],
+        medications: (medRes.data || []).map((m: any) => ({
+          ...m,
+          student_name: m.students?.full_name || m.student_name || 'Bé',
+        })),
+        meal_exceptions: (mealRes.data || []).map((me: any) => ({
+          ...me,
+          student_name: me.students?.full_name || me.student_name || 'Bé',
+        })),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('GET /api/daily-activities error:', err);
     return NextResponse.json(
@@ -128,7 +138,7 @@ export async function GET(request: Request) {
         medications: [],
         meal_exceptions: [],
       },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -172,17 +182,26 @@ export async function POST(request: Request) {
       );
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
       }
 
-      return NextResponse.json({ success: true, attendance: data || [] });
+      return NextResponse.json(
+        { success: true, attendance: data || [] },
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (action === 'CHECKOUT') {
       const studentIds: string[] = Array.isArray(body.student_ids) ? body.student_ids : [];
       const checkoutReason: string | null = body.checkout_reason || null;
       if (studentIds.length === 0) {
-        return NextResponse.json({ success: false, error: 'Missing student_ids' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'Missing student_ids' },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
       }
 
       const nowIso = new Date().toISOString();
@@ -219,16 +238,25 @@ export async function POST(request: Request) {
       );
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
       }
 
-      return NextResponse.json({ success: true, attendance: data || [] });
+      return NextResponse.json(
+        { success: true, attendance: data || [] },
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (action === 'ADD_MEDICATION') {
       const { student_id, time_slot, medication_name, dosage, instructions } = body;
       if (!student_id || !medication_name || !dosage) {
-        return NextResponse.json({ success: false, error: 'Missing medication fields' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'Missing medication fields' },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
       }
 
       const { data, error } = await executeWithFallback(async (sb) =>
@@ -248,22 +276,31 @@ export async function POST(request: Request) {
       );
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
       }
 
-      return NextResponse.json({
-        success: true,
-        medication: {
-          ...data,
-          student_name: data?.students?.full_name || 'Bé',
+      return NextResponse.json(
+        {
+          success: true,
+          medication: {
+            ...data,
+            student_name: data?.students?.full_name || 'Bé',
+          },
         },
-      });
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (action === 'ADMINISTER_MEDICATION') {
       const { id } = body;
       if (!id) {
-        return NextResponse.json({ success: false, error: 'Missing medication id' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'Missing medication id' },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
       }
 
       const { data, error } = await executeWithFallback(async (sb) =>
@@ -279,22 +316,31 @@ export async function POST(request: Request) {
       );
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
       }
 
-      return NextResponse.json({
-        success: true,
-        medication: {
-          ...data,
-          student_name: data?.students?.full_name || 'Bé',
+      return NextResponse.json(
+        {
+          success: true,
+          medication: {
+            ...data,
+            student_name: data?.students?.full_name || 'Bé',
+          },
         },
-      });
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (action === 'ADD_MEAL_EXCEPTION') {
       const { student_id, meal_type, intake_level, reason_tags, notes } = body;
       if (!student_id || !intake_level) {
-        return NextResponse.json({ success: false, error: 'Missing meal exception fields' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'Missing meal exception fields' },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
       }
 
       const { data, error } = await executeWithFallback(async (sb) =>
@@ -313,21 +359,33 @@ export async function POST(request: Request) {
       );
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
       }
 
-      return NextResponse.json({
-        success: true,
-        meal_exception: {
-          ...data,
-          student_name: data?.students?.full_name || 'Bé',
+      return NextResponse.json(
+        {
+          success: true,
+          meal_exception: {
+            ...data,
+            student_name: data?.students?.full_name || 'Bé',
+          },
         },
-      });
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
-    return NextResponse.json({ success: false, error: 'Unsupported action' }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: 'Unsupported action' },
+      { status: 400, headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('POST /api/daily-activities error:', err);
-    return NextResponse.json({ success: false, error: err?.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Internal Server Error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }

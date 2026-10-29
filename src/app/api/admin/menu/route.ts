@@ -5,6 +5,13 @@ import { WeeklyMenu } from '@/lib/types/schema';
 import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 declare global {
   var __SUONGMAI_WEEKLY_MENU__: WeeklyMenu[] | undefined;
@@ -93,13 +100,16 @@ export async function GET() {
             created_at: row.created_at,
           }));
           globalThis.__SUONGMAI_WEEKLY_MENU__ = menu;
-          return NextResponse.json({
-            success: true,
-            count: menu.length,
-            source: 'supabase',
-            has_db: true,
-            menu,
-          });
+          return NextResponse.json(
+            {
+              success: true,
+              count: menu.length,
+              source: 'supabase',
+              has_db: true,
+              menu,
+            },
+            { headers: NO_CACHE_HEADERS }
+          );
         }
       } catch (dbErr) {
         // Table not yet migrated or query timed out
@@ -112,13 +122,16 @@ export async function GET() {
         ? globalThis.__SUONGMAI_WEEKLY_MENU__
         : (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU;
 
-    return NextResponse.json({
-      success: true,
-      count: fallbackMenu.length,
-      source: 'fallback',
-      has_db: false,
-      menu: fallbackMenu,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        count: fallbackMenu.length,
+        source: 'fallback',
+        has_db: false,
+        menu: fallbackMenu,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('GET /api/admin/menu error:', err);
     return NextResponse.json(
@@ -128,7 +141,7 @@ export async function GET() {
         has_db: false,
         menu: (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU,
       },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -215,22 +228,25 @@ export async function POST(request: Request) {
           db_error: dbErrorMessage,
           menu: sanitizedMenu,
         },
-        { status: 500 }
+        { status: 500, headers: NO_CACHE_HEADERS }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Cập nhật thực đơn và đồng bộ CSDL Supabase thành công',
-      count: sanitizedMenu.length,
-      db_synced: true,
-      menu: sanitizedMenu,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Cập nhật thực đơn và đồng bộ CSDL Supabase thành công',
+        count: sanitizedMenu.length,
+        db_synced: true,
+        menu: sanitizedMenu,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('POST /api/admin/menu error:', err);
     return NextResponse.json(
       { success: false, error: err?.message || 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

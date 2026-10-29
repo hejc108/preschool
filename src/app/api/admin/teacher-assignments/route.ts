@@ -4,6 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
 
@@ -63,7 +69,10 @@ export async function GET(request: Request) {
 
     let supabase = getSupabaseClient(false);
     if (!supabase) {
-      return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: 'Database client unavailable' },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
     }
 
     // 1. Fetch live classes
@@ -155,16 +164,22 @@ export async function GET(request: Request) {
       } catch (e) {}
     }
 
-    return NextResponse.json({
-      success: true,
-      email,
-      total: assignments.length,
-      assignments,
-      classes: classesData || Object.entries(DEFAULT_CLASS_NAME_TO_UUID).map(([name, id]) => ({ id, name })),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        email,
+        total: assignments.length,
+        assignments,
+        classes: classesData || Object.entries(DEFAULT_CLASS_NAME_TO_UUID).map(([name, id]) => ({ id, name })),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('GET /api/admin/teacher-assignments error:', err);
-    return NextResponse.json({ success: false, error: err?.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Internal server error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
@@ -274,21 +289,27 @@ export async function POST(request: Request) {
       }
     } catch (e) {}
 
-    return NextResponse.json({
-      success: true,
-      teacher_email: cleanEmail,
-      table_sync: tableSyncSuccess,
-      assigned_class_ids: selectedClassIds,
-      assigned_class_names: assignedNames,
-      formatted_class_name: joinedNames,
-      assignments: selectedClassIds.map((cid) => ({
-        class_id: cid,
-        class_name: classIdToNameMap[cid] || cid,
-        is_main_teacher: true,
-      })),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        teacher_email: cleanEmail,
+        table_sync: tableSyncSuccess,
+        assigned_class_ids: selectedClassIds,
+        assigned_class_names: assignedNames,
+        formatted_class_name: joinedNames,
+        assignments: selectedClassIds.map((cid) => ({
+          class_id: cid,
+          class_name: classIdToNameMap[cid] || cid,
+          is_main_teacher: true,
+        })),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('POST /api/admin/teacher-assignments error:', err);
-    return NextResponse.json({ success: false, error: err?.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Internal server error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
