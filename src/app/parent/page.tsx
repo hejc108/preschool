@@ -64,6 +64,7 @@ export default function ParentPwaPage() {
   const [dailyMedications, setDailyMedications] = useState<any[]>([]);
   const [dailyMealExceptions, setDailyMealExceptions] = useState<any[]>([]);
   const [liveMenuList, setLiveMenuList] = useState<WeeklyMenu[]>([]);
+  const [childHealthMap, setChildHealthMap] = useState<Record<string, any>>({});
 
   const loadParentData = useCallback(async (rawEmail: string) => {
     const cleanEmail = parseSignedCookieClient(rawEmail).toLowerCase().trim();
@@ -574,14 +575,37 @@ export default function ParentPwaPage() {
     return events;
   }, [selectedChild, dailyMedications, dailyMealExceptions, t]);
 
+  // Live Health Query for Selected Child from Supabase / API
+  React.useEffect(() => {
+    if (!selectedChild?.id) return;
+    const childId = selectedChild.id;
+
+    fetch(`/api/parent/health?student_id=${encodeURIComponent(childId)}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.success) {
+          setChildHealthMap((prev) => ({
+            ...prev,
+            [childId]: data.latest || null,
+          }));
+        }
+      })
+      .catch((err) => console.warn('Error fetching child health:', err));
+  }, [selectedChild?.id]);
+
   // Latest Health Record for Selected Child
   const latestHealth = selectedChild
-    ? INITIAL_HEALTH_RECORDS.filter(
-        (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
-      ).slice(-1)[0] || null
+    ? (childHealthMap[selectedChild.id] !== undefined
+        ? childHealthMap[selectedChild.id]
+        : (INITIAL_HEALTH_RECORDS.filter(
+            (h) => h.student_id === selectedChild.id || h.student_name === selectedChild.full_name
+          ).slice(-1)[0] || null))
     : null;
 
-  const healthDisplay = latestHealth ? getGrowthStatusDisplay(latestHealth.growth_status) : null;
+  const healthDisplay =
+    latestHealth && latestHealth.growth_status
+      ? getGrowthStatusDisplay(latestHealth.growth_status as any)
+      : null;
 
   if (!isAuthenticated) {
     return (
@@ -982,29 +1006,43 @@ export default function ParentPwaPage() {
 
           {/* 3. KHỐI THEO DÕI SỨC KHỎE (GROWTH TRACKER - NẰM DƯỚI THỰC ĐƠN) */}
           <Link
-            href="/parent/health"
-            className="block p-3.5 bg-gradient-to-r from-emerald-50 via-white to-teal-50 border border-emerald-200 rounded-convent shadow-sm hover:shadow-md transition-all text-xs"
+            href={`/parent/health${selectedChild ? `?student_id=${selectedChild.id}` : ''}`}
+            className="block p-3.5 bg-gradient-to-r from-emerald-50 via-white to-teal-50 border border-emerald-200 rounded-2xl shadow-sm hover:shadow-md transition-all text-xs"
           >
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-emerald-800 font-bold">
                 <Activity className="w-4 h-4 text-emerald-600" />
-                <span>Theo dõi sức khỏe (Quý 3)</span>
+                <span>Sổ theo dõi thể trạng {latestHealth?.term ? `(${latestHealth.term})` : ''}</span>
               </div>
               <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                Chi tiết <ArrowRight className="w-3 h-3" />
+                Xem chi tiết <ArrowRight className="w-3 h-3" />
               </span>
             </div>
-            {latestHealth && healthDisplay ? (
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="font-semibold text-slate-900 font-mono text-sm">
-                  {latestHealth.weight_kg} kg • {latestHealth.height_cm} cm
-                </span>
-                <span className={`px-2.5 py-0.5 rounded-pill text-[10px] font-bold border ${healthDisplay.bgClass} ${healthDisplay.textClass}`}>
-                  {healthDisplay.text}
-                </span>
+            {latestHealth && (latestHealth.weight_kg !== null || latestHealth.height_cm !== null) ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-slate-700">
+                <div className="flex items-center flex-wrap gap-2 text-slate-900 font-mono text-xs sm:text-sm font-bold">
+                  <span className="bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-100">
+                    📏 {latestHealth.height_cm !== null && latestHealth.height_cm !== undefined ? `${latestHealth.height_cm} cm` : '--'}
+                  </span>
+                  <span className="bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-100">
+                    ⚖️ {latestHealth.weight_kg !== null && latestHealth.weight_kg !== undefined ? `${latestHealth.weight_kg} kg` : '--'}
+                  </span>
+                  {latestHealth.term && (
+                    <span className="text-[11px] font-sans font-medium text-slate-500">
+                      📅 {latestHealth.term}
+                    </span>
+                  )}
+                </div>
+                {healthDisplay && (
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}>
+                    {healthDisplay.text}
+                  </span>
+                )}
               </div>
             ) : (
-              <p className="text-slate-500 text-[11px] italic">Xem sổ theo dõi sức khỏe định kỳ</p>
+              <p className="text-slate-500 text-[11px] italic bg-slate-50/80 p-2 rounded-xl border border-dashed border-slate-200">
+                Nhà trường đang cập nhật số liệu khám sức khỏe đợt này
+              </p>
             )}
           </Link>
         </div>
