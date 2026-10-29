@@ -1,37 +1,43 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-function getSupabaseAdminClient() {
-  const url =
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const FALLBACK_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
+
+function getSupabaseClient(preferAnon = false) {
+  const url = (
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    'https://yrieuamibqjyaslprdeo.supabase.co'
+  )
+    .trim()
+    .replace(/^["']|["']$/g, '');
 
-  if (!serviceRoleKey) return null;
+  const rawKey = preferAnon
+    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+       process.env.SUPABASE_ANON_KEY ||
+       FALLBACK_ANON_KEY)
+    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+       process.env.SUPABASE_ANON_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+       process.env.SUPABASE_PUBLISHABLE_KEY ||
+       FALLBACK_ANON_KEY);
 
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function getSupabaseClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    '';
+  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
 
   if (!url || !key) return null;
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+function isApiKeyError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
 }
 
 const DEFAULT_CLASS_NAME_TO_UUID: Record<string, string> = {
@@ -55,13 +61,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email')?.toLowerCase().trim();
 
-    const supabase = getSupabaseAdminClient() || getSupabaseClient();
+    let supabase = getSupabaseClient(false);
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
     }
 
     // 1. Fetch live classes
-    const { data: classesData } = await supabase.from('classes').select('id, name');
+    let { data: classesData, error: clsErr } = await supabase.from('classes').select('id, name');
+    if (clsErr && isApiKeyError(clsErr)) {
+      supabase = getSupabaseClient(true);
+      if (supabase) {
+        const retry = await supabase.from('classes').select('id, name');
+        classesData = retry.data;
+      }
+    }
     const classIdToNameMap: Record<string, string> = { ...DEFAULT_UUID_TO_NAME };
     const classNameToIdMap: Record<string, string> = { ...DEFAULT_CLASS_NAME_TO_UUID };
 
@@ -75,7 +88,7 @@ export async function GET(request: Request) {
     let assignments: Array<{ class_id: string; class_name: string; is_main_teacher?: boolean }> = [];
 
     // 2. Try querying teacher_class_assignments table
-    if (email) {
+    if (email && supabase) {
       try {
         const { data, error } = await supabase
           .from('teacher_class_assignments')
@@ -99,7 +112,7 @@ export async function GET(request: Request) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('assigned_class_id, assigned_class_name')
-            .eq('email', email)
+            .ilike('email', email)
             .maybeSingle();
 
           if (profile) {
@@ -126,7 +139,7 @@ export async function GET(request: Request) {
           }
         } catch (e) {}
       }
-    } else {
+    } else if (supabase) {
       // Query all assignments
       try {
         const { data, error } = await supabase
@@ -167,14 +180,24 @@ export async function POST(request: Request) {
 
     const selectedClassIds: string[] = Array.isArray(class_ids) ? class_ids : [];
 
-    const supabaseAdmin = getSupabaseAdminClient();
-    const supabase = supabaseAdmin || getSupabaseClient();
+    let supabase = getSupabaseClient(false);
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
     }
 
     // 1. Fetch classes for reference
-    const { data: classesData } = await supabase.from('classes').select('id, name');
+    let { data: classesData, error: clsErr } = await supabase.from('classes').select('id, name');
+    if (clsErr && isApiKeyError(clsErr)) {
+      const fallbackClient = getSupabaseClient(true);
+      if (fallbackClient) {
+        supabase = fallbackClient;
+        const retry = await supabase.from('classes').select('id, name');
+        classesData = retry.data;
+      }
+    }
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
+    }
     const classIdToNameMap: Record<string, string> = { ...DEFAULT_UUID_TO_NAME };
     if (classesData && classesData.length > 0) {
       classesData.forEach((c: { id: string; name: string }) => {

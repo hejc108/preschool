@@ -27,7 +27,7 @@ export interface TeacherStudent extends Student {
   checkoutReason: string;
 }
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations } from '@/lib/utils/approvalHelper';
+import { fetchLiveProfilesFromSupabase, getStoredProfiles, getStoredRelations, saveStoredProfiles } from '@/lib/utils/approvalHelper';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 import { supabase } from '@/lib/supabase/client';
@@ -70,8 +70,40 @@ export default function TeacherPwaPage() {
   const [teacherEmail, setTeacherEmail] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(true);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [hasParentAccess, setHasParentAccess] = useState<boolean>(false);
+
+  const handleLogout = async () => {
+    try {
+      if (supabase && supabase.auth) await supabase.auth.signOut();
+    } catch (e) {}
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    const cookiesToClear = [
+      'suongmai_session',
+      'suongmai_user_email',
+      'suongmai_user_role',
+      'suongmai_username',
+      'suongmai_has_children',
+    ];
+    cookiesToClear.forEach((name) => {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+    });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('suongmai_auth_user');
+      localStorage.removeItem('suongmai_user_profiles_v1');
+      localStorage.removeItem('suongmai_parent_relations_v1');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase') || key.includes('suongmai')) {
+          localStorage.removeItem(key);
+        }
+      });
+      sessionStorage.clear();
+      window.location.href = '/auth';
+    }
+  };
 
   const loadTeacherAssignments = async (email: string) => {
     try {
@@ -146,7 +178,9 @@ export default function TeacherPwaPage() {
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    async function checkAuthAndRole() {
+      if (typeof window === 'undefined') return;
+
       let emailFound = '';
       let roleFound = '';
       const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
@@ -166,28 +200,103 @@ export default function TeacherPwaPage() {
         }
       }
 
-      if (emailFound) {
-        setTeacherEmail(emailFound);
-        const profiles = getStoredProfiles();
-        const profile = profiles.find((p) => p.email.toLowerCase().trim() === emailFound.toLowerCase().trim());
-        const resolvedRole = profile?.role || roleFound || 'TEACHER';
-        setUserRole(resolvedRole);
-        setIsAuthenticated(true);
-
-        const hasCookieFlag = document.cookie.includes('suongmai_has_children');
-        const relations = getStoredRelations();
-        const hasChildInRelations = relations.some(
-          (r) => r.parent_email?.toLowerCase().trim() === emailFound.toLowerCase().trim() && r.is_verified
-        );
-        if (hasCookieFlag || hasChildInRelations) {
-          setHasParentAccess(true);
-        }
-
-        loadTeacherAssignments(emailFound);
-      } else {
-        setIsAuthenticated(false);
+      if (!emailFound) {
+        // Fallback: check active Supabase Auth session
+        try {
+          const { data } = await supabase.auth.getUser();
+          if (data?.user?.email) {
+            emailFound = data.user.email.toLowerCase().trim();
+          }
+        } catch (e) {}
       }
+
+      if (!emailFound) {
+        setIsAuthenticated(false);
+        setIsCheckingStatus(false);
+        return;
+      }
+
+      const cleanEmail = emailFound.toLowerCase().trim();
+      setTeacherEmail(cleanEmail);
+      setIsAuthenticated(true);
+
+      // Verify live role from Supabase DB via check-my-status (no-cache)
+      try {
+        const res = await fetch(`/api/auth/check-my-status?email=${encodeURIComponent(cleanEmail)}`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.isApproved) {
+            const liveRole = json.role || 'TEACHER';
+            setUserRole(liveRole);
+
+            // Update localStorage auth user
+            try {
+              const saved = localStorage.getItem('suongmai_auth_user');
+              const parsed = saved ? JSON.parse(saved) : {};
+              parsed.email = cleanEmail;
+              parsed.role = liveRole;
+              localStorage.setItem('suongmai_auth_user', JSON.stringify(parsed));
+            } catch (e) {}
+
+            // Update cached profile in localStorage if exists
+            const profiles = getStoredProfiles();
+            const pIdx = profiles.findIndex((p) => p.email.toLowerCase().trim() === cleanEmail);
+            if (pIdx !== -1) {
+              profiles[pIdx].role = liveRole;
+              profiles[pIdx].approval_status = 'ACTIVE';
+              saveStoredProfiles(profiles);
+            }
+
+            // Requirement 2: If live role is PARENT, redirect to /parent
+            if (liveRole === 'PARENT') {
+              window.location.href = '/parent';
+              return;
+            }
+
+            if (json.hasChildren) {
+              setHasParentAccess(true);
+            }
+
+            await loadTeacherAssignments(cleanEmail);
+            setIsCheckingStatus(false);
+            return;
+          } else {
+            // Not approved yet
+            window.location.href = `/auth/pending-approval?type=teacher&email=${encodeURIComponent(cleanEmail)}`;
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[TeacherPwaPage] Error checking status:', err);
+      }
+
+      // Fallback if network failed
+      const profiles = getStoredProfiles();
+      const profile = profiles.find((p) => p.email.toLowerCase().trim() === cleanEmail);
+      const fallbackRole = profile?.role || roleFound || 'TEACHER';
+      setUserRole(fallbackRole);
+
+      if (fallbackRole === 'PARENT') {
+        window.location.href = '/parent';
+        return;
+      }
+
+      const hasCookieFlag = document.cookie.includes('suongmai_has_children');
+      const relations = getStoredRelations();
+      const hasChildInRelations = relations.some(
+        (r) => r.parent_email?.toLowerCase().trim() === cleanEmail && r.is_verified
+      );
+      if (hasCookieFlag || hasChildInRelations) {
+        setHasParentAccess(true);
+      }
+
+      await loadTeacherAssignments(cleanEmail);
+      setIsCheckingStatus(false);
     }
+
+    checkAuthAndRole();
   }, []);
 
   const handleInPlaceGoogleLogin = async () => {
@@ -371,52 +480,14 @@ export default function TeacherPwaPage() {
             <span>[ 🔄 Kiểm tra lại ]</span>
           </button>
 
-          {/* QC Mode Selector Bar */}
-          <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500">
-            <span className="font-semibold block mb-1">Chế độ kiểm thử (QC Selector):</span>
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <button
-                onClick={() => {
-                  setIsClassAssigned(false);
-                  setAssignedClasses([]);
-                  setActiveClass(null);
-                }}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  !isClassAssigned ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                T0 (Chưa gán)
-              </button>
-              <button
-                onClick={() => {
-                  setIsClassAssigned(true);
-                  const demo = [{ id: '5b61ec3a-11ef-4ca0-b914-97b35f9f3762', name: 'Mầm' }];
-                  setAssignedClasses(demo);
-                  handleSelectClass(demo[0]);
-                }}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  isClassAssigned && assignedClasses.length <= 1 ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                T1 (Đơn lớp: Mầm)
-              </button>
-              <button
-                onClick={() => {
-                  setIsClassAssigned(true);
-                  const demo = [
-                    { id: '5b61ec3a-11ef-4ca0-b914-97b35f9f3762', name: 'Mầm' },
-                    { id: '9d953115-1de9-4a56-a75c-eadcf903f398', name: 'Chồi' },
-                  ];
-                  setAssignedClasses(demo);
-                  handleSelectClass(demo[0]);
-                }}
-                className={`px-2 py-1 rounded text-[10px] font-bold ${
-                  isClassAssigned && assignedClasses.length > 1 ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                T2 (Đa lớp: Mầm + Chồi)
-              </button>
-            </div>
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <button
+              onClick={handleLogout}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-pill transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
+              <span>Đăng xuất / Đổi tài khoản khác</span>
+            </button>
           </div>
         </div>
       </div>
@@ -688,6 +759,24 @@ export default function TeacherPwaPage() {
     );
   }
 
+  if (isCheckingStatus && isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
+        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-8 text-center shadow-lg space-y-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-rose-50 border border-rose-200 rounded-2xl text-primary-700 shadow-2xs">
+            <RefreshCw className="w-7 h-7 animate-spin" />
+          </div>
+          <h2 className="text-base font-bold text-slate-800">
+            Đang đồng bộ quyền truy cập Giáo viên...
+          </h2>
+          <p className="text-xs text-slate-500">
+            Hệ thống đang kiểm tra trạng thái phân công tác nghiệp từ Trường Mầm Non Sương Mai.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (userRole === 'PARENT') {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 relative overflow-hidden">
@@ -708,29 +797,10 @@ export default function TeacherPwaPage() {
               <span>Chuyển Đến Trang Phụ Huynh</span>
             </Link>
             <button
-              onClick={async () => {
-                try {
-                  if (supabase && supabase.auth) await supabase.auth.signOut();
-                } catch (e) {}
-                try {
-                  await fetch('/api/auth/logout', { method: 'POST' });
-                } catch (e) {}
-                const cookiesToClear = ['suongmai_session', 'suongmai_user_email', 'suongmai_user_role', 'suongmai_username', 'suongmai_has_children'];
-                cookiesToClear.forEach((name) => {
-                  document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-                });
-                if (typeof window !== 'undefined') {
-                  localStorage.removeItem('suongmai_auth_user');
-                  Object.keys(localStorage).forEach((key) => {
-                    if (key.startsWith('sb-') || key.includes('supabase')) {
-                      localStorage.removeItem(key);
-                    }
-                  });
-                  window.location.href = '/auth';
-                }
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-pill transition-all text-xs"
+              onClick={handleLogout}
+              className="w-full inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-pill transition-all text-xs cursor-pointer"
             >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
               <span>{t('teacher.switch_account')}</span>
             </button>
           </div>
@@ -803,6 +873,14 @@ export default function TeacherPwaPage() {
             </Link>
           )}
           <LanguageSwitcher />
+          <button
+            onClick={handleLogout}
+            className="p-1.5 bg-white/15 hover:bg-white/25 active:bg-white/35 text-white rounded-full transition-all flex items-center gap-1 cursor-pointer shrink-0"
+            title="Đăng xuất khỏi hệ thống"
+          >
+            <LogOut className="w-4 h-4 text-white" />
+            <span className="text-[10px] font-bold hidden sm:inline">Đăng xuất</span>
+          </button>
         </div>
       </header>
 

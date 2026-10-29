@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { 
   Heart, Calendar, Clock, CheckCircle2, ChevronLeft, Plus, 
   Shield, Sparkles, FileText, Phone, Check, UserCheck, AlertCircle, X,
-  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert
+  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert, LogOut
 } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
@@ -85,9 +85,32 @@ export default function ParentPwaPage() {
       if (statusRes && statusRes.ok) {
         const statusJson = await statusRes.json().catch(() => ({}));
         if (statusJson?.role) {
-          setUserRole(statusJson.role);
-          if (String(statusJson.role).includes('TEACHER')) {
+          const liveRole = statusJson.role;
+          setUserRole(liveRole);
+          if (String(liveRole).includes('TEACHER')) {
             setIsTeacherUser(true);
+          }
+
+          // Update local stored user profile role
+          try {
+            const saved = localStorage.getItem('suongmai_auth_user');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              parsed.role = liveRole;
+              localStorage.setItem('suongmai_auth_user', JSON.stringify(parsed));
+            }
+          } catch (e) {}
+
+          // Requirement 2: If live role is TEACHER and has NO linked children:
+          if (liveRole === 'TEACHER' && !statusJson.hasChildren) {
+            window.location.href = '/teacher';
+            return;
+          }
+
+          // If live role is admin:
+          if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(liveRole) && !statusJson.hasChildren) {
+            window.location.href = '/admin/dashboard';
+            return;
           }
         }
         if (Array.isArray(statusJson?.linkedStudents) && statusJson.linkedStudents.length > 0) {
@@ -266,6 +289,37 @@ export default function ParentPwaPage() {
       console.warn('Error refreshing parent relations:', e);
     } finally {
       setTimeout(() => setRefreshing(false), 400);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (supabase && supabase.auth) await supabase.auth.signOut();
+    } catch (e) {}
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    const cookiesToClear = [
+      'suongmai_session',
+      'suongmai_user_email',
+      'suongmai_user_role',
+      'suongmai_username',
+      'suongmai_has_children',
+    ];
+    cookiesToClear.forEach((name) => {
+      document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+    });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('suongmai_auth_user');
+      localStorage.removeItem('suongmai_user_profiles_v1');
+      localStorage.removeItem('suongmai_parent_relations_v1');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase') || key.includes('suongmai')) {
+          localStorage.removeItem(key);
+        }
+      });
+      sessionStorage.clear();
+      window.location.href = '/auth';
     }
   };
 
@@ -628,14 +682,24 @@ export default function ParentPwaPage() {
             <span>Hotline Văn phòng: <strong>028.3896.1234</strong></span>
           </div>
 
-          <button
-            onClick={handleRefreshParentRelations}
-            disabled={refreshing}
-            className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>[ 🔄 Kiểm tra lại ]</span>
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={handleRefreshParentRelations}
+              disabled={refreshing}
+              className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-pill transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>[ 🔄 Kiểm tra lại ]</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-pill transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
+              <span>Đăng xuất / Đổi tài khoản khác</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -684,6 +748,14 @@ export default function ParentPwaPage() {
             </Link>
           )}
           <LanguageSwitcher />
+          <button
+            onClick={handleLogout}
+            className="p-1.5 bg-white/15 hover:bg-white/25 active:bg-white/35 text-white rounded-full transition-all flex items-center gap-1 cursor-pointer shrink-0"
+            title="Đăng xuất khỏi hệ thống"
+          >
+            <LogOut className="w-4 h-4 text-white" />
+            <span className="text-[10px] font-bold hidden sm:inline">Đăng xuất</span>
+          </button>
         </div>
       </header>
 

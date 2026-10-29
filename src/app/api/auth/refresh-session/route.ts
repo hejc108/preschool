@@ -3,24 +3,35 @@ import { createClient } from '@supabase/supabase-js';
 import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
 
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (serviceRoleKey) {
-    return createClient(url, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.mock-key';
-  if (url && key) {
-    return createClient(url, key);
-  }
-  return null;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const FALLBACK_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
+
+function getSupabaseClient(preferAnon = false) {
+  const url =
+    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co')
+      .trim()
+      .replace(/^["']|["']$/g, '');
+  const rawKey = preferAnon
+    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || FALLBACK_ANON_KEY)
+    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+       process.env.SUPABASE_ANON_KEY ||
+       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+       process.env.SUPABASE_PUBLISHABLE_KEY ||
+       FALLBACK_ANON_KEY);
+  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function isApiKeyError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
 }
 
 export async function POST(request: Request) {
@@ -28,7 +39,7 @@ export async function POST(request: Request) {
     let email = '';
     try {
       const body = await request.json();
-      email = (body.email || '').toLowerCase().trim();
+      email = parseSignedCookieClient(body.email || '').toLowerCase().trim();
     } catch (e) {}
 
     if (!email) {
@@ -59,10 +70,18 @@ export async function POST(request: Request) {
     let profile: any = null;
 
     // 1. Query Supabase PostgreSQL DB
-    const supabase = getSupabaseClient();
+    let supabase = getSupabaseClient(false);
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single();
+        let { data, error } = await supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
+        if (error && isApiKeyError(error)) {
+          supabase = getSupabaseClient(true);
+          if (supabase) {
+            const retry = await supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
+            data = retry.data;
+            error = retry.error;
+          }
+        }
         if (!error && data) {
           profile = data;
         }

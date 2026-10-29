@@ -4,6 +4,13 @@ import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSign
 import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -44,25 +51,36 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     let email = parseSignedCookieClient(searchParams.get('email') || '').toLowerCase().trim();
 
+    const cookieHeader = request.headers.get('cookie') || '';
+    const cookieRoleMatch = cookieHeader.match(/suongmai_user_role=([^;]+)/);
+    const currentCookieRole = cookieRoleMatch ? parseSignedCookieClient(cookieRoleMatch[1]).trim() : '';
+
     if (!email) {
-      const cookieEmail = request.headers.get('cookie')?.match(/suongmai_user_email=([^;]+)/);
+      const cookieEmail = cookieHeader.match(/suongmai_user_email=([^;]+)/);
       if (cookieEmail) {
         email = parseSignedCookieClient(cookieEmail[1]).toLowerCase().trim();
       }
     }
 
     if (!email) {
-      return NextResponse.json({ isApproved: false, status: 'PENDING', message: 'Email không tìm thấy' });
+      return NextResponse.json(
+        { isApproved: false, status: 'PENDING', message: 'Email không tìm thấy' },
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     // Special check for sadmin@suongmai.edu.vn
     if (email === 'sadmin@suongmai.edu.vn') {
-      const response = NextResponse.json({
-        isApproved: true,
-        status: 'ACTIVE',
-        role: 'SUPER_ADMIN',
-        redirectUrl: '/admin/dashboard',
-      });
+      const response = NextResponse.json(
+        {
+          isApproved: true,
+          status: 'ACTIVE',
+          role: 'SUPER_ADMIN',
+          roleChanged: currentCookieRole !== 'SUPER_ADMIN',
+          redirectUrl: '/admin/dashboard',
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
       await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_role', 'SUPER_ADMIN', { path: '/', maxAge: 86400, sameSite: 'lax' });
@@ -72,14 +90,14 @@ export async function GET(request: Request) {
     let profile: any = null;
     let activeClient = getSupabaseClient(false);
 
-    // 1. Direct DB query using Service Role / Anon Key fallback
+    // 1. Direct DB query using Service Role / Anon Key fallback on public.profiles
     if (activeClient) {
       try {
-        let { data, error } = await activeClient.from('profiles').select('*').eq('email', email).maybeSingle();
+        let { data, error } = await activeClient.from('profiles').select('*').ilike('email', email).maybeSingle();
         if (error && isApiKeyError(error)) {
           activeClient = getSupabaseClient(true);
           if (activeClient) {
-            const retry = await activeClient.from('profiles').select('*').eq('email', email).maybeSingle();
+            const retry = await activeClient.from('profiles').select('*').ilike('email', email).maybeSingle();
             data = retry.data;
             error = retry.error;
           }
@@ -96,7 +114,10 @@ export async function GET(request: Request) {
     }
 
     if (!profile) {
-      return NextResponse.json({ isApproved: false, status: 'PENDING', message: 'Tài khoản chưa có trong CSDL' });
+      return NextResponse.json(
+        { isApproved: false, status: 'PENDING', message: 'Tài khoản chưa có trong CSDL' },
+        { headers: NO_CACHE_HEADERS }
+      );
     }
 
     const isApproved = profile.approval_status === 'ACTIVE';
@@ -104,6 +125,7 @@ export async function GET(request: Request) {
       email === 'luciaxuan178@gmail.com' && profile.role === 'SUPER_ADMIN'
         ? 'SCHOOL_ADMIN'
         : (profile.role || 'PARENT');
+    const roleChanged = Boolean(currentCookieRole && currentCookieRole !== role);
 
     // Query linked students directly from public.student_guardians on Supabase
     let linkedStudents: any[] = [];
@@ -161,7 +183,7 @@ export async function GET(request: Request) {
         redirectUrl = '/teacher';
       } else if (role === 'PARENT') {
         redirectUrl = '/parent';
-      } else if (role === 'KITCHEN_STAFF') {
+      } else if (role === 'STAFF' || role === 'KITCHEN_STAFF') {
         redirectUrl = '/admin/menu';
       } else if (role === 'NURSE_STAFF') {
         redirectUrl = '/admin/health';
@@ -170,19 +192,24 @@ export async function GET(request: Request) {
       const status = checkUserApprovalStatus(email);
       const hasChildren =
         linkedStudents.length > 0 ||
-        status.isParentVerified ||
-        (status.linkedStudents && status.linkedStudents.length > 0);
+        (role === 'PARENT' && (status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0)));
 
-      const response = NextResponse.json({
-        isApproved: true,
-        status: 'ACTIVE',
-        role,
-        hasChildren,
-        linkedStudents,
-        redirectUrl,
-        profile,
-      });
+      const response = NextResponse.json(
+        {
+          isApproved: true,
+          status: 'ACTIVE',
+          role,
+          previousCookieRole: currentCookieRole || null,
+          roleChanged,
+          hasChildren,
+          linkedStudents,
+          redirectUrl,
+          profile,
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
 
+      // Always refresh signed cookies with the latest role & status from Supabase DB
       await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
       await setSignedCookie(response, 'suongmai_user_role', role, { path: '/', maxAge: 86400, sameSite: 'lax' });
@@ -195,13 +222,26 @@ export async function GET(request: Request) {
       return response;
     }
 
-    return NextResponse.json({
-      isApproved: false,
-      status: profile.approval_status || 'PENDING',
-      role: profile.role || 'GUEST',
-      linkedStudents,
+    const pendingResponse = NextResponse.json(
+      {
+        isApproved: false,
+        status: profile.approval_status || 'PENDING',
+        role: profile.role || 'GUEST',
+        roleChanged,
+        linkedStudents,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
+    await setSignedCookie(pendingResponse, 'suongmai_user_role', profile.role || 'GUEST', {
+      path: '/',
+      maxAge: 86400,
+      sameSite: 'lax',
     });
+    return pendingResponse;
   } catch (error: any) {
-    return NextResponse.json({ isApproved: false, status: 'PENDING', message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { isApproved: false, status: 'PENDING', message: error.message },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
