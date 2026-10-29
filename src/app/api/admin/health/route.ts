@@ -262,9 +262,26 @@ export async function POST(request: Request) {
     const supabase = getSupabaseClient();
     const body = await request.json().catch(() => ({}));
 
-    // Support both batch { records: [...] } and single { record: {...} }
+    // Support sync all catalog, batch { records: [...] }, and single { record: {...} }
     let rawRecords: any[] = [];
-    if (Array.isArray(body.records)) {
+    if (body.sync_all_catalog) {
+      const catalog = loadHealthCatalog();
+      rawRecords = catalog.map((c) => ({
+        student_id: c.student_id,
+        student_name: c.student_name,
+        term: c.term || defaultTerm,
+        academic_year: c.academic_year || defaultAcademicYear,
+        record_date: c.measured_date || defaultDate,
+        measured_date: c.measured_date || defaultDate,
+        weight: c.weight_kg,
+        height: c.height_cm,
+        weight_kg: c.weight_kg,
+        height_cm: c.height_cm,
+        bmi: c.bmi,
+        growth_status: c.growth_status,
+        notes: c.notes,
+      }));
+    } else if (Array.isArray(body.records)) {
       rawRecords = body.records;
     } else if (body.record && typeof body.record === 'object') {
       rawRecords = [body.record];
@@ -365,23 +382,32 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         }));
 
-        // Try primary unique constraint (student_id, term)
-        const { error: upsertErr } = await supabase
-          .from('health_records')
-          .upsert(dbPayload, { onConflict: 'student_id,term' });
+        // Chunk upsert to avoid request size limits (max 50 rows per batch)
+        const CHUNK_SIZE = 50;
+        let anyChunkFailed = false;
 
-        if (!upsertErr) {
-          supabaseSuccess = true;
-        } else {
-          supabaseErrorMsg = upsertErr.message;
-          // Try fallback constraint (student_id, term, academic_year)
-          const { error: fallbackErr } = await supabase
+        for (let i = 0; i < dbPayload.length; i += CHUNK_SIZE) {
+          const chunk = dbPayload.slice(i, i + CHUNK_SIZE);
+          let { error: chunkErr } = await supabase
             .from('health_records')
-            .upsert(dbPayload, { onConflict: 'student_id,term,academic_year' });
-          if (!fallbackErr) {
-            supabaseSuccess = true;
-            supabaseErrorMsg = '';
+            .upsert(chunk, { onConflict: 'student_id,term' });
+
+          if (chunkErr) {
+            // Fallback constraint
+            const { error: fbErr } = await supabase
+              .from('health_records')
+              .upsert(chunk, { onConflict: 'student_id,term,academic_year' });
+            if (fbErr) {
+              anyChunkFailed = true;
+              supabaseErrorMsg = fbErr.message;
+              break;
+            }
           }
+        }
+
+        if (!anyChunkFailed) {
+          supabaseSuccess = true;
+          supabaseErrorMsg = '';
         }
       } catch (e: any) {
         supabaseErrorMsg = e?.message || 'Supabase error';

@@ -336,6 +336,41 @@ export default function AdminHealthPage() {
     }
   };
 
+  const [isSyncingAll, setIsSyncingAll] = useState<boolean>(false);
+
+  const handleSyncAllCatalog = async () => {
+    if (isSyncingAll || isSubmitting) return;
+    setIsSyncingAll(true);
+    try {
+      const res = await fetch('/api/admin/health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync_all_catalog: true }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        if (json.synced_supabase) {
+          setHasSupabaseTable(true);
+          showToast('success', `Đã đồng bộ thành công toàn bộ ${json.saved_count || 170} hồ sơ sức khỏe vào Database Supabase!`);
+          fetchHealthData();
+        } else {
+          setHasSupabaseTable(false);
+          setShowSqlModal(true);
+          showToast(
+            'warning',
+            'CSDL Supabase chưa có bảng health_records. Vui lòng bấm "Sao chép mã SQL" và chạy trên Supabase trước.'
+          );
+        }
+      } else {
+        showToast('error', json.error || 'Lỗi khi đồng bộ dữ liệu vào Supabase.');
+      }
+    } catch (e: any) {
+      showToast('error', e?.message || 'Lỗi kết nối khi đồng bộ dữ liệu.');
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
   const handleCopySql = () => {
     navigator.clipboard.writeText(SQL_MIGRATION_SCRIPT);
     setCopiedSql(true);
@@ -402,7 +437,7 @@ export default function AdminHealthPage() {
                 <li>
                   Mở{' '}
                   <a
-                    href="https://supabase.com/dashboard/project/yrieuamibqjyaslprdeo/sql"
+                    href="https://supabase.com/dashboard/project/yrieuamibqjyaslprdeo/sql/new"
                     target="_blank"
                     rel="noreferrer"
                     className="text-sky-600 font-bold underline inline-flex items-center gap-1"
@@ -411,7 +446,8 @@ export default function AdminHealthPage() {
                   </a>
                   .
                 </li>
-                <li>Dán (Paste) câu lệnh vào ô truy vấn và bấm <strong>Run</strong>.</li>
+                <li>Dán (Paste) câu lệnh vào ô truy vấn và bấm <strong>Run</strong> (màu xanh).</li>
+                <li>Quay lại trang này và bấm nút <strong>&quot;Đồng bộ 170 hồ sơ&quot;</strong> để nạp toàn bộ dữ liệu vào Database!</li>
               </ol>
             </div>
 
@@ -457,17 +493,27 @@ export default function AdminHealthPage() {
             <div>
               <span className="font-bold">CSDL Supabase chưa tạo bảng <code>public.health_records</code>:</span>
               <p className="text-amber-800 font-normal mt-0.5">
-                Dữ liệu hiện đang lưu trong bộ nhớ ứng dụng. Vui lòng chạy lệnh SQL trên Supabase Dashboard để lưu vĩnh viễn vào Database.
+                Dữ liệu hiện đang lưu trong bộ nhớ ứng dụng. Vui lòng bấm &quot;Lấy mã SQL tạo bảng&quot; và dán vào Supabase Dashboard để lưu vĩnh viễn vào Database.
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowSqlModal(true)}
-            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shrink-0 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Lấy mã SQL tạo bảng</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowSqlModal(true)}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Lấy mã SQL tạo bảng</span>
+            </button>
+            <button
+              onClick={handleSyncAllCatalog}
+              disabled={isSyncingAll}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
+              <span>Đã chạy SQL? Bấm đồng bộ ngay</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -490,10 +536,10 @@ export default function AdminHealthPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={fetchHealthData}
-            disabled={loading || isSubmitting}
+            disabled={loading || isSubmitting || isSyncingAll}
             className="p-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
             title="Tải lại dữ liệu"
           >
@@ -501,8 +547,22 @@ export default function AdminHealthPage() {
           </button>
 
           <button
+            onClick={handleSyncAllCatalog}
+            disabled={isSyncingAll || isSubmitting || loading}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-xs shadow-sm whitespace-nowrap text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+            title="Đồng bộ toàn bộ 170 học sinh của cả 5 lớp vào Database Supabase"
+          >
+            {isSyncingAll ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0 text-emerald-600" />
+            ) : (
+              <Database className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+            )}
+            <span>{isSyncingAll ? 'Đang nạp 170 hồ sơ...' : 'Đồng bộ 170 hồ sơ'}</span>
+          </button>
+
+          <button
             onClick={handleSaveBatch}
-            disabled={isSubmitting || loading}
+            disabled={isSubmitting || loading || isSyncingAll}
             className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm whitespace-nowrap text-white transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${
               saveBtnStatus === 'success'
                 ? 'bg-emerald-600 hover:bg-emerald-700'
