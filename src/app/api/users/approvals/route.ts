@@ -302,7 +302,15 @@ export async function POST(request: Request) {
           }
         }
 
-        if (!dbExisting && supabaseClient) {
+        if (dbExisting) {
+          newProfile.role = dbExisting.role;
+          newProfile.approval_status = dbExisting.approval_status;
+          if (dbExisting.id) newProfile.id = dbExisting.id;
+          const cacheIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
+          if (cacheIdx !== -1) {
+            serverCache[cacheIdx] = { ...serverCache[cacheIdx], ...dbExisting };
+          }
+        } else if (supabaseClient) {
           const insertPayload = {
             id: ensureValidUuid(newProfile.id),
             email: newProfile.email,

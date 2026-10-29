@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { checkUserApprovalStatus, registerGoogleUserIfMissing } from '@/lib/utils/approvalHelper';
 import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 const FALLBACK_ANON_KEY =
@@ -140,98 +139,130 @@ export async function GET(request: Request) {
 
     let dbProfileSaved: any = null;
 
-    // 1. Upsert into profiles DB with automatic fallback to Anon Key if Service Role Key is invalid
+    // 1. Kiểm tra xem hồ sơ đã tồn tại trong profiles DB chưa (TUYỆT ĐỐI KHÔNG upsert đè role và approval_status)
     try {
       let supabaseAdmin = getSupabaseAdminClient(false);
       
       let { data: existingDbProfile, error: findErr } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, approval_status, assigned_class_id, assigned_class_name, phone, is_temporary')
-        .eq('email', cleanEmail)
+        .select('*')
+        .ilike('email', cleanEmail)
         .maybeSingle();
 
       if (findErr && (findErr.message?.includes('Invalid API key') || findErr.message?.includes('JWT'))) {
         supabaseAdmin = getSupabaseAdminClient(true);
         const retry = await supabaseAdmin
           .from('profiles')
-          .select('id, role, approval_status, assigned_class_id, assigned_class_name, phone, is_temporary')
-          .eq('email', cleanEmail)
+          .select('*')
+          .ilike('email', cleanEmail)
           .maybeSingle();
         existingDbProfile = retry.data;
       }
 
       const isSuper = cleanEmail === 'sadmin@suongmai.edu.vn';
       const isPrincipal = cleanEmail === 'luciaxuan178@gmail.com';
-      const resolvedExistingRole =
-        isPrincipal && existingDbProfile?.role === 'SUPER_ADMIN'
-          ? 'SCHOOL_ADMIN'
-          : existingDbProfile?.role;
-      const profilePayload: any = {
-        id: ensureValidUuid(existingDbProfile?.id || userId),
-        email: cleanEmail,
-        full_name: resolvedName,
-        avatar_url: resolvedAvatar,
-        role: resolvedExistingRole || (isSuper ? 'SUPER_ADMIN' : isPrincipal ? 'SCHOOL_ADMIN' : 'GUEST'),
-        approval_status: existingDbProfile ? existingDbProfile.approval_status : (isSuper || isPrincipal ? 'ACTIVE' : 'PENDING'),
-        updated_at: new Date().toISOString(),
-      };
 
-      if (existingDbProfile?.assigned_class_name) {
-        profilePayload.assigned_class_name = existingDbProfile.assigned_class_name;
-      }
-      if (existingDbProfile?.assigned_class_id) {
-        profilePayload.assigned_class_id = existingDbProfile.assigned_class_id;
-      }
-      if (existingDbProfile?.phone) {
-        profilePayload.phone = existingDbProfile.phone;
-      }
-      if (existingDbProfile?.is_temporary !== undefined) {
-        profilePayload.is_temporary = existingDbProfile.is_temporary;
-      }
+      if (existingDbProfile) {
+        // NẾU ĐÃ TỒN TẠI: TUYỆT ĐỐI GIỮ NGUYÊN role VÀ approval_status HIỆN TẠI TRONG DATABASE!
+        console.log('[AUTH CALLBACK] Hồ sơ đã tồn tại trong DB, bảo lưu nguyên vẹn vai trò:', {
+          email: existingDbProfile.email,
+          role: existingDbProfile.role,
+          status: existingDbProfile.approval_status
+        });
+        dbProfileSaved = existingDbProfile;
 
-      let { data: upsertData, error: upsertErr } = await supabaseAdmin
-        .from('profiles')
-        .upsert(profilePayload, { onConflict: 'email' })
-        .select();
-
-      if (upsertErr && (upsertErr.message?.includes('Invalid API key') || upsertErr.message?.includes('JWT'))) {
-        supabaseAdmin = getSupabaseAdminClient(true);
-        const retryUpsert = await supabaseAdmin
-          .from('profiles')
-          .upsert(profilePayload, { onConflict: 'email' })
-          .select();
-        upsertData = retryUpsert.data;
-        upsertErr = retryUpsert.error;
-      }
-
-      if (upsertErr || !upsertData || upsertData.length === 0) {
-        console.error('[AUTH CALLBACK ERROR] Ghi dữ liệu profile vào Supabase DB thất bại:', upsertErr);
+        // Chỉ cập nhật avatar hoặc tên mới nếu trước đó chưa có hoặc cập nhật từ Google OAuth (KHÔNG ĐỤNG ĐẾN ROLE HAY STATUS)
+        const updateFields: any = {};
+        if (resolvedName && (!existingDbProfile.full_name || existingDbProfile.full_name === cleanEmail.split('@')[0])) {
+          updateFields.full_name = resolvedName;
+        }
+        if (avatarUrl && !existingDbProfile.avatar_url) {
+          updateFields.avatar_url = avatarUrl;
+        }
+        if (Object.keys(updateFields).length > 0) {
+          updateFields.updated_at = new Date().toISOString();
+          await supabaseAdmin.from('profiles').update(updateFields).eq('id', existingDbProfile.id);
+          dbProfileSaved = { ...existingDbProfile, ...updateFields };
+        }
       } else {
-        dbProfileSaved = upsertData[0];
-        console.log('[AUTH CALLBACK SUCCESS] Ghi/Cập nhật profile vào Supabase DB thành công:', upsertData[0]);
+        // CHỈ TẠO MỚI NẾU LÀ LẦN ĐẦU TIÊN ĐĂNG NHẬP VỚI PENDING (Hoặc ACTIVE nếu là sadmin/Hiệu trưởng)
+        console.log('[AUTH CALLBACK] Tài khoản đăng nhập lần đầu tiên, tạo hồ sơ PENDING mới:', cleanEmail);
+        const initialRole = isSuper ? 'SUPER_ADMIN' : isPrincipal ? 'SCHOOL_ADMIN' : 'GUEST';
+        const initialStatus = isSuper || isPrincipal ? 'ACTIVE' : 'PENDING';
+        const newRecord = {
+          id: ensureValidUuid(userId),
+          email: cleanEmail,
+          full_name: resolvedName,
+          avatar_url: resolvedAvatar,
+          role: initialRole,
+          approval_status: initialStatus,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: insData, error: insErr } = await supabaseAdmin
+          .from('profiles')
+          .insert(newRecord)
+          .select()
+          .maybeSingle();
+
+        if (insErr) {
+          console.error('[AUTH CALLBACK INSERT ERROR]:', insErr.message);
+          dbProfileSaved = newRecord;
+        } else {
+          dbProfileSaved = insData || newRecord;
+        }
       }
     } catch (adminErr: any) {
       console.error('[AUTH CALLBACK EXCEPTION] Supabase Admin Client Exception:', adminErr.message || adminErr);
     }
 
-    // 2. Also register in local server memory cache
-    registerGoogleUserIfMissing(cleanEmail, resolvedName, resolvedAvatar);
+    // 2. Cập nhật đồng bộ vào bộ nhớ tạm server (nếu có)
+    if (dbProfileSaved && typeof globalThis !== 'undefined') {
+      if (!globalThis.__SUONGMAI_PROFILES_CACHE__) {
+        globalThis.__SUONGMAI_PROFILES_CACHE__ = [];
+      }
+      const cIdx = globalThis.__SUONGMAI_PROFILES_CACHE__.findIndex(
+        (p) => p.email.toLowerCase().trim() === cleanEmail
+      );
+      if (cIdx !== -1) {
+        globalThis.__SUONGMAI_PROFILES_CACHE__[cIdx] = {
+          ...globalThis.__SUONGMAI_PROFILES_CACHE__[cIdx],
+          ...dbProfileSaved,
+        };
+      } else {
+        globalThis.__SUONGMAI_PROFILES_CACHE__.push(dbProfileSaved);
+      }
+    }
 
-    // 3. Fetch live profile status to determine redirect
+    // 3. Phân quyền và điều hướng hoàn toàn dựa trên dữ liệu chuẩn từ Database Supabase
     let liveProfile: any = dbProfileSaved;
     if (!liveProfile && typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
       liveProfile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
     }
 
-    const status = checkUserApprovalStatus(cleanEmail);
-    const isApproved = liveProfile?.approval_status === 'ACTIVE' || status.approvalStatus === 'ACTIVE';
-    const resolvedRole = liveProfile?.role || status.profile?.role || 'PARENT';
+    const isSuper = cleanEmail === 'sadmin@suongmai.edu.vn';
+    const isApproved = isSuper || (liveProfile && liveProfile.approval_status === 'ACTIVE');
+    let resolvedRole = liveProfile?.role || 'GUEST';
+    if (cleanEmail === 'luciaxuan178@gmail.com' && resolvedRole === 'SUPER_ADMIN') {
+      resolvedRole = 'SCHOOL_ADMIN';
+    }
 
     const nextParam = searchParams.get('next') || searchParams.get('returnUrl');
 
     if (isApproved) {
       let targetUrl = '/parent';
-      const hasChildren = status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0);
+      let hasChildren = false;
+      try {
+        if (liveProfile?.id) {
+          let supabaseAdmin = getSupabaseAdminClient(false);
+          const { count } = await supabaseAdmin
+            .from('student_guardians')
+            .select('*', { count: 'exact', head: true })
+            .eq('guardian_id', liveProfile.id);
+          hasChildren = Boolean(count && count > 0);
+        }
+      } catch (e) {}
 
       if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
         targetUrl = nextParam && nextParam.startsWith('/') ? nextParam : '/admin/dashboard';
@@ -285,7 +316,7 @@ export async function GET(request: Request) {
       return response;
     } else {
       // Pending user: Redirect to /auth/pending-approval
-      const pendingRedirect = `${origin}/auth/pending-approval?type=${status.pendingType || 'unknown'}&email=${encodeURIComponent(cleanEmail)}`;
+      const pendingRedirect = `${origin}/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
       const response = NextResponse.redirect(pendingRedirect);
       response.cookies.delete('suongmai_session');
       await setSignedCookie(response, 'suongmai_user_email', cleanEmail, {

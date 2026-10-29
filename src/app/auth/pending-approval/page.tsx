@@ -33,23 +33,50 @@ function PendingApprovalContent() {
     }
   }, [email]);
 
-  // Ensure registration record in DB
+  // Tự động kiểm tra trạng thái kích hoạt trên Supabase DB ngay khi load trang
   useEffect(() => {
-    if (email && email !== 'example@gmail.com' && typeof window !== 'undefined') {
-      fetch('/api/users/approvals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      }).catch(() => {});
+    if (email && email.includes('@') && typeof window !== 'undefined') {
+      const cleanEmail = email.toLowerCase().trim();
+      fetch(`/api/auth/check-my-status?email=${encodeURIComponent(cleanEmail)}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.isApproved && data.status === 'ACTIVE') {
+            const role = data.role || 'PARENT';
+            let targetUrl = data.redirectUrl || '/parent';
+            if (role === 'TEACHER') {
+              targetUrl = '/teacher';
+            } else if (role === 'PARENT') {
+              targetUrl = '/parent';
+            } else if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(role)) {
+              targetUrl = '/admin/dashboard';
+            }
+            window.location.replace(targetUrl);
+          }
+        })
+        .catch(() => {});
     }
   }, [email]);
 
   const [loadingCheck, setLoadingCheck] = useState(false);
 
   const handleCheckMyStatus = async () => {
+    if (!email) return;
     setLoadingCheck(true);
     try {
-      const res = await fetch(`/api/auth/check-my-status?email=${encodeURIComponent(email)}`);
+      const cleanEmail = email.toLowerCase().trim();
+      const res = await fetch(`/api/auth/check-my-status?email=${encodeURIComponent(cleanEmail)}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       const data = await res.json();
 
       if (data.isApproved && data.status === 'ACTIVE') {
@@ -63,10 +90,12 @@ function PendingApprovalContent() {
           targetUrl = '/admin/dashboard';
         }
         window.location.replace(targetUrl);
+        return;
       } else {
         alert('Nhà trường chưa duyệt, vui lòng đợi thêm');
       }
     } catch (e) {
+      console.error('[STATUS_CHECK_ERROR]:', e);
       alert('Nhà trường chưa duyệt, vui lòng đợi thêm');
     } finally {
       setLoadingCheck(false);

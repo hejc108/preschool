@@ -356,8 +356,14 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
 
   (async () => {
     try {
-      await supabase.from('profiles').upsert(
-        {
+      const { data: existingDb } = await supabase
+        .from('profiles')
+        .select('id, role, approval_status')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (!existingDb) {
+        await supabase.from('profiles').insert({
           id: newProfile.id,
           email: newProfile.email,
           full_name: newProfile.full_name,
@@ -365,9 +371,12 @@ export function registerGoogleUserIfMissing(email: string, fullName?: string, av
           approval_status: newProfile.approval_status,
           avatar_url: newProfile.avatar_url,
           created_at: newProfile.created_at,
-        },
-        { onConflict: 'email' }
-      );
+        });
+      } else {
+        // Đồng bộ ngược quyền từ Supabase DB vào local profile nếu đã tồn tại
+        if (existingDb.role) newProfile.role = existingDb.role;
+        if (existingDb.approval_status) newProfile.approval_status = existingDb.approval_status;
+      }
     } catch (e) {
       console.error('Failed to sync google user profile to Supabase:', e);
     }

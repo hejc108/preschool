@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
-import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -189,10 +188,7 @@ export async function GET(request: Request) {
         redirectUrl = '/admin/health';
       }
 
-      const status = checkUserApprovalStatus(email);
-      const hasChildren =
-        linkedStudents.length > 0 ||
-        (role === 'PARENT' && (status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0)));
+      const hasChildren = linkedStudents.length > 0;
 
       const response = NextResponse.json(
         {
