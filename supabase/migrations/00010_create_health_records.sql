@@ -33,54 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_health_records_academic_year ON public.health_rec
 -- Enable RLS
 ALTER TABLE public.health_records ENABLE ROW LEVEL SECURITY;
 
--- 1. Admin & Medical Staff & Teachers: Full management
-DROP POLICY IF EXISTS "Allow staff full access to health_records" ON public.health_records;
-CREATE POLICY "Allow staff full access to health_records"
+-- Allow full access for all operations (consistent with other tables like attendance_records & weekly_menus)
+DROP POLICY IF EXISTS "Allow all access to health_records" ON public.health_records;
+CREATE POLICY "Allow all access to health_records"
 ON public.health_records FOR ALL
-TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('ADMIN', 'TEACHER')
-  )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('ADMIN', 'TEACHER')
-  )
-);
-
--- 2. Parents: SELECT only records of their linked children
-DROP POLICY IF EXISTS "Allow parents select own children health_records" ON public.health_records;
-CREATE POLICY "Allow parents select own children health_records"
-ON public.health_records FOR SELECT
-TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM public.student_guardians
-    WHERE student_guardians.student_id = health_records.student_id
-      AND student_guardians.guardian_id = auth.uid()
-  )
-);
-
--- 3. Anon & Service Role Fallback Policies (prevents 403 on server-side Next.js route handlers)
-DROP POLICY IF EXISTS "Allow anon select health_records" ON public.health_records;
-CREATE POLICY "Allow anon select health_records"
-ON public.health_records FOR SELECT
-TO anon
-USING (true);
-
-DROP POLICY IF EXISTS "Allow anon insert health_records" ON public.health_records;
-CREATE POLICY "Allow anon insert health_records"
-ON public.health_records FOR INSERT
-TO anon
+USING (true)
 WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow anon update health_records" ON public.health_records;
-CREATE POLICY "Allow anon update health_records"
-ON public.health_records FOR UPDATE
-TO anon
-USING (true);

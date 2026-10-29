@@ -1,7 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Activity, Save, CheckCircle2, ChevronLeft, AlertCircle, Users, Search, RefreshCw, X, Check } from 'lucide-react';
+import {
+  Activity,
+  Save,
+  CheckCircle2,
+  ChevronLeft,
+  AlertCircle,
+  Users,
+  Search,
+  RefreshCw,
+  X,
+  Check,
+  Database,
+  Copy,
+  ExternalLink,
+} from 'lucide-react';
 import Link from 'next/link';
 import { calculateBMI, classifyWHOGrowthStatus, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { HealthTerm } from '@/lib/types/schema';
@@ -27,6 +41,41 @@ const DEFAULT_CLASSES = [
   { id: '86b1e783-b643-41a5-9833-194b5a29d2e1', name: 'Lá 2' },
 ];
 
+const SQL_MIGRATION_SCRIPT = `-- ==============================================================================
+-- Migration: Tạo bảng health_records trên Supabase cho Mầm Non Sương Mai
+-- Chạy câu lệnh này tại: Supabase Dashboard -> SQL Editor -> New Query -> Run
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.health_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  term VARCHAR(50) NOT NULL DEFAULT 'Q1',
+  academic_year VARCHAR(50) NOT NULL DEFAULT '2026-2027',
+  measured_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  record_date DATE DEFAULT CURRENT_DATE,
+  weight_kg NUMERIC(5,2),
+  height_cm NUMERIC(5,2),
+  weight NUMERIC(5,2),
+  height NUMERIC(5,2),
+  bmi NUMERIC(5,2),
+  growth_status VARCHAR(50) NOT NULL DEFAULT 'NORMAL',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uq_health_records_student_term UNIQUE (student_id, term)
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_records_student_id ON public.health_records(student_id);
+CREATE INDEX IF NOT EXISTS idx_health_records_term ON public.health_records(term);
+
+ALTER TABLE public.health_records ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all access to health_records" ON public.health_records;
+CREATE POLICY "Allow all access to health_records"
+ON public.health_records FOR ALL
+USING (true)
+WITH CHECK (true);`;
+
 function safeParseFloat(val: any): number | null {
   if (val === null || val === undefined) return null;
   const s = String(val).trim().replace(',', '.');
@@ -46,15 +95,26 @@ export default function AdminHealthPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [savedSuccess, setSavedSuccess] = useState<string | null>(null);
+  const [hasSupabaseTable, setHasSupabaseTable] = useState<boolean>(true);
+  const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [saveBtnStatus, setSaveBtnStatus] = useState<'idle' | 'success' | 'warning'>('idle');
 
   // Modern Toast Notification state
-  const [toast, setToast] = useState<{ show: boolean; type: 'success' | 'error'; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'warning';
+    message: string;
+  } | null>(null);
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = (type: 'success' | 'error' | 'warning', message: string) => {
     setToast({ show: true, type, message });
     if (type === 'success') {
-      setSavedSuccess(true);
+      setSavedSuccess(message);
+      setValidationError(null);
+    } else if (type === 'warning') {
+      setSavedSuccess(message);
       setValidationError(null);
     } else {
       setValidationError(message);
@@ -65,7 +125,7 @@ export default function AdminHealthPage() {
     if (toast?.show) {
       const timer = setTimeout(() => {
         setToast((prev) => (prev ? { ...prev, show: false } : null));
-      }, 4000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
@@ -87,6 +147,9 @@ export default function AdminHealthPage() {
           }
           if (json.recordsMap) {
             setRecordsMap(json.recordsMap);
+          }
+          if (typeof json.has_supabase_table === 'boolean') {
+            setHasSupabaseTable(json.has_supabase_table);
           }
         }
       } else {
@@ -117,7 +180,7 @@ export default function AdminHealthPage() {
         s.class_name === selectedClassName ||
         s.class_id === selectedClassObj?.id
     )
-    .sort((a, b) => a.student_code.localeCompare(b.student_code));
+    .sort((a, b) => (a.student_code || '').localeCompare(b.student_code || ''));
 
   // Field change handler
   const handleInputChange = (studentId: string, field: 'weight_kg' | 'height_cm' | 'notes', value: any) => {
@@ -170,7 +233,11 @@ export default function AdminHealthPage() {
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
-        showToast('success', `Đã lưu thành công sổ sức khỏe bé ${student.full_name}!`);
+        if (json.synced_supabase) {
+          showToast('success', `Đã lưu vào Database Supabase cho bé ${student.full_name}!`);
+        } else {
+          showToast('warning', `Đã lưu tạm thời bé ${student.full_name} (Database Supabase chưa có bảng health_records).`);
+        }
       } else {
         showToast('error', json.error || `Không thể lưu số liệu của bé ${student.full_name}.`);
       }
@@ -210,6 +277,7 @@ export default function AdminHealthPage() {
 
     setIsSubmitting(true);
     setValidationError(null);
+    setSaveBtnStatus('idle');
 
     try {
       const payloadRecords = classStudents.map((st) => {
@@ -241,10 +309,22 @@ export default function AdminHealthPage() {
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
-        showToast(
-          'success',
-          `Đã lưu thành công ${json.saved_count || payloadRecords.length} bản ghi sức khỏe cho Lớp ${selectedClassName}!`
-        );
+        if (json.synced_supabase) {
+          setSaveBtnStatus('success');
+          setHasSupabaseTable(true);
+          showToast(
+            'success',
+            `Đã lưu thành công ${json.saved_count || payloadRecords.length} bản ghi vào Database Supabase!`
+          );
+        } else {
+          setSaveBtnStatus('warning');
+          setHasSupabaseTable(false);
+          showToast(
+            'warning',
+            `Đã lưu ${json.saved_count || payloadRecords.length} bản ghi vào bộ nhớ hệ thống. (Lưu ý: Bảng health_records chưa tạo trên Supabase, bấm "Xem mã SQL" để kích hoạt lưu vĩnh viễn).`
+          );
+        }
+        setTimeout(() => setSaveBtnStatus('idle'), 4000);
       } else {
         showToast('error', json.error || 'Máy chủ báo lỗi khi lưu sổ sức khỏe.');
       }
@@ -256,20 +336,30 @@ export default function AdminHealthPage() {
     }
   };
 
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_MIGRATION_SCRIPT);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6 relative">
       {/* Toast Notification Container */}
       {toast && toast.show && (
-        <div className="fixed top-5 right-5 z-50 max-w-md w-full animate-slide-in">
+        <div className="fixed top-5 right-5 z-50 max-w-md w-full shadow-2xl transition-all">
           <div
-            className={`p-4 rounded-2xl shadow-xl border flex items-start gap-3 transition-all ${
+            className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
               toast.type === 'success'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                : 'bg-rose-50 border-rose-300 text-rose-900'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-emerald-500/10'
+                : toast.type === 'warning'
+                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-amber-500/10'
+                : 'bg-rose-50 border-rose-300 text-rose-900 shadow-rose-500/10'
             }`}
           >
             {toast.type === 'success' ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            ) : toast.type === 'warning' ? (
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             ) : (
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             )}
@@ -278,11 +368,106 @@ export default function AdminHealthPage() {
             </div>
             <button
               onClick={() => setToast((prev) => (prev ? { ...prev, show: false } : null))}
-              className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+              className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* SQL Script Modal */}
+      {showSqlModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-900 text-base">Mã SQL Kích Hoạt Bảng Sức Khỏe Trên Supabase</h3>
+              </div>
+              <button
+                onClick={() => setShowSqlModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-1.5 leading-relaxed">
+              <p>
+                Để dữ liệu được lưu vĩnh viễn vào cơ sở dữ liệu Supabase, bạn chỉ cần thực hiện 3 bước đơn giản:
+              </p>
+              <ol className="list-decimal pl-4 space-y-1 font-medium text-slate-700">
+                <li>Bấm nút <strong>Sao chép mã SQL</strong> bên dưới.</li>
+                <li>
+                  Mở{' '}
+                  <a
+                    href="https://supabase.com/dashboard/project/yrieuamibqjyaslprdeo/sql"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-600 font-bold underline inline-flex items-center gap-1"
+                  >
+                    Supabase SQL Editor <ExternalLink className="w-3 h-3" />
+                  </a>
+                  .
+                </li>
+                <li>Dán (Paste) câu lệnh vào ô truy vấn và bấm <strong>Run</strong>.</li>
+              </ol>
+            </div>
+
+            <div className="relative">
+              <pre className="bg-slate-900 text-slate-100 p-4 rounded-xl text-xs font-mono overflow-x-auto max-h-64 leading-relaxed">
+                {SQL_MIGRATION_SCRIPT}
+              </pre>
+              <button
+                onClick={handleCopySql}
+                className="absolute top-3 right-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-all cursor-pointer"
+              >
+                {copiedSql ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Đã sao chép!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Sao chép mã SQL</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowSqlModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Đóng lại
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Warning Banner if Supabase table not created yet */}
+      {!hasSupabaseTable && !loading && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 text-xs shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">CSDL Supabase chưa tạo bảng <code>public.health_records</code>:</span>
+              <p className="text-amber-800 font-normal mt-0.5">
+                Dữ liệu hiện đang lưu trong bộ nhớ ứng dụng. Vui lòng chạy lệnh SQL trên Supabase Dashboard để lưu vĩnh viễn vào Database.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSqlModal(true)}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shrink-0 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Lấy mã SQL tạo bảng</span>
+          </button>
         </div>
       )}
 
@@ -314,17 +499,36 @@ export default function AdminHealthPage() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
           <button
             onClick={handleSaveBatch}
             disabled={isSubmitting || loading}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm whitespace-nowrap bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+            className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm whitespace-nowrap text-white transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${
+              saveBtnStatus === 'success'
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : saveBtnStatus === 'warning'
+                ? 'bg-amber-600 hover:bg-amber-700'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
             {isSubmitting ? (
               <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+            ) : saveBtnStatus === 'success' ? (
+              <Check className="w-4 h-4 shrink-0" />
+            ) : saveBtnStatus === 'warning' ? (
+              <AlertCircle className="w-4 h-4 shrink-0" />
             ) : (
               <Save className="w-4 h-4 shrink-0" />
             )}
-            <span>{isSubmitting ? 'Đang lưu sổ sức khỏe...' : 'Lưu sổ sức khỏe lớp'}</span>
+            <span>
+              {isSubmitting
+                ? 'Đang gửi lưu dữ liệu...'
+                : saveBtnStatus === 'success'
+                ? 'Đã lưu Database thành công!'
+                : saveBtnStatus === 'warning'
+                ? 'Đã lưu tạm (Bấm xem SQL)'
+                : 'Lưu sổ sức khỏe lớp'}
+            </span>
           </button>
         </div>
       </div>
@@ -338,11 +542,30 @@ export default function AdminHealthPage() {
       )}
 
       {savedSuccess && (
-        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 font-bold text-sm flex items-center gap-2 shadow-sm">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>
-            Đã lưu thành công dữ liệu sổ sức khỏe cho Lớp {selectedClassName}! Dữ liệu đã đồng bộ sang màn hình Cổng Phụ huynh.
-          </span>
+        <div
+          className={`p-4 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 shadow-sm ${
+            saveBtnStatus === 'warning'
+              ? 'bg-amber-50 border-amber-300 text-amber-900'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {saveBtnStatus === 'warning' ? (
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>{savedSuccess}</span>
+          </div>
+
+          {!hasSupabaseTable && (
+            <button
+              onClick={() => setShowSqlModal(true)}
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold shrink-0 cursor-pointer"
+            >
+              Xem mã SQL
+            </button>
+          )}
         </div>
       )}
 

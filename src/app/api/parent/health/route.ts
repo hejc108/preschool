@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HealthRecord } from '@/lib/types/schema';
 import { calculateBMI, classifyWHOGrowthStatus } from '@/lib/utils/healthHelper';
+import defaultHealthCatalog from '@/lib/data/health_catalog.json';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,6 +14,15 @@ const NO_CACHE_HEADERS = {
   Pragma: 'no-cache',
   Expires: '0',
 };
+
+// Global in-memory cache for durable persistence across requests in Node/Serverless
+declare global {
+  var __SUONGMAI_HEALTH_CATALOG__: HealthRecord[] | undefined;
+}
+
+if (!globalThis.__SUONGMAI_HEALTH_CATALOG__) {
+  globalThis.__SUONGMAI_HEALTH_CATALOG__ = (defaultHealthCatalog as HealthRecord[]) || [];
+}
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -38,16 +48,21 @@ function getSupabaseClient() {
 }
 
 function loadHealthCatalog(): HealthRecord[] {
+  if (globalThis.__SUONGMAI_HEALTH_CATALOG__ && globalThis.__SUONGMAI_HEALTH_CATALOG__.length > 0) {
+    return globalThis.__SUONGMAI_HEALTH_CATALOG__;
+  }
   try {
     const catalogPath = path.resolve(process.cwd(), 'src/lib/data/health_catalog.json');
     if (fs.existsSync(catalogPath)) {
       const content = fs.readFileSync(catalogPath, 'utf-8');
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      globalThis.__SUONGMAI_HEALTH_CATALOG__ = parsed;
+      return parsed;
     }
   } catch (e) {
-    console.error('Error loading health_catalog.json:', e);
+    console.error('Error loading health_catalog.json from disk:', e);
   }
-  return [];
+  return (defaultHealthCatalog as HealthRecord[]) || [];
 }
 
 function safeParseFloat(val: any): number | null {
@@ -116,7 +131,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2. Fallback: if no records in Supabase, load from health_catalog.json
+    // 2. Fallback: if no records in Supabase, load from health_catalog
     if (records.length === 0) {
       const catalog = loadHealthCatalog();
       const matched = catalog.filter((c) => c.student_id === studentId);

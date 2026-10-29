@@ -5,6 +5,7 @@ import * as path from 'path';
 import { calculateBMI, classifyWHOGrowthStatus } from '@/lib/utils/healthHelper';
 import { HealthRecord } from '@/lib/types/schema';
 import { isNonRegularStudent } from '@/lib/utils/studentClassification';
+import defaultHealthCatalog from '@/lib/data/health_catalog.json';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -14,6 +15,15 @@ const NO_CACHE_HEADERS = {
   Pragma: 'no-cache',
   Expires: '0',
 };
+
+// Global in-memory cache for durable persistence across requests in Node/Serverless
+declare global {
+  var __SUONGMAI_HEALTH_CATALOG__: HealthRecord[] | undefined;
+}
+
+if (!globalThis.__SUONGMAI_HEALTH_CATALOG__) {
+  globalThis.__SUONGMAI_HEALTH_CATALOG__ = (defaultHealthCatalog as HealthRecord[]) || [];
+}
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -39,24 +49,34 @@ function getSupabaseClient() {
 }
 
 function loadHealthCatalog(): HealthRecord[] {
+  // 1. First check in-memory store
+  if (globalThis.__SUONGMAI_HEALTH_CATALOG__ && globalThis.__SUONGMAI_HEALTH_CATALOG__.length > 0) {
+    return globalThis.__SUONGMAI_HEALTH_CATALOG__;
+  }
+  // 2. Try loading from file system
   try {
     const catalogPath = path.resolve(process.cwd(), 'src/lib/data/health_catalog.json');
     if (fs.existsSync(catalogPath)) {
       const content = fs.readFileSync(catalogPath, 'utf-8');
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      globalThis.__SUONGMAI_HEALTH_CATALOG__ = parsed;
+      return parsed;
     }
   } catch (e) {
-    console.error('Error loading health_catalog.json:', e);
+    console.error('Error loading health_catalog.json from disk:', e);
   }
-  return [];
+  return (defaultHealthCatalog as HealthRecord[]) || [];
 }
 
 function saveHealthCatalog(records: HealthRecord[]) {
+  // Update in-memory cache
+  globalThis.__SUONGMAI_HEALTH_CATALOG__ = records;
+  // Try writing to disk for local dev persistence
   try {
     const catalogPath = path.resolve(process.cwd(), 'src/lib/data/health_catalog.json');
     fs.writeFileSync(catalogPath, JSON.stringify(records, null, 2), 'utf-8');
   } catch (e) {
-    console.error('Error saving health_catalog.json:', e);
+    // Expected on read-only environments like Vercel Lambda
   }
 }
 
@@ -121,6 +141,7 @@ export async function GET(request: Request) {
 
     // 3. Fetch health records from Supabase table
     let dbRecords: any[] = [];
+    let hasSupabaseTable = false;
     try {
       let hrQuery = supabase
         .from('health_records')
@@ -134,12 +155,15 @@ export async function GET(request: Request) {
       const { data: hrData, error: hrErr } = await hrQuery;
       if (!hrErr && hrData) {
         dbRecords = hrData;
+        hasSupabaseTable = true;
+      } else if (hrErr && !hrErr.message.includes('schema cache')) {
+        hasSupabaseTable = true;
       }
     } catch (e) {
       console.warn('Supabase health_records select fallback:', e);
     }
 
-    // 4. Fallback: merge with health_catalog.json
+    // 4. Fallback: merge with health_catalog
     const catalogRecords = loadHealthCatalog();
     const recordsMap: Record<
       string,
@@ -220,6 +244,7 @@ export async function GET(request: Request) {
         students,
         recordsMap,
         total: students.length,
+        has_supabase_table: hasSupabaseTable,
       },
       { headers: NO_CACHE_HEADERS }
     );
@@ -318,7 +343,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // 1. Upsert into Supabase public.health_records
+    // 1. Upsert into Supabase public.health_records if table exists
     let supabaseSuccess = false;
     let supabaseErrorMsg = '';
 
@@ -364,8 +389,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Always persist into health_catalog.json for instant local availability
-    const catalog = loadHealthCatalog();
+    // 2. Always persist into in-memory catalog
+    const catalog = [...loadHealthCatalog()];
     for (const prep of preparedRecords) {
       const existingIdx = catalog.findIndex(
         (c) =>
@@ -401,8 +426,13 @@ export async function POST(request: Request) {
         success: true,
         saved_count: preparedRecords.length,
         synced_supabase: supabaseSuccess,
-        supabase_warning: supabaseSuccess ? undefined : supabaseErrorMsg,
-        message: `Đã lưu thành công ${preparedRecords.length} bản ghi sổ sức khỏe!`,
+        has_supabase_table: supabaseSuccess,
+        supabase_warning: supabaseSuccess
+          ? undefined
+          : 'CSDL Supabase chưa có bảng public.health_records.',
+        message: supabaseSuccess
+          ? `Đã lưu thành công ${preparedRecords.length} bản ghi vào Database Supabase!`
+          : `Đã lưu tạm ${preparedRecords.length} bản ghi vào bộ nhớ hệ thống (Cần chạy script tạo bảng trên Supabase để lưu vĩnh viễn)`,
       },
       { headers: NO_CACHE_HEADERS }
     );
