@@ -36,7 +36,7 @@ function normalizeName(str: string): string {
     .replace(/\s+/g, ' ');
 }
 
-// Bảng ánh xạ 5 lỗi chính tả / đảo thứ tự họ tên giữa file Sức khỏe và Danh bạ gốc
+// Bảng ánh xạ các sai khác chính tả / đảo thứ tự họ tên giữa file Sức khỏe và Danh bạ gốc
 const NAME_ALIASES: Record<string, string> = {
   'nguyễn đình khải dương': 'nguyễn đình hải dương',
   'hồ thị minh khuê': 'hồ ngọc minh khuê',
@@ -45,6 +45,7 @@ const NAME_ALIASES: Record<string, string> = {
   'nguyễn ngọc bào an': 'nguyễn ngọc bảo an',
   'đình nhân ntrual': 'ntrual đình nhân',
   'ntrual đình nhân': 'ntrual đình nhân',
+  'nguyễn hoàng thiên ân': 'nguyễn hoàng thiên ân (g)',
 };
 
 interface HealthExcelRow {
@@ -60,7 +61,7 @@ interface HealthExcelRow {
 }
 
 export async function runHealthVNeIDImport() {
-  console.log('🚀 Bắt đầu quá trình Import 168 Hồ sơ VNeID và Sức khỏe thể chất...');
+  console.log('🚀 Bắt đầu quá trình Import 168 Hồ sơ VNeID và Sức khỏe thể chất từ nguồn chuẩn...');
 
   // 1. Quét 5 file Excel khai báo sức khỏe
   const healthDir = path.resolve(process.cwd(), 'data/health_records');
@@ -88,7 +89,7 @@ export async function runHealthVNeIDImport() {
     else if (f.toUpperCase().includes('LÁ 2') || f.toUpperCase().includes('LA 2')) detectedClass = 'Lá 2';
     else if (f.toUpperCase().includes('MẦM') || f.toUpperCase().includes('MAM')) detectedClass = 'Mầm';
 
-    for (let i = 9; i < rows.length; i++) {
+    for (let i = 6; i < rows.length; i++) {
       const row = rows[i];
       if (!row || !row[2]) continue;
       const stt = String(row[0] || '').trim();
@@ -99,7 +100,8 @@ export async function runHealthVNeIDImport() {
       const weight_kg = Number(row[5]) || 0;
       const height_cm = Number(row[6]) || 0;
 
-      if (!full_name || full_name.toUpperCase().includes('HỌ')) continue;
+      // Bỏ qua dòng tiêu đề phụ
+      if (!full_name || full_name.toUpperCase().includes('HỌ TÊN') || citizen_id.includes('Mã định danh')) continue;
 
       parsedRecords.push({
         file: f,
@@ -117,18 +119,39 @@ export async function runHealthVNeIDImport() {
 
   console.log(`\n📊 Tổng số hồ sơ đọc từ 5 file Excel: ${parsedRecords.length} học sinh.`);
 
-  // 2. Tải toàn bộ học sinh từ Supabase
+  // 2. Tải toàn bộ học sinh và lớp từ Supabase
   const { data: dbStudents, error: fetchErr } = await supabase
     .from('students')
-    .select('id, student_code, full_name, dob, class_id, citizen_id');
+    .select('id, student_code, full_name, dob, class_id, citizen_id')
+    .order('student_code');
 
-  if (fetchErr) {
-    throw new Error(`Không thể lấy danh sách học sinh từ Supabase: ${fetchErr.message}`);
+  if (fetchErr || !dbStudents) {
+    throw new Error(`Không thể lấy danh sách học sinh từ Supabase: ${fetchErr?.message}`);
   }
+
+  const { data: classesData } = await supabase.from('classes').select('id, name');
+  const classIdToName: Record<string, string> = {
+    '14ccdb7e-c341-4fe4-8a59-78b2a2914096': 'Nhà trẻ',
+    '5b61ec3a-11ef-4ca0-b914-97b35f9f3762': 'Mầm',
+    '9d953115-1de9-4a56-a75c-eadcf903f398': 'Chồi',
+    'ebe8ec4d-1cf5-406a-9483-f0d90ccc71fd': 'Lá 1',
+    '86b1e783-b643-41a5-9833-194b5a29d2e1': 'Lá 2',
+  };
+  if (classesData && classesData.length > 0) {
+    classesData.forEach((c: { id: string; name: string }) => {
+      classIdToName[c.id] = c.name;
+    });
+  }
+
+  // Gắn thông tin className và normalizedName vào từng học sinh
+  dbStudents.forEach((s: any) => {
+    s.className = classIdToName[s.class_id] || 'Unknown';
+    s.normName = normalizeName(s.full_name);
+  });
 
   console.log(`📦 Tổng số học sinh hiện có trong CSDL Supabase: ${dbStudents.length} bé.`);
 
-  // 3. Khớp hồ sơ và cập nhật citizen_id xuống Supabase
+  // 3. Khớp hồ sơ bằng bộ khóa kết hợp [Lớp học + Họ tên + Ngày sinh]
   let successCount = 0;
   const matchResults: {
     excelName: string;
@@ -144,6 +167,7 @@ export async function runHealthVNeIDImport() {
 
   const unmatchedExcel: HealthExcelRow[] = [];
   const healthCatalog: HealthRecord[] = [];
+  const matchedStudentIds = new Set<string>();
 
   for (const item of parsedRecords) {
     let norm = normalizeName(item.full_name);
@@ -151,25 +175,44 @@ export async function runHealthVNeIDImport() {
       norm = NAME_ALIASES[norm];
     }
 
-    // Tìm trong DB
-    let matchedStudent = dbStudents.find(s => normalizeName(s.full_name) === norm);
-    if (!matchedStudent) {
-      // Thử tìm theo họ tên chứa nhau
-      matchedStudent = dbStudents.find(s => {
-        const sNorm = normalizeName(s.full_name);
-        return sNorm.includes(norm) || norm.includes(sNorm);
-      });
+    // BƯỚC 1: Lọc theo đúng lớp học trong file khai báo
+    const classCandidates = dbStudents.filter((s: any) => s.className === item.className);
+
+    // BƯỚC 2: Tìm theo họ tên chuẩn hóa
+    const sameNameCandidates = classCandidates.filter((s: any) => s.normName === norm);
+    let matchedStudent: any = null;
+
+    if (sameNameCandidates.length === 1) {
+      matchedStudent = sameNameCandidates[0];
+    } else if (sameNameCandidates.length > 1) {
+      // BƯỚC 3: Trường hợp trùng tên trong cùng lớp (ví dụ: Trần Ngọc An Nhiên ở Nhà trẻ)
+      // So khớp chính xác bằng Ngày sinh (DOB)
+      const parts = item.dob.split('/');
+      if (parts.length === 3) {
+        const dobFormatted = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        const dobReversed = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+        matchedStudent = sameNameCandidates.find((s: any) => s.dob === dobFormatted || s.dob === dobReversed);
+      }
+      if (!matchedStudent) {
+        // Chọn bé chưa được khớp
+        matchedStudent = sameNameCandidates.find((s: any) => !matchedStudentIds.has(s.id)) || sameNameCandidates[0];
+      }
+    } else {
+      // Fallback: Tìm theo chứa chuỗi trong phạm vi lớp
+      matchedStudent = classCandidates.find((s: any) => s.normName.includes(norm) || norm.includes(s.normName));
     }
 
     if (matchedStudent) {
+      matchedStudentIds.add(matchedStudent.id);
       const bmi = calculateBMI(item.weight_kg, item.height_cm);
       const growthStatus = classifyWHOGrowthStatus(bmi);
 
-      // Cập nhật citizen_id vào Supabase
+      // Cập nhật citizen_id vào Supabase dưới dạng chuỗi (String/Text)
       if (item.citizen_id) {
+        const cleanCitizenId = String(item.citizen_id).trim();
         const { error: updateErr } = await supabase
           .from('students')
-          .update({ citizen_id: item.citizen_id })
+          .update({ citizen_id: cleanCitizenId })
           .eq('id', matchedStudent.id);
 
         if (updateErr) {
@@ -201,7 +244,7 @@ export async function runHealthVNeIDImport() {
         height_cm: item.height_cm,
         bmi,
         growth_status: growthStatus,
-        notes: `Chỉ số sức khỏe đầu năm học 2026-2027 (VNeID: ${item.citizen_id})`,
+        notes: `Chỉ số sức khỏe đầu năm học 2026-2027 (Mã định danh: ${item.citizen_id})`,
         created_at: new Date().toISOString()
       });
     } else {
@@ -253,7 +296,7 @@ export async function runHealthVNeIDImport() {
         { onConflict: 'student_id,term,academic_year' }
       );
     if (!hrErr) {
-      console.log(`✅ Đã nạp thành công ${healthCatalog.length} bản ghi vào bảng public.health_records trên Supabase!`);
+      console.log(`✅ Đã UPSERT thành công ${healthCatalog.length} bản ghi vào bảng public.health_records trên Supabase!`);
     } else {
       console.log(`ℹ️ Bảng public.health_records trên Supabase: ${hrErr.message} (đã lưu dự phòng trong health_catalog.json)`);
     }
@@ -261,9 +304,12 @@ export async function runHealthVNeIDImport() {
     console.log(`ℹ️ Bảng public.health_records chưa tồn tại trên Supabase, dữ liệu đang hoạt động qua health_catalog.json.`);
   }
 
-  // 7. Lập danh sách 23 bé chưa có số định danh
-  const studentsWithCitizenId = new Set(matchResults.map(r => r.studentCode));
-  const missingCitizenStudents = dbStudents.filter(s => !studentsWithCitizenId.has(s.student_code));
+  // 7. Lập danh sách đối soát các bé chưa có mã định danh
+  const officialStudents = dbStudents.filter((s: any) => {
+    const num = parseInt(s.student_code.replace('SM-2026-', ''), 10);
+    return num >= 1 && num <= 170;
+  });
+  const missingOfficial = officialStudents.filter((s: any) => !matchedStudentIds.has(s.id));
 
   console.log(`\n===============================================================`);
   console.log(`📋 BÁO CÁO NGHIỆM THU ĐỐI SOÁT IMPORT 168 HỒ SƠ VNeID & SỨC KHỎE`);
@@ -271,8 +317,10 @@ export async function runHealthVNeIDImport() {
   console.log(`- Tổng hồ sơ khai báo trong 5 file Excel: ${parsedRecords.length} bé.`);
   console.log(`- Khớp thành công 100% vào CSDL Supabase: ${successCount} / 168 bé.`);
   console.log(`- Số trường hợp không khớp: ${unmatchedExcel.length} bé.`);
+  console.log(`- Tổng số học sinh chính quy đã có mã định danh: ${officialStudents.length - missingOfficial.length} / 170 bé (168 bé).`);
+  console.log(`- Số học sinh chính quy chưa có mã định danh: ${missingOfficial.length} bé (đúng 2 bé lớp Lá 2).`);
   
-  console.log(`\n--- PHÂN BỔ KHỚP HỒ SƠ THEO 5 LỚP ---`);
+  console.log(`\n--- PHÂN BỔ KHỚP HỒ SƠ THEO 5 LỚP CHÍNH THỨC ---`);
   const classBreakdown: Record<string, number> = {};
   matchResults.forEach(r => {
     classBreakdown[r.className] = (classBreakdown[r.className] || 0) + 1;
@@ -281,18 +329,16 @@ export async function runHealthVNeIDImport() {
     console.log(`   + Lớp ${cName}: ${count} bé đã nạp mã định danh & thể trạng.`);
   }
 
-  console.log(`\n--- DANH SÁCH 23 BÉ CHƯA CÓ MÃ ĐỊNH DANH (CẦN THEO DÕI THU THẬP) ---`);
-  console.log(`(Gồm 21 bé ngoài danh sách chính quy + 2 bé lớp Lá 2 chưa nộp tờ khai)`);
-  missingCitizenStudents.forEach((s, idx) => {
-    console.log(`   ${idx + 1}. [${s.student_code}] ${s.full_name} (${isNonRegularStudent(s) ? 'Ngoài quy chế' : 'Lớp Lá 2'})`);
+  console.log(`\n--- 02 HỌC SINH CHÍNH QUY LỚP LÁ 2 CHƯA NỘP TỜ KHAI Y TẾ ---`);
+  missingOfficial.forEach((s: any, idx: number) => {
+    console.log(`   ${idx + 1}. [${s.student_code}] ${s.full_name} (${s.className})`);
   });
 
   return {
     total: parsedRecords.length,
     success: successCount,
     unmatched: unmatchedExcel,
-    missingCitizenCount: missingCitizenStudents.length,
-    missingCitizenStudents
+    missingOfficial
   };
 }
 

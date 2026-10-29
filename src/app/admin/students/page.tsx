@@ -28,6 +28,7 @@ import { INITIAL_STUDENTS, INITIAL_CLASSES, INITIAL_KITCHEN_ORDERS, supabase } f
 import { Student, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import { hasRealAllergy } from '@/lib/utils/studentClassification';
 
 export default function StudentsDirectoryPage() {
   const { t } = useLanguage();
@@ -194,7 +195,7 @@ export default function StudentsDirectoryPage() {
         `"${s.gender}"`,
         `"${s.dob}"`,
         `"${s.class_name || ''}"`,
-        `"${s.allergies || 'Không'}"`,
+        `"${hasRealAllergy(s.allergies) ? s.allergies : 'Không'}"`,
         `"${s.status === 'ACTIVE' ? 'Đang theo học' : 'Đã nghỉ học'}"`,
         `"${parentsInfo.replace(/"/g, '""')}"`,
         `"${parentsPhone.replace(/"/g, '""')}"`,
@@ -609,12 +610,12 @@ export default function StudentsDirectoryPage() {
                         )}
                       </td>
                       <td className="py-4 px-4 text-xs">
-                        {s.allergies === 'Không' ? (
-                          <span className="text-slate-400 italic">{t('admin.students.normal_allergy')}</span>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 rounded-pill font-bold whitespace-nowrap">
+                        {hasRealAllergy(s.allergies) ? (
+                          <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-pill font-bold whitespace-nowrap">
                             ⚠️ {s.allergies}
                           </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Bình thường</span>
                         )}
                       </td>
                       <td className="py-4 px-4 text-xs whitespace-nowrap">
@@ -799,7 +800,9 @@ export default function StudentsDirectoryPage() {
               </div>
               <div>
                 <span className="text-slate-400 block font-semibold">Lưu ý sức khoẻ</span>
-                <span className="font-bold text-sky-800">{selectedStudent.allergies}</span>
+                <span className="font-bold text-sky-800">
+                  {hasRealAllergy(selectedStudent.allergies) ? `⚠️ ${selectedStudent.allergies}` : 'Bình thường (Không dị ứng)'}
+                </span>
               </div>
             </div>
 
