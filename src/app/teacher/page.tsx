@@ -86,6 +86,17 @@ export default function TeacherPwaPage() {
   );
 
   const [isKitchenLocked, setIsKitchenLocked] = useState(false);
+  const [kitchenReportData, setKitchenReportData] = useState<{
+    isWeekend?: boolean;
+    isPastCutoff?: boolean;
+    currentVietnamTime?: string;
+    report?: any;
+    canFinalize?: boolean;
+    canUpdate?: boolean;
+    remainingUpdates?: number;
+    uiState?: 'WEEKEND' | 'NOT_FINALIZED' | 'FINALIZED_CAN_UPDATE' | 'MAX_UPDATES_REACHED' | 'PAST_CUTOFF_LOCKED';
+  } | null>(null);
+  const [isFinalizingKitchen, setIsFinalizingKitchen] = useState(false);
   const [absences, setAbsences] = useState<AbsenceRequest[]>(INITIAL_ABSENCE_REQUESTS);
 
   // Medication State
@@ -230,6 +241,26 @@ export default function TeacherPwaPage() {
     }
   };
 
+  const fetchKitchenReportStatus = async (classId: string) => {
+    if (!classId) return;
+    try {
+      const res = await fetch(`/api/teacher/attendance/kitchen-report?class_id=${encodeURIComponent(classId)}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setKitchenReportData(json);
+        if (json.uiState === 'PAST_CUTOFF_LOCKED' || json.uiState === 'MAX_UPDATES_REACHED' || json.uiState === 'WEEKEND') {
+          setIsKitchenLocked(true);
+        } else {
+          setIsKitchenLocked(false);
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi tải trạng thái báo bếp:', e);
+    }
+  };
+
   // Instant SWR Switch (<0.1s switch, zero lag, no 0/0 screen)
   const handleSelectClass = (c: AssignedClass) => {
     if (activeClass?.id === c.id) return;
@@ -260,6 +291,7 @@ export default function TeacherPwaPage() {
 
     // B. Revalidate fresh data from Supabase in background
     fetchClassData(c, Boolean(cached));
+    fetchKitchenReportStatus(c.id);
   };
 
   // Initial class load
@@ -267,6 +299,7 @@ export default function TeacherPwaPage() {
     if (!activeClass) return;
     const isCached = Boolean(classDataCacheRef.current[activeClass.id]);
     fetchClassData(activeClass, isCached);
+    fetchKitchenReportStatus(activeClass.id);
   }, [activeClass]);
 
   // Background Preload: Silently warm up cache for other assigned classes
@@ -651,15 +684,59 @@ export default function TeacherPwaPage() {
   };
 
   const handleDispatchToKitchen = async () => {
-    setIsKitchenLocked(true);
-    await syncAttendanceToDb(
-      students.map((s) => ({
-        student_id: s.id,
-        status: s.attendance === 'ABSENT' ? 'ABSENT_UNEXCUSED' : s.attendance,
-      }))
-    );
-    const officialPresentCount = officialStudents.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length;
-    alert(`⚡ ${t('teacher.dispatched_done')}\n\n• ${t('common.child')}: ${officialPresentCount}/${officialStudents.length}`);
+    if (!activeClass || isKitchenLocked || isFinalizingKitchen) return;
+
+    const officialPresentCount = officialStudents.filter(
+      (s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE'
+    ).length;
+
+    const isUpdate = kitchenReportData?.report && kitchenReportData.report.update_count === 0;
+    const confirmMessage = isUpdate
+      ? `Xác nhận cập nhật lại sĩ số báo bếp Lớp ${activeClass.name}: ${officialPresentCount}/${officialStudents.length} suất ăn?\n(Lưu ý: Đây là lần cập nhật phát sinh cuối cùng trong ngày)`
+      : `Xác nhận chốt sĩ số báo bếp Lớp ${activeClass.name}: ${officialPresentCount}/${officialStudents.length} suất ăn cho học sinh chính quy?`;
+
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsFinalizingKitchen(true);
+
+    try {
+      // 1. Đồng bộ điểm danh toàn bộ học sinh
+      await syncAttendanceToDb(
+        students.map((s) => ({
+          student_id: s.id,
+          status: s.attendance === 'ABSENT' ? 'ABSENT_UNEXCUSED' : s.attendance,
+        }))
+      );
+
+      // 2. Gửi request chốt báo bếp lên API Route
+      const res = await fetch('/api/teacher/attendance/kitchen-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: activeClass.id,
+          present_count: officialPresentCount,
+          submitted_by: teacherEmail || 'Giáo viên',
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        alert(`⚠️ ${json.error || 'Không thể chốt báo bếp'}`);
+        await fetchKitchenReportStatus(activeClass.id);
+        return;
+      }
+
+      await fetchKitchenReportStatus(activeClass.id);
+
+      alert(`⚡ ${json.message || 'Thành công'}\n\n• Lớp: ${activeClass.name}\n• Sĩ số ăn bán trú: ${officialPresentCount}/${officialStudents.length} bé`);
+    } catch (e: any) {
+      alert(`⚠️ Lỗi khi chốt báo bếp: ${e.message || e}`);
+    } finally {
+      setIsFinalizingKitchen(false);
+    }
   };
 
   const handleAddMedication = async (e: React.FormEvent) => {
@@ -1087,6 +1164,19 @@ export default function TeacherPwaPage() {
       {/* --- TAB 1: MORNING ATTENDANCE --- */}
       {activeTab === 'ATTENDANCE' && (
         <div className="p-4 space-y-4 flex-1 overflow-y-auto pb-28">
+          {/* Weekend Notification Banner */}
+          {kitchenReportData?.isWeekend && (
+            <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl text-xs text-slate-700 flex items-center gap-2.5 shadow-xs">
+              <span className="text-xl shrink-0">📅</span>
+              <div>
+                <p className="font-extrabold text-slate-800">Thông báo cuối tuần:</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Hôm nay là cuối tuần - Trường nghỉ học, hệ thống đóng điểm danh &amp; báo bếp
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Quick Action Bar & Summary Count */}
           <div className="flex items-center justify-between bg-white border border-rose-100 p-3 rounded-2xl shadow-xs">
             <div className="flex items-center gap-2">
@@ -1098,7 +1188,7 @@ export default function TeacherPwaPage() {
 
             <button
               onClick={handleSelectAllPresent}
-              disabled={isKitchenLocked}
+              disabled={isKitchenLocked || Boolean(kitchenReportData?.isWeekend)}
               className="px-3 py-1.5 rounded-full text-xs font-bold border border-primary-600 text-primary-700 hover:bg-rose-50 active:bg-rose-100 disabled:opacity-50 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-primary-700" />
@@ -1152,216 +1242,186 @@ export default function TeacherPwaPage() {
               Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* 1. Official Students (100% matched to class quota) */}
-              <div className="space-y-2.5">
-                {officialStudents.map((student) => {
-                  const hasMedToday = medications.some((m) => m.student_id === student.id);
-                  const hasAllergy = hasRealAllergy(student.allergies);
+            <div className="space-y-2.5">
+              {/* Toàn bộ danh sách học sinh hiển thị đồng nhất, sạch đẹp, không viền vàng, không tag Bổ sung */}
+              {students.map((student) => {
+                const hasMedToday = medications.some((m) => m.student_id === student.id);
+                const hasAllergy = hasRealAllergy(student.allergies);
+                const isAttendanceDisabled = isKitchenLocked || Boolean(kitchenReportData?.isWeekend);
 
-                  return (
-                    <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {student.avatar_url ? (
-                            <img
-                              src={student.avatar_url}
-                              alt={student.full_name}
-                              className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
-                              {student.full_name.charAt(0)}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
-                            <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
+                return (
+                  <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {student.avatar_url ? (
+                          <img
+                            src={student.avatar_url}
+                            alt={student.full_name}
+                            className="w-10 h-10 rounded-full border-2 border-rose-200 object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-primary-800 flex items-center justify-center font-bold text-xs shrink-0">
+                            {student.full_name.charAt(0)}
                           </div>
-                        </div>
-
-                        {/* Medical & Allergy Badges */}
-                        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                          {hasMedToday && (
-                            <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold flex items-center gap-1">
-                              💊 {language === 'en' ? 'Medication' : 'Có dặn thuốc'}
-                            </span>
-                          )}
-                          {hasAllergy && (
-                            <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
-                              ⚠️ {translateAllergy(student.allergies, language)}
-                            </span>
-                          )}
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                          <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
                         </div>
                       </div>
 
-                      {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
-                      <div className="grid grid-cols-3 gap-1.5 pt-1">
-                        <button
-                          onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
-                          disabled={isKitchenLocked}
-                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                            student.attendance === 'PRESENT'
-                              ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                          }`}
-                        >
-                          {t('teacher.btn_present')}
-                        </button>
-
-                        <button
-                          onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
-                          disabled={isKitchenLocked}
-                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                            student.attendance === 'PRESENT_LATE'
-                              ? 'bg-secondary-600 text-white shadow-sm font-bold'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                          }`}
-                        >
-                          {t('teacher.btn_late')}
-                        </button>
-
-                        <button
-                          onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
-                          disabled={isKitchenLocked}
-                          className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                            student.attendance === 'ABSENT'
-                              ? 'bg-rose-500 text-white shadow-sm font-bold'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                          }`}
-                        >
-                          {t('teacher.btn_absent')}
-                        </button>
+                      {/* Medical & Allergy Badges */}
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+                        {hasMedToday && (
+                          <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold flex items-center gap-1">
+                            💊 {language === 'en' ? 'Medication' : 'Có dặn thuốc'}
+                          </span>
+                        )}
+                        {hasAllergy && (
+                          <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
+                            ⚠️ {translateAllergy(student.allergies, language)}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
 
-              {/* 2. Non-Regular / Supplemental Students Section (Completely segregated from official count) */}
-              {nonRegularStudents.length > 0 && (
-                <div className="pt-4 border-t-2 border-dashed border-amber-200 space-y-3">
-                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 flex items-start gap-2.5">
-                    <span className="text-base leading-none mt-0.5">📋</span>
-                    <div>
-                      <h4 className="text-xs font-bold text-amber-900 flex items-center gap-2">
-                        <span>Danh sách ngoài quy chế / bổ sung</span>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-[10px] font-extrabold">
-                          {nonRegularStudents.length} bé
-                        </span>
-                      </h4>
-                      <p className="text-[11px] text-amber-700/90 mt-0.5">
-                        Học sinh tiếp nhận bổ sung, theo dõi chuyên cần riêng và <strong>không tính vào sĩ số báo ăn chính thức</strong> của lớp.
-                      </p>
+                    {/* Concise 3-State Thumb Buttons ([ Có mặt ] - [ Đến muộn ] - [ Vắng ]) */}
+                    <div className="grid grid-cols-3 gap-1.5 pt-1">
+                      <button
+                        onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
+                        disabled={isAttendanceDisabled}
+                        className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                          student.attendance === 'PRESENT'
+                            ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {t('teacher.btn_present')}
+                      </button>
+
+                      <button
+                        onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
+                        disabled={isAttendanceDisabled}
+                        className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                          student.attendance === 'PRESENT_LATE'
+                            ? 'bg-secondary-600 text-white shadow-sm font-bold'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {t('teacher.btn_late')}
+                      </button>
+
+                      <button
+                        onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
+                        disabled={isAttendanceDisabled}
+                        className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
+                          student.attendance === 'ABSENT'
+                            ? 'bg-rose-500 text-white shadow-sm font-bold'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {t('teacher.btn_absent')}
+                      </button>
                     </div>
                   </div>
-
-                  <div className="space-y-2.5">
-                    {nonRegularStudents.map((student) => {
-                      const hasMedToday = medications.some((m) => m.student_id === student.id);
-                      const hasAllergy = hasRealAllergy(student.allergies);
-
-                      return (
-                        <div key={student.id} className="p-3.5 bg-amber-50/30 border border-amber-200/60 rounded-2xl space-y-2.5 shadow-2xs">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {student.avatar_url ? (
-                                <img
-                                  src={student.avatar_url}
-                                  alt={student.full_name}
-                                  className="w-10 h-10 rounded-full border-2 border-amber-200 object-cover shrink-0"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
-                                  {student.full_name.charAt(0)}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs text-slate-400 font-mono">{student.student_code}</span>
-                                  <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">
-                                    Bổ sung
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Medical & Allergy Badges */}
-                            <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                              {hasMedToday && (
-                                <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold flex items-center gap-1">
-                                  💊 {language === 'en' ? 'Medication' : 'Có dặn thuốc'}
-                                </span>
-                              )}
-                              {hasAllergy && (
-                                <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-secondary-800 border border-amber-200 rounded-full font-bold">
-                                  ⚠️ {translateAllergy(student.allergies, language)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-1.5 pt-1">
-                            <button
-                              onClick={() => handleToggleAttendance(student.id, 'PRESENT')}
-                              disabled={isKitchenLocked}
-                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                                student.attendance === 'PRESENT'
-                                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {t('teacher.btn_present')}
-                            </button>
-
-                            <button
-                              onClick={() => handleToggleAttendance(student.id, 'PRESENT_LATE')}
-                              disabled={isKitchenLocked}
-                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                                student.attendance === 'PRESENT_LATE'
-                                  ? 'bg-secondary-600 text-white shadow-sm font-bold'
-                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {t('teacher.btn_late')}
-                            </button>
-
-                            <button
-                              onClick={() => handleToggleAttendance(student.id, 'ABSENT')}
-                              disabled={isKitchenLocked}
-                              className={`h-[38px] px-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all flex items-center justify-center cursor-pointer ${
-                                student.attendance === 'ABSENT'
-                                  ? 'bg-rose-500 text-white shadow-sm font-bold'
-                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {t('teacher.btn_absent')}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           )}
 
-          {/* Fixed Bottom Dispatch Button (Warm Red Theme) */}
+          {/* Fixed Bottom Dispatch Button (5 Dynamic States) */}
           <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 bg-white/95 border-t border-rose-100 backdrop-blur-md z-30">
-            <button
-              onClick={handleDispatchToKitchen}
-              disabled={isKitchenLocked}
-              className={`w-full py-3.5 rounded-full font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                isKitchenLocked
-                  ? 'bg-slate-100 text-slate-400 border border-slate-200'
-                  : 'bg-primary-700 hover:bg-primary-800 text-white shadow-primary-700/30 active:scale-98'
-              }`}
-            >
-              <Sparkles className="w-5 h-5 text-white" />
-              <span>{isKitchenLocked ? t('teacher.dispatched_done') : t('teacher.btn_dispatch_kitchen')}</span>
-            </button>
+            {(() => {
+              const uiState = kitchenReportData?.uiState || (isKitchenLocked ? 'PAST_CUTOFF_LOCKED' : 'NOT_FINALIZED');
+              const report = kitchenReportData?.report;
+
+              const formatSubmittedTime = (isoString?: string) => {
+                if (!isoString) return '';
+                try {
+                  const d = new Date(isoString);
+                  return new Intl.DateTimeFormat('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  }).format(d);
+                } catch {
+                  return '';
+                }
+              };
+
+              const submittedTime = formatSubmittedTime(report?.last_submitted_at || report?.first_submitted_at);
+
+              // 1. Cuối tuần (Thứ 7 / CN): Vô hiệu hóa
+              if (uiState === 'WEEKEND') {
+                return (
+                  <button
+                    disabled
+                    className="w-full py-3.5 px-4 rounded-full font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200 shadow-xs flex items-center justify-center gap-2 cursor-not-allowed"
+                  >
+                    <span>📅 Cuối tuần - Trường nghỉ học</span>
+                  </button>
+                );
+              }
+
+              // 2. Quá 08:00 sáng: Tự động khóa cứng
+              if (uiState === 'PAST_CUTOFF_LOCKED') {
+                return (
+                  <button
+                    disabled
+                    className="w-full py-3.5 px-4 rounded-full font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200 shadow-xs flex items-center justify-center gap-2 cursor-not-allowed text-center"
+                  >
+                    <Lock className="w-4 h-4 shrink-0 text-slate-400" />
+                    <span className="truncate">🔒 Đã khóa chốt bếp (Sau 08:00) - Liên hệ BGH nếu cần điều chỉnh</span>
+                  </button>
+                );
+              }
+
+              // 3. Đã dùng hết lượt sửa (update_count = 1): Khóa cứng
+              if (uiState === 'MAX_UPDATES_REACHED') {
+                return (
+                  <button
+                    disabled
+                    className="w-full py-3.5 px-4 rounded-full font-bold text-sm bg-slate-100 text-slate-500 border border-slate-300 shadow-xs flex items-center justify-center gap-2 cursor-not-allowed text-center"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="truncate">
+                      ✓ Đã cập nhật lúc {submittedTime || 'sáng nay'} ({report?.final_count ?? officialStudents.length} suất) - Đã hết lượt sửa
+                    </span>
+                  </button>
+                );
+              }
+
+              // 4. Đã chốt lần 1, còn trước 08:00 (update_count = 0): Cho phép cập nhật phát sinh lần cuối
+              if (uiState === 'FINALIZED_CAN_UPDATE') {
+                return (
+                  <button
+                    onClick={handleDispatchToKitchen}
+                    disabled={isFinalizingKitchen}
+                    className="w-full py-3.5 px-4 rounded-full font-extrabold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30 active:scale-[0.98] flex items-center justify-center gap-2 transition-all cursor-pointer text-center"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
+                    <span className="truncate">
+                      {isFinalizingKitchen
+                        ? 'Đang cập nhật...'
+                        : `✓ Đã chốt lúc ${submittedTime || 'sáng nay'} (${report?.final_count ?? officialStudents.length} suất) - Bấm để cập nhật lại (còn 1 lần)`}
+                    </span>
+                  </button>
+                );
+              }
+
+              // 5. Chưa chốt (Trước 08:00, chưa có bản ghi)
+              return (
+                <button
+                  onClick={handleDispatchToKitchen}
+                  disabled={isFinalizingKitchen}
+                  className="w-full py-3.5 px-4 rounded-full font-extrabold text-sm bg-primary-700 hover:bg-primary-800 text-white shadow-xl shadow-primary-700/30 active:scale-[0.98] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-5 h-5 text-white shrink-0" />
+                  <span>{isFinalizingKitchen ? 'Đang chốt báo bếp...' : t('teacher.btn_dispatch_kitchen')}</span>
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
