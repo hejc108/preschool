@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Activity,
   Save,
@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import { calculateBMI, classifyWHOGrowthStatus, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { HealthTerm } from '@/lib/types/schema';
+import { useHealthWithRealtime } from '@/lib/hooks/useHealthWithRealtime';
 
 interface StudentHealthItem {
   id: string;
@@ -85,13 +86,27 @@ function safeParseFloat(val: any): number | null {
 }
 
 export default function AdminHealthPage() {
-  const [classesList, setClassesList] = useState(DEFAULT_CLASSES);
   const [selectedClassId, setSelectedClassId] = useState<string>('5b61ec3a-11ef-4ca0-b914-97b35f9f3762'); // Default: Mầm
   const [selectedTerm, setSelectedTerm] = useState<HealthTerm>('Q1');
   const [academicYear, setAcademicYear] = useState<string>('2026-2027');
+
+  // Custom hook: SWR Cache + Supabase Realtime Subscription
+  const {
+    classes: realtimeClasses,
+    students: realtimeStudents,
+    recordsMap: realtimeRecordsMap,
+    hasSupabaseTable: realtimeHasSupabaseTable,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useHealthWithRealtime({
+    term: selectedTerm,
+    academicYear,
+  });
+
+  const [classesList, setClassesList] = useState(DEFAULT_CLASSES);
   const [allStudents, setAllStudents] = useState<StudentHealthItem[]>([]);
   const [recordsMap, setRecordsMap] = useState<Record<string, { weight_kg: any; height_cm: any; notes: string }>>({});
-  const [loading, setLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -100,6 +115,48 @@ export default function AdminHealthPage() {
   const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [saveBtnStatus, setSaveBtnStatus] = useState<'idle' | 'success' | 'warning'>('idle');
+
+  // Quản lý các ô input đang chỉnh sửa (dirty) để Realtime ngầm không ghi đè giá trị hoặc làm mất focus
+  const dirtyRecordsRef = useRef<Record<string, Record<string, boolean>>>({});
+
+  // Đồng bộ danh mục lớp
+  useEffect(() => {
+    if (realtimeClasses && realtimeClasses.length > 0) {
+      setClassesList(realtimeClasses);
+    }
+  }, [realtimeClasses]);
+
+  // Đồng bộ danh sách học sinh
+  useEffect(() => {
+    if (realtimeStudents && realtimeStudents.length > 0) {
+      setAllStudents(realtimeStudents);
+    }
+  }, [realtimeStudents]);
+
+  // Đồng bộ trạng thái bảng CSDL Supabase
+  useEffect(() => {
+    setHasSupabaseTable(realtimeHasSupabaseTable);
+  }, [realtimeHasSupabaseTable]);
+
+  // Hợp nhất dữ liệu số đo sức khỏe từ SWR/Realtime mà KHÔNG ghi đè các ô đang gõ dở
+  useEffect(() => {
+    if (!realtimeRecordsMap) return;
+    setRecordsMap((prev) => {
+      const next = { ...prev };
+      Object.keys(realtimeRecordsMap).forEach((stId) => {
+        const serverRec = realtimeRecordsMap[stId];
+        const dirtyStudent = dirtyRecordsRef.current[stId] || {};
+        const prevRec = prev[stId] || { weight_kg: '', height_cm: '', notes: '' };
+
+        next[stId] = {
+          weight_kg: dirtyStudent.weight_kg ? prevRec.weight_kg : (serverRec.weight_kg ?? ''),
+          height_cm: dirtyStudent.height_cm ? prevRec.height_cm : (serverRec.height_cm ?? ''),
+          notes: dirtyStudent.notes ? prevRec.notes : (serverRec.notes ?? ''),
+        };
+      });
+      return next;
+    });
+  }, [realtimeRecordsMap]);
 
   // Modern Toast Notification state
   const [toast, setToast] = useState<{
@@ -130,43 +187,6 @@ export default function AdminHealthPage() {
     }
   }, [toast]);
 
-  // Load health data from API route
-  const fetchHealthData = async () => {
-    try {
-      setLoading(true);
-      setValidationError(null);
-      const res = await fetch(`/api/admin/health?term=${selectedTerm}&academic_year=${academicYear}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          if (json.classes && json.classes.length > 0) {
-            setClassesList(json.classes);
-          }
-          if (json.students) {
-            setAllStudents(json.students);
-          }
-          if (json.recordsMap) {
-            setRecordsMap(json.recordsMap);
-          }
-          if (typeof json.has_supabase_table === 'boolean') {
-            setHasSupabaseTable(json.has_supabase_table);
-          }
-        }
-      } else {
-        showToast('error', 'Không thể tải dữ liệu sức khỏe từ máy chủ.');
-      }
-    } catch (e: any) {
-      console.error('Error loading health data:', e);
-      showToast('error', e?.message || 'Lỗi kết nối khi tải dữ liệu sức khỏe.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHealthData();
-  }, [selectedTerm, academicYear]);
-
   const selectedClassObj =
     classesList.find((c) => c.id === selectedClassId) ||
     DEFAULT_CLASSES.find((c) => c.id === selectedClassId);
@@ -182,9 +202,14 @@ export default function AdminHealthPage() {
     )
     .sort((a, b) => (a.student_code || '').localeCompare(b.student_code || ''));
 
-  // Field change handler
+  // Field change handler: Ghi nhận trạng thái dirty cho ô input đang chỉnh sửa
   const handleInputChange = (studentId: string, field: 'weight_kg' | 'height_cm' | 'notes', value: any) => {
     setValidationError(null);
+    if (!dirtyRecordsRef.current[studentId]) {
+      dirtyRecordsRef.current[studentId] = {};
+    }
+    dirtyRecordsRef.current[studentId][field] = true;
+
     setRecordsMap((prev) => ({
       ...prev,
       [studentId]: {
@@ -233,6 +258,8 @@ export default function AdminHealthPage() {
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
+        delete dirtyRecordsRef.current[studentId];
+        mutate();
         if (json.synced_supabase) {
           showToast('success', `Đã lưu vào Database Supabase cho bé ${student.full_name}!`);
         } else {
@@ -250,7 +277,7 @@ export default function AdminHealthPage() {
 
   // Batch Save handler with rigorous validation and zero silent returns
   const handleSaveBatch = async () => {
-    if (isSubmitting || loading) return;
+    if (isSubmitting) return;
 
     if (classStudents.length === 0) {
       showToast('error', `Lớp ${selectedClassName} hiện chưa có danh sách học sinh để lưu sổ sức khỏe.`);
@@ -309,6 +336,8 @@ export default function AdminHealthPage() {
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
+        dirtyRecordsRef.current = {};
+        mutate();
         if (json.synced_supabase) {
           setSaveBtnStatus('success');
           setHasSupabaseTable(true);
@@ -349,10 +378,11 @@ export default function AdminHealthPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
+        dirtyRecordsRef.current = {};
+        mutate();
         if (json.synced_supabase) {
           setHasSupabaseTable(true);
           showToast('success', `Đã đồng bộ thành công toàn bộ ${json.saved_count || 170} hồ sơ sức khỏe vào Database Supabase!`);
-          fetchHealthData();
         } else {
           setHasSupabaseTable(false);
           setShowSqlModal(true);
@@ -486,7 +516,7 @@ export default function AdminHealthPage() {
       )}
 
       {/* Top Warning Banner if Supabase table not created yet */}
-      {!hasSupabaseTable && !loading && (
+      {!hasSupabaseTable && (
         <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 text-xs shadow-sm">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -538,17 +568,17 @@ export default function AdminHealthPage() {
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={fetchHealthData}
-            disabled={loading || isSubmitting || isSyncingAll}
+            onClick={() => mutate()}
+            disabled={isSubmitting || isSyncingAll}
             className="p-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
             title="Tải lại dữ liệu"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin' : ''}`} />
           </button>
 
           <button
             onClick={handleSyncAllCatalog}
-            disabled={isSyncingAll || isSubmitting || loading}
+            disabled={isSyncingAll || isSubmitting}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-xs shadow-sm whitespace-nowrap text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
             title="Đồng bộ toàn bộ 170 học sinh của cả 5 lớp vào Database Supabase"
           >
@@ -562,7 +592,7 @@ export default function AdminHealthPage() {
 
           <button
             onClick={handleSaveBatch}
-            disabled={isSubmitting || loading || isSyncingAll}
+            disabled={isSubmitting || isSyncingAll}
             className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm whitespace-nowrap text-white transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${
               saveBtnStatus === 'success'
                 ? 'bg-emerald-600 hover:bg-emerald-700'
@@ -636,7 +666,7 @@ export default function AdminHealthPage() {
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            disabled={isSubmitting || loading}
+            disabled={isSubmitting}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
           >
             {classesList.map((c) => (
@@ -652,7 +682,7 @@ export default function AdminHealthPage() {
           <select
             value={selectedTerm}
             onChange={(e) => setSelectedTerm(e.target.value as HealthTerm)}
-            disabled={isSubmitting || loading}
+            disabled={isSubmitting}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
           >
             <option value="Q1">Quý 1 (Đầu năm học - Tháng 9)</option>
@@ -668,14 +698,20 @@ export default function AdminHealthPage() {
             type="text"
             value={academicYear}
             onChange={(e) => setAcademicYear(e.target.value)}
-            disabled={isSubmitting || loading}
+            disabled={isSubmitting}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-800 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
           />
         </div>
       </div>
 
       {/* Batch Entry Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden relative">
+        {/* Thanh loading siêu mỏng ở mép trên cùng khi dữ liệu đang làm mới ngầm (SWR Revalidating) */}
+        {isValidating && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-emerald-100 overflow-hidden z-20">
+            <div className="h-full bg-emerald-500 animate-pulse w-full" />
+          </div>
+        )}
         <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h2 className="font-bold text-slate-900 text-sm flex items-center gap-2">
             <Activity className="w-4 h-4 text-emerald-600" />
@@ -703,7 +739,7 @@ export default function AdminHealthPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
-              {loading ? (
+              {(isLoading && classStudents.length === 0) ? (
                 <tr>
                   <td colSpan={10} className="p-8 text-center text-slate-500">
                     <div className="flex items-center justify-center gap-2">

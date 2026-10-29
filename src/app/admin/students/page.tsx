@@ -29,11 +29,19 @@ import { Student, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 import { hasRealAllergy } from '@/lib/utils/studentClassification';
+import { useStudentsWithRealtime } from '@/lib/hooks/useStudentsWithRealtime';
 
 export default function StudentsDirectoryPage() {
   const { t } = useLanguage();
-  const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
-  const [loading, setLoading] = useState<boolean>(true);
+  const {
+    students: realtimeStudents,
+    settings: realtimeSettings,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useStudentsWithRealtime();
+
+  const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -41,50 +49,18 @@ export default function StudentsDirectoryPage() {
   const [globalAllowNonRegular, setGlobalAllowNonRegular] = useState<boolean>(false);
   const [updatingSetting, setUpdatingSetting] = useState<boolean>(false);
 
-  // Load students from Supabase via API route
+  // Đồng bộ danh sách học sinh từ SWR Cache & Realtime Subscription
   React.useEffect(() => {
-    async function loadStudents() {
-      try {
-        const res = await fetch('/api/admin/students');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.students && json.students.length > 0) {
-            let localCitizenMap: Record<string, string | null> = {};
-            try {
-              const rawMap = localStorage.getItem('suongmai_student_citizen_ids_v1');
-              if (rawMap) localCitizenMap = JSON.parse(rawMap);
-            } catch (e) {}
-
-            const mergedStudents = (json.students as Student[]).map((s) => ({
-              ...s,
-              citizen_id:
-                s.citizen_id !== undefined && s.citizen_id !== null
-                  ? s.citizen_id
-                  : (localCitizenMap[s.id] !== undefined ? localCitizenMap[s.id] : null),
-            }));
-            setStudents(mergedStudents);
-          }
-          if (json.settings) {
-            setGlobalAllowNonRegular(Boolean(json.settings.allow_school_admin_view_non_regular));
-          }
-        }
-
-        // Fetch system settings to double-check
-        const resSettings = await fetch('/api/admin/system-settings');
-        if (resSettings.ok) {
-          const jsonSettings = await resSettings.json();
-          if (jsonSettings.settings) {
-            setGlobalAllowNonRegular(Boolean(jsonSettings.settings.allow_school_admin_view_non_regular));
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching students or system settings:', err);
-      } finally {
-        setLoading(false);
-      }
+    if (realtimeStudents) {
+      setStudents(realtimeStudents);
     }
-    loadStudents();
-  }, []);
+  }, [realtimeStudents]);
+
+  React.useEffect(() => {
+    if (realtimeSettings && typeof realtimeSettings.allow_school_admin_view_non_regular === 'boolean') {
+      setGlobalAllowNonRegular(realtimeSettings.allow_school_admin_view_non_regular);
+    }
+  }, [realtimeSettings]);
 
   // Super Admin: Bật/Tắt cờ cấu hình toàn trường cho phép School Admin xem 21 bé ngoài chính quy
   const handleToggleGlobalNonRegular = async (newValue: boolean) => {
@@ -369,6 +345,7 @@ export default function StudentsDirectoryPage() {
       console.error('Error saving student edits:', err);
     }
 
+    mutate();
     setEditStudent(null);
   };
 
@@ -406,6 +383,7 @@ export default function StudentsDirectoryPage() {
     }
 
     syncClassHeadcount(oldClass, newSingleClass, 1);
+    mutate();
     setTransferStudent(null);
     setSingleTransferReason('');
   };
@@ -518,7 +496,13 @@ export default function StudentsDirectoryPage() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white border border-slate-200 rounded-convent overflow-hidden shadow-sm text-slate-800">
+      <div className="bg-white border border-slate-200 rounded-convent overflow-hidden shadow-sm text-slate-800 relative">
+        {/* Thanh loading siêu mỏng ở mép trên cùng khi dữ liệu đang làm mới ngầm (SWR Revalidating) */}
+        {isValidating && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-sky-100 overflow-hidden z-20">
+            <div className="h-full bg-sky-500 animate-pulse w-full" />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-700">
             <thead className="bg-sky-50 text-xs font-bold text-sky-900 tracking-wider border-b border-sky-100">
@@ -533,12 +517,12 @@ export default function StudentsDirectoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {loading ? (
+              {(isLoading && students.length === 0) ? (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-sky-600 border-t-transparent rounded-full animate-spin" />
-                      <span>Đang đồng bộ hồ sơ học sinh từ cơ sở dữ liệu...</span>
+                      <span>Đang nạp hồ sơ học sinh...</span>
                     </div>
                   </td>
                 </tr>
