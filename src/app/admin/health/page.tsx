@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { calculateBMI, classifyWHOGrowthStatus, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { HealthTerm } from '@/lib/types/schema';
 import { useHealthWithRealtime } from '@/lib/hooks/useHealthWithRealtime';
+import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 interface StudentHealthItem {
   id: string;
@@ -115,6 +116,35 @@ export default function AdminHealthPage() {
   const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [saveBtnStatus, setSaveBtnStatus] = useState<'idle' | 'success' | 'warning'>('idle');
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+
+  // Xác thực quyền Super Admin (chỉ Super Admin mới xem được cờ/nhãn bổ sung ngoài danh sách)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let role = '';
+      let email = '';
+      const savedUser = localStorage.getItem('suongmai_auth_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          role = parsed.role || '';
+          email = (parsed.email || '').toLowerCase().trim();
+        } catch (e) {}
+      }
+      const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
+      if (matchRole) role = parseSignedCookieClient(matchRole[1]);
+      const matchEmail = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      if (matchEmail) email = parseSignedCookieClient(matchEmail[1]).toLowerCase().trim();
+
+      const cleanEmail = email.toLowerCase().trim();
+      const isSuper =
+        cleanEmail !== 'hejc108@gmail.com' &&
+        cleanEmail !== 'luciaxuan178@gmail.com' &&
+        (role === 'SUPER_ADMIN' ||
+          cleanEmail === 'sadmin@suongmai.edu.vn');
+      setIsSuperAdmin(isSuper);
+    }
+  }, []);
 
   // Quản lý các ô input đang chỉnh sửa (dirty) để Realtime ngầm không ghi đè giá trị hoặc làm mất focus
   const dirtyRecordsRef = useRef<Record<string, Record<string, boolean>>>({});
@@ -777,7 +807,7 @@ export default function AdminHealthPage() {
                       </td>
                       <td className="p-3 font-bold text-slate-900 whitespace-nowrap min-w-[150px]">
                         <div>{st.full_name}</div>
-                        {st.is_non_regular && (
+                        {isSuperAdmin && st.is_non_regular && (
                           <span className="text-[10px] text-amber-700 font-normal">
                             (Bổ sung ngoài danh sách)
                           </span>

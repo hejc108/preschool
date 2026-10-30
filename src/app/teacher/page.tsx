@@ -75,13 +75,9 @@ export default function TeacherPwaPage() {
   // Attendance & SWR Cache State
   const [students, setStudents] = useState<TeacherStudent[]>([]);
 
-  // Sĩ số chính thức (đúng định mức 170 bé) & Học sinh ngoài danh sách (21 bé bổ sung)
+  // Sĩ số chính thức phục vụ báo suất ăn bếp đúng định mức
   const officialStudents = useMemo(
     () => students.filter((s) => s.is_official !== false && !s.is_non_regular),
-    [students]
-  );
-  const nonRegularStudents = useMemo(
-    () => students.filter((s) => s.is_official === false || s.is_non_regular),
     [students]
   );
 
@@ -693,7 +689,7 @@ export default function TeacherPwaPage() {
     const isUpdate = kitchenReportData?.report && kitchenReportData.report.update_count === 0;
     const confirmMessage = isUpdate
       ? `Xác nhận cập nhật lại sĩ số báo bếp Lớp ${activeClass.name}: ${officialPresentCount}/${officialStudents.length} suất ăn?\n(Lưu ý: Đây là lần cập nhật phát sinh cuối cùng trong ngày)`
-      : `Xác nhận chốt sĩ số báo bếp Lớp ${activeClass.name}: ${officialPresentCount}/${officialStudents.length} suất ăn cho học sinh chính quy?`;
+      : `Xác nhận chốt sĩ số báo bếp Lớp ${activeClass.name}: ${officialPresentCount}/${officialStudents.length} suất ăn?`;
 
     if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
       return;
@@ -1713,120 +1709,48 @@ export default function TeacherPwaPage() {
               Chưa có học sinh nào trong Lớp {activeClass?.name || assignedClassName}.
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* 1. Official Students (100% quota) */}
-              <div className="space-y-2.5">
-                {officialStudents.map((student) => (
-                  <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {student.avatar_url ? (
-                        <img
-                          src={student.avatar_url}
-                          alt={student.full_name}
-                          className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          {student.full_name.charAt(0)}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
-                        <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
-                        {student.checkoutReason && (
-                          <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {student.checkedOut ? (
-                      <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
-                        <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
-                      </span>
+            <div className="space-y-2.5">
+              {students.map((student) => (
+                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {student.avatar_url ? (
+                      <img
+                        src={student.avatar_url}
+                        alt={student.full_name}
+                        className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
+                      />
                     ) : (
-                      <button
-                        onClick={() => {
-                          setLateStudentId(student.id);
-                          setShowLateCheckoutModal(true);
-                        }}
-                        className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
-                      >
-                        <UserCheck className="w-3.5 h-3.5" />
-                        <span>{t('teacher.checkout_late')}</span>
-                      </button>
+                      <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        {student.full_name.charAt(0)}
+                      </div>
                     )}
-                  </div>
-                ))}
-              </div>
-
-              {/* 2. Non-Regular / Supplemental Students Section */}
-              {nonRegularStudents.length > 0 && (
-                <div className="pt-4 border-t-2 border-dashed border-amber-200 space-y-3">
-                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 flex items-start gap-2.5">
-                    <span className="text-base leading-none mt-0.5">📋</span>
-                    <div>
-                      <h4 className="text-xs font-bold text-amber-900 flex items-center gap-2">
-                        <span>Danh sách trả trẻ ngoài quy chế / bổ sung</span>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-[10px] font-extrabold">
-                          {nonRegularStudents.length} bé
-                        </span>
-                      </h4>
-                      <p className="text-[11px] text-amber-700/90 mt-0.5">
-                        Xác nhận bàn giao học sinh tiếp nhận ngoài danh sách chính thức.
-                      </p>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                      <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
+                      {student.checkoutReason && (
+                        <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {nonRegularStudents.map((student) => (
-                      <div key={student.id} className="p-3.5 bg-amber-50/30 border border-amber-200/60 rounded-convent flex items-center justify-between text-xs shadow-2xs">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {student.avatar_url ? (
-                            <img
-                              src={student.avatar_url}
-                              alt={student.full_name}
-                              className="w-10 h-10 rounded-full border-2 border-amber-200 object-cover shrink-0"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
-                              {student.full_name.charAt(0)}
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
-                              <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">
-                                Bổ sung
-                              </span>
-                            </div>
-                            {student.checkoutReason && (
-                              <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
-                            )}
-                          </div>
-                        </div>
-
-                        {student.checkedOut ? (
-                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
-                            <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setLateStudentId(student.id);
-                              setShowLateCheckoutModal(true);
-                            }}
-                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>{t('teacher.checkout_late')}</span>
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  {student.checkedOut ? (
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
+                      <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setLateStudentId(student.id);
+                        setShowLateCheckoutModal(true);
+                      }}
+                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{t('teacher.checkout_late')}</span>
+                    </button>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
           )}
 

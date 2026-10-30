@@ -167,7 +167,7 @@ export default function StudentsDirectoryPage() {
         index + 1,
         `"${s.student_code}"`,
         `"${s.full_name}"`,
-        `"${s.is_non_regular ? 'Ngoài chính quy' : 'Chính quy'}"`,
+        `"${isSuperAdmin ? (s.is_non_regular ? 'Ngoài chính quy' : 'Chính quy') : 'Chính quy'}"`,
         `"${s.gender}"`,
         `"${s.dob}"`,
         `"${s.class_name || ''}"`,
@@ -561,7 +561,7 @@ export default function StudentsDirectoryPage() {
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="block font-bold">{s.full_name}</span>
-                              {s.is_non_regular && (
+                              {isSuperAdmin && s.is_non_regular && (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
                                   Ngoài chính quy
                                 </span>
