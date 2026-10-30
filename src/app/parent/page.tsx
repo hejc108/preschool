@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { 
   Heart, Calendar, Clock, CheckCircle2, ChevronLeft, Plus, 
   Shield, Sparkles, FileText, Phone, Check, UserCheck, AlertCircle, X,
-  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert, LogOut
+  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert, LogOut, Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
@@ -386,42 +386,100 @@ export default function ParentPwaPage() {
   // Active Main View Tab
   const [activeNav, setActiveNav] = useState<'TIMELINE' | 'ABSENCE' | 'RECONCILIATION' | 'PICKUPS'>('TIMELINE');
 
-  // Students list state (to manage pickups)
-  const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
-
-  // Add Pickup Modal State
-  const [showAddPickupModal, setShowAddPickupModal] = useState(false);
+  // Authorized Pickups State (Truy vấn dữ liệu thực tế từ Supabase)
+  const [childPickups, setChildPickups] = useState<AuthorizedPickup[]>([]);
+  const [isLoadingPickups, setIsLoadingPickups] = useState<boolean>(false);
+  const [pickupSubmitting, setPickupSubmitting] = useState<boolean>(false);
+  const [showAddPickupModal, setShowAddPickupModal] = useState<boolean>(false);
   const [newPickupName, setNewPickupName] = useState('');
   const [newPickupRel, setNewPickupRel] = useState('Ông Nội');
   const [newPickupPhone, setNewPickupPhone] = useState('');
 
-  // Handle Parent Submitting New Authorized Pickup (Defaults to PENDING)
-  const handleParentAddPickup = (e: React.FormEvent) => {
+  // Hàm tải danh sách người đón được ủy quyền của học sinh được chọn từ Supabase
+  const loadChildPickups = useCallback(async (studentId: string) => {
+    if (!studentId) {
+      setChildPickups([]);
+      return;
+    }
+    setIsLoadingPickups(true);
+    try {
+      const res = await fetch(`/api/parent/pickups?student_id=${encodeURIComponent(studentId)}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setChildPickups(Array.isArray(json.pickups) ? json.pickups : []);
+      } else {
+        setChildPickups([]);
+      }
+    } catch (err) {
+      console.warn('[ParentPwaPage] Failed to fetch pickups:', err);
+      setChildPickups([]);
+    } finally {
+      setIsLoadingPickups(false);
+    }
+  }, []);
+
+  // Tự động tải người đón khi đổi bé hoặc chuyển sang tab Người đón
+  React.useEffect(() => {
+    if (selectedChild?.id) {
+      loadChildPickups(selectedChild.id);
+    }
+  }, [selectedChild?.id, activeNav, loadChildPickups]);
+
+  // Xử lý phụ huynh gửi đơn ủy quyền người đón mới lên Supabase
+  const handleParentAddPickup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPickupName || !newPickupPhone || !selectedChild) return;
+    if (!newPickupName.trim() || !newPickupPhone.trim() || !selectedChild) return;
 
-    const newPickup: AuthorizedPickup = {
-      id: `p-${Date.now()}`,
-      name: newPickupName,
-      relationship: newPickupRel,
-      phone: newPickupPhone,
-      avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-      approval_status: 'PENDING',
-    };
+    setPickupSubmitting(true);
+    try {
+      const res = await fetch('/api/parent/pickups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: selectedChild.id,
+          name: newPickupName.trim(),
+          relationship: newPickupRel,
+          phone: newPickupPhone.trim(),
+        }),
+      });
 
-    setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id === selectedChild.id || s.full_name === selectedChild.full_name) {
-          const existing = s.authorized_pickups || [];
-          return { ...s, authorized_pickups: [newPickup, ...existing] };
-        }
-        return s;
-      })
-    );
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success && json.pickup) {
+        setChildPickups((prev) => [json.pickup, ...prev]);
+        setShowAddPickupModal(false);
+        setNewPickupName('');
+        setNewPickupPhone('');
+        alert('Đã gửi thông tin người đón thành công! Nhà trường sẽ đối chiếu và phê duyệt.');
+      } else {
+        alert(json.error || 'Có lỗi xảy ra khi lưu người đón.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi kết nối khi gửi thông tin người đón.');
+    } finally {
+      setPickupSubmitting(false);
+    }
+  };
 
-    setShowAddPickupModal(false);
-    setNewPickupName('');
-    setNewPickupPhone('');
+  // Xử lý phụ huynh hủy ủy quyền người đón
+  const handleParentDeletePickup = async (pickupId: string, pickupName: string) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn hủy ủy quyền đưa đón đối với: ${pickupName}?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/parent/pickups?id=${encodeURIComponent(pickupId)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setChildPickups((prev) => prev.filter((p) => p.id !== pickupId));
+      } else {
+        const json = await res.json().catch(() => ({}));
+        alert(json.error || 'Không thể xóa người đón.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi khi xóa người đón.');
+    }
   };
 
   // Absence Requests State
@@ -1102,70 +1160,127 @@ export default function ParentPwaPage() {
       )}
 
       {/* --- SECTION 5: AUTHORIZED PICKUPS SYSTEM --- */}
-      {activeNav === 'PICKUPS' && (() => {
-        const currentStudentObj = students.find((s) => s.id === selectedChild.id || s.full_name === selectedChild.full_name);
-        const pickups = currentStudentObj?.authorized_pickups || [
-          {
-            id: 'p-1',
-            name: 'Nguyễn Thị Hoa',
-            relationship: 'Bà Ngoại',
-            phone: '0913221100',
-            avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-            approval_status: 'APPROVED',
-          },
-        ];
+      {activeNav === 'PICKUPS' && (
+        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-4 shadow-sm text-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Danh Sách Người Đón Được Ủy Quyền</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Xác thực danh tính người thân đón trẻ khi tan trường</p>
+              </div>
 
-        return (
-          <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-            <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-4 shadow-sm text-slate-800">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Danh Sách Người Đón Được Ủy Quyền</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Xác thực ảnh chân dung người thân đón trẻ</p>
+              <button
+                onClick={() => setShowAddPickupModal(true)}
+                className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3 py-2 rounded-pill shadow transition-all active:scale-95 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm người đón</span>
+              </button>
+            </div>
+
+            {/* Loading Indicator */}
+            {isLoadingPickups ? (
+              <div className="py-12 text-center text-slate-400 space-y-2">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-sky-600" />
+                <p className="text-xs">Đang tải danh sách người đón...</p>
+              </div>
+            ) : childPickups.length === 0 ? (
+              /* EMPTY STATE SẠCH SẼ, TINH GỌN THEO YÊU CẦU */
+              <div className="py-10 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl space-y-3.5">
+                <div className="w-14 h-14 rounded-full bg-sky-50 text-sky-600 mx-auto flex items-center justify-center border border-sky-100 shadow-2xs">
+                  <UserCheck className="w-7 h-7" />
                 </div>
-
+                <div className="space-y-1.5 max-w-sm mx-auto">
+                  <h4 className="font-bold text-slate-800 text-sm">
+                    Chưa có người đón được ủy quyền
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Chưa có người đón được ủy quyền. Bố/mẹ có thể thêm người nhà (ông, bà, người đưa đón) để nhà trường đối chiếu khi trả trẻ.
+                  </p>
+                </div>
                 <button
+                  type="button"
                   onClick={() => setShowAddPickupModal(true)}
-                  className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3 py-2 rounded-pill shadow transition-all active:scale-95 shrink-0"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-pill text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Đăng Ký Đón</span>
+                  <span>Thêm người đón</span>
                 </button>
               </div>
-
-              {/* Pickups List */}
+            ) : (
+              /* Pickups List (DỮ LIỆU THỰC TẾ TỪ SUPABASE) */
               <div className="space-y-3">
-                {pickups.map((pickup) => (
-                  <div key={pickup.id} className="p-3.5 border rounded-xl flex items-center justify-between gap-3 text-xs bg-emerald-50/30 border-emerald-200">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={pickup.avatar_url}
-                        alt={pickup.name}
-                        className="w-12 h-12 rounded-full border-2 border-emerald-500 object-cover shrink-0"
-                      />
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-pill border border-slate-200">
-                            {pickup.relationship}
-                          </span>
-                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-pill border border-emerald-300 flex items-center gap-1">
-                            <Check className="w-3 h-3 text-emerald-700" /> Đã Xác Thực
-                          </span>
+                {childPickups.map((pickup) => {
+                  const isApproved = pickup.approval_status === 'APPROVED';
+
+                  return (
+                    <div
+                      key={pickup.id}
+                      className={`p-3.5 border rounded-xl flex items-center justify-between gap-3 text-xs transition-all ${
+                        isApproved
+                          ? 'bg-emerald-50/30 border-emerald-200'
+                          : 'bg-amber-50/30 border-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {pickup.avatar_url ? (
+                          <img
+                            src={pickup.avatar_url}
+                            alt={pickup.name}
+                            className={`w-12 h-12 rounded-full border-2 object-cover shrink-0 ${
+                              isApproved ? 'border-emerald-500' : 'border-amber-400'
+                            }`}
+                          />
+                        ) : (
+                          <div
+                            className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border-2 ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            {pickup.name?.charAt(0) || 'U'}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                            <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-pill border border-slate-200">
+                              {pickup.relationship}
+                            </span>
+                            {isApproved ? (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-pill border border-emerald-300 flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-700" /> Đã Xác Thực
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-pill border border-amber-300 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-700" /> Chờ Phê Duyệt
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{pickup.name}</h4>
+                          <span className="text-slate-500 font-mono text-[11px]">SĐT: {pickup.phone}</span>
                         </div>
-                        <h4 className="font-bold text-slate-900 text-sm">{pickup.name}</h4>
-                        <span className="text-slate-500 font-mono text-[11px]">SĐT: {pickup.phone}</span>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleParentDeletePickup(pickup.id, pickup.name)}
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                        title="Hủy ủy quyền người đón"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* FOOTER HOTLINE BUTTON (TC-UI-04: Single Phone Icon & Sentence Case) */}
       <footer className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-200 p-3 z-30 flex items-center justify-between shadow-lg">
@@ -1230,6 +1345,113 @@ export default function ParentPwaPage() {
               >
                 Gửi Đơn Xin Nghỉ
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD AUTHORIZED PICKUP MODAL */}
+      {showAddPickupModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-convent max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <h3 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-sky-600" />
+                Thêm Người Đón Được Ủy Quyền
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddPickupModal(false)}
+                className="text-slate-400 hover:text-slate-800 text-sm p-1 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleParentAddPickup} className="space-y-3 text-xs">
+              <div>
+                <span className="text-[11px] text-slate-500 block mb-2">
+                  Bé được đón: <strong className="text-sky-700">{selectedChild?.full_name}</strong>
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Họ và tên người đón (*)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Nguyễn Văn A"
+                  value={newPickupName}
+                  onChange={(e) => setNewPickupName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Quan hệ với bé (*)
+                </label>
+                <select
+                  value={newPickupRel}
+                  onChange={(e) => setNewPickupRel(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none font-medium"
+                >
+                  <option value="Ông Nội">Ông Nội</option>
+                  <option value="Bà Nội">Bà Nội</option>
+                  <option value="Ông Ngoại">Ông Ngoại</option>
+                  <option value="Bà Ngoại">Bà Ngoại</option>
+                  <option value="Bác">Bác</option>
+                  <option value="Cô">Cô</option>
+                  <option value="Chú">Chú</option>
+                  <option value="Dì">Dì</option>
+                  <option value="Tài xế đưa đón">Tài xế đưa đón</option>
+                  <option value="Người quen / Họ hàng">Người quen / Họ hàng</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Số điện thoại liên hệ (*)
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="Ví dụ: 0912345678"
+                  value={newPickupPhone}
+                  onChange={(e) => setNewPickupPhone(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="bg-sky-50 border border-sky-100 rounded-xl p-2.5 text-[11px] text-sky-800 leading-relaxed">
+                ℹ️ Thông tin người đón sẽ được lưu trực tiếp vào cơ sở dữ liệu nhà trường để các cô giáo đối chiếu khi trả trẻ.
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddPickupModal(false)}
+                  className="w-1/3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-pill transition-all cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={pickupSubmitting}
+                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-bold rounded-pill shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {pickupSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <span>Lưu người đón</span>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>

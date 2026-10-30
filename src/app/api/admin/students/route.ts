@@ -158,6 +158,31 @@ export async function GET() {
       );
     }
 
+    // 3.1. Fetch authorized pickups from public.authorized_pickups
+    const pickupsMap: Record<string, any[]> = {};
+    try {
+      const { data: pickupsData } = await supabase
+        .from('authorized_pickups')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (Array.isArray(pickupsData)) {
+        pickupsData.forEach((p: any) => {
+          if (!pickupsMap[p.student_id]) pickupsMap[p.student_id] = [];
+          pickupsMap[p.student_id].push({
+            id: p.id,
+            name: p.name,
+            relationship: p.relationship,
+            phone: p.phone,
+            avatar_url: p.avatar_url,
+            approval_status: p.approval_status || 'PENDING',
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch authorized_pickups:', e);
+    }
+
     // 4. Map students with proper class names, citizen_id, and non-regular flags
     const students = (studentsData || []).map((s: any) => {
       let friendlyClassName = s.classes?.name;
@@ -190,7 +215,7 @@ export async function GET() {
         is_non_regular: isNonReg,
         is_official: !isNonReg,
         parents: s.parents || [],
-        authorized_pickups: s.authorized_pickups || [],
+        authorized_pickups: pickupsMap[s.id] || s.authorized_pickups || [],
         created_at: s.created_at,
       };
     });
