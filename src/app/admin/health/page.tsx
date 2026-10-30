@@ -15,6 +15,7 @@ import {
   Database,
   Copy,
   ExternalLink,
+  Download,
 } from 'lucide-react';
 import Link from 'next/link';
 import { calculateBMI, classifyWHOGrowthStatus, getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
@@ -437,6 +438,61 @@ export default function AdminHealthPage() {
     setTimeout(() => setCopiedSql(false), 3000);
   };
 
+  // Xuất báo cáo y tế / sổ sức khỏe ra file Excel (.CSV UTF-8 BOM)
+  const handleExportHealthExcel = () => {
+    if (classStudents.length === 0) {
+      showToast('warning', 'Không có dữ liệu học sinh trong lớp để xuất báo cáo.');
+      return;
+    }
+
+    const headers = [
+      'STT',
+      'Mã Học Sinh',
+      'Mã Định Danh (11 số)',
+      'Họ Và Tên',
+      'Lớp',
+      'Cân Nặng (kg)',
+      'Chiều Cao (cm)',
+      'Chỉ Số BMI',
+      'Đánh Giá Thể Trạng',
+      'Nhận Xét Y Tế',
+    ];
+
+    const rows = classStudents.map((st, idx) => {
+      const data = recordsMap[st.id] || { weight_kg: '', height_cm: '', notes: '' };
+      const w = safeParseFloat(data.weight_kg);
+      const h = safeParseFloat(data.height_cm);
+      const bmi = w !== null && h !== null && h > 0 ? calculateBMI(w, h) : 0;
+      const status = bmi > 0 ? classifyWHOGrowthStatus(bmi) : 'NORMAL';
+      const display = getGrowthStatusDisplay(status);
+
+      return [
+        idx + 1,
+        `"${st.student_code}"`,
+        `"${st.citizen_id || ''}"`,
+        `"${st.full_name}"`,
+        `"${st.class_name || selectedClassName}"`,
+        w !== null ? w : '',
+        h !== null ? h : '',
+        bmi > 0 ? bmi : '',
+        `"${bmi > 0 ? display.text : 'Chờ đo'}"`,
+        `"${(data.notes || '').replace(/"/g, '""')}"`,
+      ];
+    });
+
+    const csvContent =
+      '\uFEFF' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Bao_cao_suc_khoe_Lop_${selectedClassName}_${selectedTerm}_${academicYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6 relative">
       {/* Toast Notification Container */}
@@ -591,12 +647,12 @@ export default function AdminHealthPage() {
               Sổ theo dõi sức khỏe định kỳ học sinh (Y tế / Giáo viên)
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Tự động tính BMI & xếp loại thể trạng chuẩn WHO • Đợt khám {selectedTerm} ({academicYear})
+              Tự động tính BMI & đánh giá thể trạng học sinh • Đợt khám {selectedTerm} ({academicYear})
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
           <button
             onClick={() => mutate()}
             disabled={isSubmitting || isSyncingAll}
@@ -604,6 +660,16 @@ export default function AdminHealthPage() {
             title="Tải lại dữ liệu"
           >
             <RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={handleExportHealthExcel}
+            disabled={isSubmitting || isSyncingAll || classStudents.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-semibold text-xs shadow-sm whitespace-nowrap text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-300 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+            title="Xuất danh sách sổ sức khỏe ra file Excel (.CSV)"
+          >
+            <Download className="w-3.5 h-3.5 shrink-0 text-sky-600" />
+            <span>Xuất báo cáo y tế</span>
           </button>
 
           <button
@@ -763,7 +829,7 @@ export default function AdminHealthPage() {
                 <th className="p-3 min-w-[110px] whitespace-nowrap">Cân nặng (kg)</th>
                 <th className="p-3 min-w-[110px] whitespace-nowrap">Chiều cao (cm)</th>
                 <th className="p-3 min-w-[70px] whitespace-nowrap">BMI</th>
-                <th className="p-3 min-w-[160px] whitespace-nowrap">Xếp loại WHO</th>
+                <th className="p-3 min-w-[160px] whitespace-nowrap">Đánh giá thể trạng</th>
                 <th className="p-3 min-w-[180px] w-full">Nhận xét y tế</th>
                 <th className="p-3 w-20 text-center whitespace-nowrap">Thao tác</th>
               </tr>

@@ -27,19 +27,47 @@ export function classifyWHOGrowthStatus(bmi: number): GrowthStatus {
 
 /**
  * Returns user-friendly Vietnamese badge text and Tailwind color for GrowthStatus
+ * Chuẩn sư phạm mầm non & quy định y tế học đường:
+ * - Thiếu cân / dưới chuẩn: "Nhẹ cân so với tuổi" (thay cho Suy dinh dưỡng)
+ * - Vượt chuẩn cân nặng: "Thừa cân so với tuổi" (thay cho Béo phì / Nguy cơ béo phì)
+ * - Đạt chuẩn: "Bình thường"
+ * Màu sắc nhẹ nhàng, sư phạm, không dùng màu đỏ gay gắt.
  */
-export function getGrowthStatusDisplay(status: GrowthStatus): { text: string; bgClass: string; textClass: string } {
-  switch (status) {
-    case 'NORMAL':
-      return { text: 'Thể trạng chuẩn WHO', bgClass: 'bg-emerald-50 border-emerald-200', textClass: 'text-emerald-700' };
+export function getGrowthStatusDisplay(status: GrowthStatus | string): { text: string; bgClass: string; textClass: string } {
+  const normalized = String(status || '').toUpperCase().trim();
+
+  switch (normalized) {
     case 'UNDERWEIGHT':
-      return { text: 'Suy dinh dưỡng', bgClass: 'bg-amber-50 border-amber-200', textClass: 'text-amber-700' };
+    case 'SUY DINH DƯỠNG':
+    case 'THIẾU CÂN':
+    case 'NHẸ CÂN':
+    case 'NHẸ CÂN SO VỚI TUỔI':
+      return {
+        text: 'Nhẹ cân so với tuổi',
+        bgClass: 'bg-amber-50 border-amber-200',
+        textClass: 'text-amber-700',
+      };
     case 'OVERWEIGHT_RISK':
-      return { text: 'Nguy cơ béo phì', bgClass: 'bg-orange-50 border-orange-200', textClass: 'text-orange-700' };
+    case 'OVERWEIGHT':
     case 'OBESE':
-      return { text: 'Béo phì', bgClass: 'bg-rose-50 border-rose-200', textClass: 'text-rose-700' };
+    case 'BÉO PHÌ':
+    case 'THỪA CÂN':
+    case 'NGUY CƠ BÉO PHÌ':
+    case 'THỪA CÂN SO VỚI TUỔI':
+      return {
+        text: 'Thừa cân so với tuổi',
+        bgClass: 'bg-orange-50 border-orange-200',
+        textClass: 'text-orange-700',
+      };
+    case 'NORMAL':
+    case 'BÌNH THƯỜNG':
+    case 'THỂ TRẠNG CHUẨN WHO':
     default:
-      return { text: 'Thể trạng chuẩn WHO', bgClass: 'bg-emerald-50 border-emerald-200', textClass: 'text-emerald-700' };
+      return {
+        text: 'Bình thường',
+        bgClass: 'bg-emerald-50 border-emerald-200',
+        textClass: 'text-emerald-700',
+      };
   }
 }
 
