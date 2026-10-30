@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { 
   Heart, Calendar, Clock, CheckCircle2, ChevronLeft, Plus, 
   Shield, Sparkles, FileText, Phone, Check, UserCheck, AlertCircle, X,
-  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert, LogOut, Trash2
+  Utensils, Activity, ArrowRight, RefreshCw, ShieldAlert, LogOut, Trash2,
+  Camera, Edit3, Power, Upload
 } from 'lucide-react';
 import Link from 'next/link';
 import { INITIAL_ABSENCE_REQUESTS, INITIAL_STUDENTS, supabase } from '@/lib/supabase/client';
@@ -391,9 +392,14 @@ export default function ParentPwaPage() {
   const [isLoadingPickups, setIsLoadingPickups] = useState<boolean>(false);
   const [pickupSubmitting, setPickupSubmitting] = useState<boolean>(false);
   const [showAddPickupModal, setShowAddPickupModal] = useState<boolean>(false);
-  const [newPickupName, setNewPickupName] = useState('');
-  const [newPickupRel, setNewPickupRel] = useState('Ông Nội');
-  const [newPickupPhone, setNewPickupPhone] = useState('');
+  const [editingPickupId, setEditingPickupId] = useState<string | null>(null);
+  const [pickupFormName, setPickupFormName] = useState('');
+  const [pickupFormRel, setPickupFormRel] = useState('Bà Ngoại');
+  const [pickupFormPhone, setPickupFormPhone] = useState('');
+  const [pickupFormAvatar, setPickupFormAvatar] = useState('');
+  const [pickupFormIsActive, setPickupFormIsActive] = useState<boolean>(true);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hàm tải danh sách người đón được ủy quyền của học sinh được chọn từ Supabase
   const loadChildPickups = useCallback(async (studentId: string) => {
@@ -427,36 +433,190 @@ export default function ParentPwaPage() {
     }
   }, [selectedChild?.id, activeNav, loadChildPickups]);
 
-  // Xử lý phụ huynh gửi đơn ủy quyền người đón mới lên Supabase
-  const handleParentAddPickup = async (e: React.FormEvent) => {
+  // Xử lý nén và tải ảnh chân dung lên Supabase Storage
+  const handleAvatarFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (readerEvent) => {
+        const rawDataUrl = readerEvent.target?.result as string;
+        if (!rawDataUrl) {
+          setIsUploadingAvatar(false);
+          return;
+        }
+
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 400;
+          let width = img.width;
+          let height = img.height;
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            try {
+              const res = await fetch('/api/parent/pickups/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  student_id: selectedChild?.id || 'common',
+                  dataUrl: compressedDataUrl,
+                }),
+              });
+              const json = await res.json().catch(() => ({}));
+              if (res.ok && json.success && json.url) {
+                setPickupFormAvatar(json.url);
+              } else {
+                setPickupFormAvatar(compressedDataUrl);
+              }
+            } catch {
+              setPickupFormAvatar(compressedDataUrl);
+            }
+          }
+          setIsUploadingAvatar(false);
+        };
+        img.onerror = () => {
+          setPickupFormAvatar(rawDataUrl);
+          setIsUploadingAvatar(false);
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error handling avatar image:', err);
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Mở modal Thêm mới
+  const handleOpenAddPickupModal = () => {
+    setEditingPickupId(null);
+    setPickupFormName('');
+    setPickupFormRel('Bà Ngoại');
+    setPickupFormPhone('');
+    setPickupFormAvatar('');
+    setPickupFormIsActive(true);
+    setShowAddPickupModal(true);
+  };
+
+  // Mở modal Sửa
+  const handleOpenEditPickupModal = (pickup: AuthorizedPickup) => {
+    setEditingPickupId(pickup.id);
+    setPickupFormName(pickup.name);
+    setPickupFormRel(pickup.relationship);
+    setPickupFormPhone(pickup.phone);
+    setPickupFormAvatar(pickup.avatar_url || '');
+    setPickupFormIsActive(pickup.is_active !== false);
+    setShowAddPickupModal(true);
+  };
+
+  // Xử lý bật/tắt trạng thái kích hoạt đưa đón
+  const handleTogglePickupActive = async (pickup: AuthorizedPickup) => {
+    const currentActive = pickup.is_active !== false;
+    const nextStatus = !currentActive;
+
+    // Cập nhật lạc quan trên UI
+    setChildPickups((prev) =>
+      prev.map((p) => (p.id === pickup.id ? { ...p, is_active: nextStatus } : p))
+    );
+
+    try {
+      const res = await fetch('/api/parent/pickups', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: pickup.id,
+          is_active: nextStatus,
+        }),
+      });
+      if (!res.ok) {
+        // Rollback nếu thất bại
+        setChildPickups((prev) =>
+          prev.map((p) => (p.id === pickup.id ? { ...p, is_active: currentActive } : p))
+        );
+        alert('Không thể cập nhật trạng thái người đón.');
+      }
+    } catch (err: any) {
+      setChildPickups((prev) =>
+        prev.map((p) => (p.id === pickup.id ? { ...p, is_active: currentActive } : p))
+      );
+      alert(err?.message || 'Lỗi kết nối khi cập nhật trạng thái.');
+    }
+  };
+
+  // Xử lý Lưu người đón (Thêm mới hoặc Cập nhật)
+  const handleSavePickupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPickupName.trim() || !newPickupPhone.trim() || !selectedChild) return;
+    if (!pickupFormName.trim() || !pickupFormPhone.trim() || !selectedChild) return;
 
     setPickupSubmitting(true);
     try {
-      const res = await fetch('/api/parent/pickups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: selectedChild.id,
-          name: newPickupName.trim(),
-          relationship: newPickupRel,
-          phone: newPickupPhone.trim(),
-        }),
-      });
+      if (editingPickupId) {
+        // UPDATE (PUT)
+        const res = await fetch('/api/parent/pickups', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingPickupId,
+            name: pickupFormName.trim(),
+            relationship: pickupFormRel,
+            phone: pickupFormPhone.trim(),
+            avatar_url: pickupFormAvatar.trim(),
+            is_active: pickupFormIsActive,
+          }),
+        });
 
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.success && json.pickup) {
-        setChildPickups((prev) => [json.pickup, ...prev]);
-        setShowAddPickupModal(false);
-        setNewPickupName('');
-        setNewPickupPhone('');
-        alert('Đã gửi thông tin người đón thành công! Nhà trường sẽ đối chiếu và phê duyệt.');
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success && json.pickup) {
+          setChildPickups((prev) =>
+            prev.map((p) => (p.id === editingPickupId ? json.pickup : p))
+          );
+          setShowAddPickupModal(false);
+          alert('Đã cập nhật thông tin người đón thành công!');
+        } else {
+          alert(json.error || 'Có lỗi xảy ra khi cập nhật.');
+        }
       } else {
-        alert(json.error || 'Có lỗi xảy ra khi lưu người đón.');
+        // CREATE (POST)
+        const res = await fetch('/api/parent/pickups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: selectedChild.id,
+            name: pickupFormName.trim(),
+            relationship: pickupFormRel,
+            phone: pickupFormPhone.trim(),
+            avatar_url: pickupFormAvatar.trim(),
+            is_active: pickupFormIsActive,
+          }),
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success && json.pickup) {
+          setChildPickups((prev) => [json.pickup, ...prev]);
+          setShowAddPickupModal(false);
+          alert('Đã thêm người đón ủy quyền thành công! Nhà trường có thể đối soát ngay.');
+        } else {
+          alert(json.error || 'Có lỗi xảy ra khi lưu người đón.');
+        }
       }
     } catch (err: any) {
-      alert(err?.message || 'Lỗi kết nối khi gửi thông tin người đón.');
+      alert(err?.message || 'Lỗi kết nối khi lưu thông tin người đón.');
     } finally {
       setPickupSubmitting(false);
     }
@@ -1173,11 +1333,12 @@ export default function ParentPwaPage() {
               </div>
 
               <button
-                onClick={() => setShowAddPickupModal(true)}
+                type="button"
+                onClick={handleOpenAddPickupModal}
                 className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3 py-2 rounded-pill shadow transition-all active:scale-95 shrink-0 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Thêm người đón</span>
+                <span>+ Thêm người đón</span>
               </button>
             </div>
 
@@ -1203,26 +1364,26 @@ export default function ParentPwaPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowAddPickupModal(true)}
+                  onClick={handleOpenAddPickupModal}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-pill text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Thêm người đón</span>
+                  <span>+ Thêm người đón ủy quyền</span>
                 </button>
               </div>
             ) : (
               /* Pickups List (DỮ LIỆU THỰC TẾ TỪ SUPABASE) */
               <div className="space-y-3">
                 {childPickups.map((pickup) => {
-                  const isApproved = pickup.approval_status === 'APPROVED';
+                  const isActive = pickup.is_active !== false;
 
                   return (
                     <div
                       key={pickup.id}
-                      className={`p-3.5 border rounded-xl flex items-center justify-between gap-3 text-xs transition-all ${
-                        isApproved
-                          ? 'bg-emerald-50/30 border-emerald-200'
-                          : 'bg-amber-50/30 border-amber-200'
+                      className={`p-3.5 border rounded-2xl flex items-center justify-between gap-3 text-xs transition-all ${
+                        isActive
+                          ? 'bg-emerald-50/20 border-emerald-200'
+                          : 'bg-slate-50/70 border-slate-200 opacity-75'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -1231,15 +1392,15 @@ export default function ParentPwaPage() {
                             src={pickup.avatar_url}
                             alt={pickup.name}
                             className={`w-12 h-12 rounded-full border-2 object-cover shrink-0 ${
-                              isApproved ? 'border-emerald-500' : 'border-amber-400'
+                              isActive ? 'border-emerald-500 shadow-2xs' : 'border-slate-300 grayscale'
                             }`}
                           />
                         ) : (
                           <div
                             className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border-2 ${
-                              isApproved
+                              isActive
                                 ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                                : 'bg-slate-100 text-slate-600 border-slate-300'
                             }`}
                           >
                             {pickup.name?.charAt(0) || 'U'}
@@ -1250,29 +1411,64 @@ export default function ParentPwaPage() {
                             <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-pill border border-slate-200">
                               {pickup.relationship}
                             </span>
-                            {isApproved ? (
+                            {isActive ? (
                               <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-pill border border-emerald-300 flex items-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-700" /> Đã Xác Thực
+                                <Check className="w-3 h-3 text-emerald-700" /> Đang kích hoạt
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-pill border border-amber-300 flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-amber-700" /> Chờ Phê Duyệt
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-pill border border-slate-300 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-500" /> Tạm ngưng đón
                               </span>
                             )}
                           </div>
                           <h4 className="font-bold text-slate-900 text-sm truncate">{pickup.name}</h4>
-                          <span className="text-slate-500 font-mono text-[11px]">SĐT: {pickup.phone}</span>
+                          <a
+                            href={`tel:${pickup.phone}`}
+                            className="text-sky-700 hover:text-sky-900 font-mono text-[11px] inline-flex items-center gap-1 hover:underline"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>{pickup.phone}</span>
+                          </a>
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleParentDeletePickup(pickup.id, pickup.name)}
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
-                        title="Hủy ủy quyền người đón"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Action buttons: Bật/Tắt, Sửa, Xóa */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Nút Bật/Tắt trạng thái */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePickupActive(pickup)}
+                          className={`px-2.5 py-1.5 rounded-pill text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                              : 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300'
+                          }`}
+                          title={isActive ? 'Bấm để tạm ngưng đón bé' : 'Bấm để kích hoạt lại quyền đón'}
+                        >
+                          <Power className="w-3 h-3" />
+                          <span>{isActive ? 'Bật' : 'Tắt'}</span>
+                        </button>
+
+                        {/* Nút Sửa */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPickupModal(pickup)}
+                          className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer"
+                          title="Chỉnh sửa thông tin người đón"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+
+                        {/* Nút Xóa */}
+                        <button
+                          type="button"
+                          onClick={() => handleParentDeletePickup(pickup.id, pickup.name)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Hủy ủy quyền người đón"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -1350,14 +1546,14 @@ export default function ParentPwaPage() {
         </div>
       )}
 
-      {/* ADD AUTHORIZED PICKUP MODAL */}
+      {/* ADD / EDIT AUTHORIZED PICKUP MODAL */}
       {showAddPickupModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-convent max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800">
+          <div className="bg-white border border-slate-200 rounded-convent max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
               <h3 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
                 <UserCheck className="w-4 h-4 text-sky-600" />
-                Thêm Người Đón Được Ủy Quyền
+                <span>{editingPickupId ? 'Chỉnh Sửa Người Đón' : 'Thêm Người Đón Ủy Quyền'}</span>
               </h3>
               <button
                 type="button"
@@ -1368,13 +1564,81 @@ export default function ParentPwaPage() {
               </button>
             </div>
 
-            <form onSubmit={handleParentAddPickup} className="space-y-3 text-xs">
+            <form onSubmit={handleSavePickupSubmit} className="space-y-3.5 text-xs">
               <div>
-                <span className="text-[11px] text-slate-500 block mb-2">
+                <span className="text-[11px] text-slate-500 block">
                   Bé được đón: <strong className="text-sky-700">{selectedChild?.full_name}</strong>
                 </span>
               </div>
 
+              {/* UPLOAD ẢNH CHÂN DUNG NGƯỜI ĐÓN */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Ảnh chân dung người đón
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handleAvatarFileSelected}
+                />
+
+                {pickupFormAvatar ? (
+                  <div className="flex items-center gap-3 bg-sky-50/60 border border-sky-200 rounded-2xl p-2.5">
+                    <img
+                      src={pickupFormAvatar}
+                      alt="Ảnh chân dung"
+                      className="w-14 h-14 rounded-full object-cover border-2 border-sky-500 shadow-2xs shrink-0"
+                    />
+                    <div className="space-y-1 min-w-0">
+                      <span className="text-emerald-700 font-bold text-xs flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5" /> Đã có ảnh chân dung
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-[11px] text-sky-700 hover:underline font-semibold cursor-pointer"
+                        >
+                          Đổi ảnh khác
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPickupFormAvatar('')}
+                          className="text-[11px] text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Xóa ảnh
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="w-full py-3 px-4 border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 hover:bg-sky-50 rounded-2xl flex items-center justify-center gap-2 text-sky-700 font-bold transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isUploadingAvatar ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-sky-600" />
+                        <span>Đang xử lý ảnh...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-4 h-4 text-sky-600" />
+                        <span>Chụp / Tải ảnh chân dung</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Ảnh chụp rõ mặt để các cô giáo đối chiếu khi bàn giao trẻ.
+                </span>
+              </div>
+
+              {/* HỌ VÀ TÊN */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
                   Họ và tên người đón (*)
@@ -1382,35 +1646,37 @@ export default function ParentPwaPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Ví dụ: Nguyễn Văn A"
-                  value={newPickupName}
-                  onChange={(e) => setNewPickupName(e.target.value)}
+                  placeholder="Ví dụ: Nguyễn Thị Hoa"
+                  value={pickupFormName}
+                  onChange={(e) => setPickupFormName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
+              {/* MỐI QUAN HỆ */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
                   Quan hệ với bé (*)
                 </label>
                 <select
-                  value={newPickupRel}
-                  onChange={(e) => setNewPickupRel(e.target.value)}
+                  value={pickupFormRel}
+                  onChange={(e) => setPickupFormRel(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none font-medium"
                 >
-                  <option value="Ông Nội">Ông Nội</option>
-                  <option value="Bà Nội">Bà Nội</option>
-                  <option value="Ông Ngoại">Ông Ngoại</option>
                   <option value="Bà Ngoại">Bà Ngoại</option>
+                  <option value="Ông Ngoại">Ông Ngoại</option>
+                  <option value="Bà Nội">Bà Nội</option>
+                  <option value="Ông Nội">Ông Nội</option>
                   <option value="Bác">Bác</option>
                   <option value="Cô">Cô</option>
                   <option value="Chú">Chú</option>
                   <option value="Dì">Dì</option>
-                  <option value="Tài xế đưa đón">Tài xế đưa đón</option>
+                  <option value="Tài xế">Tài xế</option>
                   <option value="Người quen / Họ hàng">Người quen / Họ hàng</option>
                 </select>
               </div>
 
+              {/* SỐ ĐIỆN THOẠI */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
                   Số điện thoại liên hệ (*)
@@ -1419,15 +1685,29 @@ export default function ParentPwaPage() {
                   type="tel"
                   required
                   placeholder="Ví dụ: 0912345678"
-                  value={newPickupPhone}
-                  onChange={(e) => setNewPickupPhone(e.target.value)}
+                  value={pickupFormPhone}
+                  onChange={(e) => setPickupFormPhone(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
-              <div className="bg-sky-50 border border-sky-100 rounded-xl p-2.5 text-[11px] text-sky-800 leading-relaxed">
-                ℹ️ Thông tin người đón sẽ được lưu trực tiếp vào cơ sở dữ liệu nhà trường để các cô giáo đối chiếu khi trả trẻ.
-              </div>
+              {/* TRẠNG THÁI KÍCH HOẠT */}
+              <label className="flex items-center gap-2.5 bg-slate-50 p-2.5 border border-slate-200 rounded-xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pickupFormIsActive}
+                  onChange={(e) => setPickupFormIsActive(e.target.checked)}
+                  className="w-4 h-4 text-sky-600 rounded cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 text-xs block">
+                    Kích hoạt quyền đón bé ngay
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">
+                    Khi bật, giáo viên được phép đối chiếu và bàn giao bé cho người này.
+                  </span>
+                </div>
+              </label>
 
               <div className="flex gap-2 pt-1">
                 <button
@@ -1448,7 +1728,7 @@ export default function ParentPwaPage() {
                       <span>Đang lưu...</span>
                     </>
                   ) : (
-                    <span>Lưu người đón</span>
+                    <span>{editingPickupId ? 'Lưu thay đổi' : 'Lưu người đón'}</span>
                   )}
                 </button>
               </div>

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   CheckCircle2, HeartPulse, Utensils, Lock, 
   ChevronLeft, Plus, Sparkles, Check, AlertCircle, LogOut, 
-  UserCheck, ShieldAlert, Phone, RefreshCw, ChevronDown, Layers
+  UserCheck, ShieldAlert, Phone, RefreshCw, ChevronDown, Layers, Eye
 } from 'lucide-react';
 import Link from 'next/link';
 import { 
@@ -567,6 +567,7 @@ export default function TeacherPwaPage() {
   const [showLateCheckoutModal, setShowLateCheckoutModal] = useState(false);
   const [lateStudentId, setLateStudentId] = useState<string | null>(null);
   const [lateReason, setLateReason] = useState('Phụ huynh bận công việc đột xuất');
+  const [viewPickupStudentId, setViewPickupStudentId] = useState<string | null>(null);
 
   // --- TEACHER EMPTY STATE (Section III.2 Technical Directive) ---
   if (!isClassAssigned) {
@@ -873,6 +874,30 @@ export default function TeacherPwaPage() {
       console.error('Failed to mass checkout in DB:', err);
     }
     alert(`✅ ${t('teacher.checkout_done')}`);
+  };
+
+  const handleQuickCheckoutStudent = async (studentId: string, reason: string = 'Người thân đón (Đã đối soát khuôn mặt)') => {
+    const updated = students.map((s) =>
+      s.id === studentId ? { ...s, checkedOut: true, checkoutReason: reason } : s
+    );
+    setStudents(updated);
+    updateActiveCache((entry) => ({
+      ...entry,
+      students: updated,
+    }));
+    try {
+      await fetch('/api/teacher/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CHECKOUT',
+          student_ids: [studentId],
+          checkout_reason: reason,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to checkout student in DB:', err);
+    }
   };
 
   const handleSaveLateCheckout = async () => {
@@ -1710,49 +1735,279 @@ export default function TeacherPwaPage() {
             </div>
           ) : (
             <div className="space-y-2.5">
-              {students.map((student) => (
-                <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent flex items-center justify-between text-xs shadow-sm">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {student.avatar_url ? (
-                      <img
-                        src={student.avatar_url}
-                        alt={student.full_name}
-                        className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        {student.full_name.charAt(0)}
+              {students.map((student) => {
+                const activePickups = (student.authorized_pickups || []).filter(
+                  (p: AuthorizedPickup) => p.is_active !== false && p.approval_status !== 'REJECTED'
+                );
+
+                return (
+                  <div key={student.id} className="p-3.5 bg-white border border-slate-200 rounded-convent text-xs shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {student.avatar_url ? (
+                          <img
+                            src={student.avatar_url}
+                            alt={student.full_name}
+                            className="w-10 h-10 rounded-full border-2 border-sky-200 object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            {student.full_name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
+                          <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
+                          {student.checkoutReason && (
+                            <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Nút Xem đối soát người đón nếu có */}
+                        {activePickups.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setViewPickupStudentId(student.id)}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-pill font-bold flex items-center gap-1 transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="Xem ảnh chân dung & SĐT người đón được ủy quyền"
+                          >
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Đối soát ({activePickups.length})</span>
+                          </button>
+                        )}
+
+                        {student.checkedOut ? (
+                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
+                            <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setLateStudentId(student.id);
+                              setShowLateCheckoutModal(true);
+                            }}
+                            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>{t('teacher.checkout_late')}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Strip người đón ủy quyền trực quan */}
+                    {activePickups.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] bg-slate-50/70 -mx-3.5 -mb-3.5 px-3.5 py-2 rounded-b-convent">
+                        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+                          <span className="text-[10px] text-slate-500 font-semibold shrink-0">Người đón ủy quyền:</span>
+                          {activePickups.map((p: AuthorizedPickup) => (
+                            <div
+                              key={p.id}
+                              onClick={() => setViewPickupStudentId(student.id)}
+                              className="inline-flex items-center gap-1.5 bg-white border border-emerald-200 rounded-pill px-2 py-0.5 text-[11px] cursor-pointer hover:border-emerald-400 hover:shadow-2xs transition-all shrink-0"
+                            >
+                              {p.avatar_url ? (
+                                <img src={p.avatar_url} alt={p.name} className="w-4 h-4 rounded-full object-cover border border-emerald-500 shrink-0" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold flex items-center justify-center shrink-0">
+                                  {p.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="font-bold text-slate-800">{p.name}</span>
+                              <span className="text-[10px] text-slate-500">({p.relationship})</span>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setViewPickupStudentId(student.id)}
+                          className="text-[11px] text-emerald-700 font-bold hover:underline shrink-0 ml-2 cursor-pointer"
+                        >
+                          Đối chiếu →
+                        </button>
                       </div>
                     )}
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-slate-900 text-sm truncate">{student.full_name}</h4>
-                      <span className="text-slate-400 font-mono text-[11px]">{student.student_code}</span>
-                      {student.checkoutReason && (
-                        <div className="text-[11px] text-amber-700 font-semibold mt-0.5">⚠️ {student.checkoutReason}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Dedicated Visual Pickup Cross-Check Modal */}
+          {viewPickupStudentId && (() => {
+            const st = students.find((s) => s.id === viewPickupStudentId);
+            if (!st) return null;
+            const activePickups = (st.authorized_pickups || []).filter(
+              (p: AuthorizedPickup) => p.is_active !== false && p.approval_status !== 'REJECTED'
+            );
+            const inactivePickups = (st.authorized_pickups || []).filter(
+              (p: AuthorizedPickup) => p.is_active === false
+            );
+
+            return (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white border border-slate-200 rounded-convent max-w-md w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800 max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                    <h3 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Đối Soát Người Đón Bé</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setViewPickupStudentId(null)}
+                      className="text-slate-400 hover:text-slate-800 text-sm p-1 rounded-full cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Student Card */}
+                  <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl flex items-center gap-3">
+                    {st.avatar_url ? (
+                      <img src={st.avatar_url} alt={st.full_name} className="w-12 h-12 rounded-full border-2 border-sky-400 object-cover shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-sky-100 text-sky-800 font-bold text-sm flex items-center justify-center shrink-0">
+                        {st.full_name.charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{st.full_name}</h4>
+                      <span className="text-xs text-sky-700 font-mono font-semibold">{st.student_code}</span>
+                      {st.allergies && st.allergies !== 'Không' && (
+                        <div className="text-[10px] text-rose-600 font-semibold mt-0.5">⚠️ Dị ứng: {st.allergies}</div>
                       )}
                     </div>
                   </div>
 
-                  {student.checkedOut ? (
-                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold flex items-center gap-1 shrink-0">
-                      <Check className="w-3.5 h-3.5" /> {t('teacher.checkout_done')}
-                    </span>
-                  ) : (
+                  {/* AUTHORIZED PICKUPS CARDS */}
+                  <div className="space-y-2">
+                    <label className="block text-slate-700 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Người Được Phụ Huynh Ủy Quyền ({activePickups.length})</span>
+                    </label>
+
+                    {activePickups.length === 0 ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center text-amber-800 text-xs">
+                        Bé chưa có người đón ủy quyền hợp lệ. Chỉ phụ huynh ruột (Bố/Mẹ) mới được nhận trẻ.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {activePickups.map((pickup: AuthorizedPickup) => (
+                          <div key={pickup.id} className="p-3 bg-emerald-50/50 border-2 border-emerald-300 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {pickup.avatar_url ? (
+                                <img
+                                  src={pickup.avatar_url}
+                                  alt={pickup.name}
+                                  className="w-14 h-14 rounded-full border-2 border-emerald-500 object-cover shadow-2xs shrink-0"
+                                />
+                              ) : (
+                                <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-800 border-2 border-emerald-400 font-bold text-base flex items-center justify-center shrink-0">
+                                  {pickup.name?.charAt(0) || 'U'}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <span className="px-2 py-0.5 bg-white text-emerald-800 font-bold text-[10px] rounded-pill border border-emerald-300">
+                                    {pickup.relationship}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
+                                    <Check className="w-3 h-3" /> Hợp lệ đón bé
+                                  </span>
+                                </div>
+                                <h4 className="font-extrabold text-slate-900 text-sm truncate">{pickup.name}</h4>
+                                <a
+                                  href={`tel:${pickup.phone}`}
+                                  className="text-sky-700 hover:text-sky-900 font-mono font-bold text-xs inline-flex items-center gap-1 mt-0.5 hover:underline"
+                                >
+                                  <Phone className="w-3 h-3 fill-current" />
+                                  <span>{pickup.phone}</span>
+                                </a>
+                              </div>
+                            </div>
+
+                            <a
+                              href={`tel:${pickup.phone}`}
+                              className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-pill text-[11px] font-bold flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
+                              title="Gọi điện xác thực"
+                            >
+                              <Phone className="w-3 h-3 fill-current" />
+                              <span>Gọi</span>
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Inactive Pickups Warning */}
+                    {inactivePickups.length > 0 && (
+                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                        <span className="font-bold text-rose-700 text-[11px] block">
+                          ⚠️ CẢNH BÁO: Người đón đang tạm ngưng ({inactivePickups.length}):
+                        </span>
+                        {inactivePickups.map((ip: AuthorizedPickup) => (
+                          <div key={ip.id} className="text-[11px] text-rose-800 flex items-center justify-between">
+                            <span>• {ip.name} ({ip.relationship}) - SĐT: {ip.phone}</span>
+                            <span className="font-bold text-rose-600 text-[10px]">TẠM KHÓA</span>
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-rose-600 italic">Tuyệt đối không bàn giao trẻ cho người đang ở trạng thái Tạm ngưng đón.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PARENT CONTACTS */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="block text-slate-600 font-bold text-[11px] uppercase tracking-wider">
+                      Phụ Huynh Ruột (Bố / Mẹ)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {st.parents?.map((parent: ParentContact, idx: number) => (
+                        <div key={idx} className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2">
+                          <img src={parent.avatar_url} alt={parent.name} className="w-8 h-8 rounded-full border border-slate-300 object-cover shrink-0" />
+                          <div className="min-w-0 text-[11px]">
+                            <span className="font-bold block text-slate-800 truncate">{parent.name}</span>
+                            <span className="text-slate-500 block text-[10px]">{parent.relationship}</span>
+                            {parent.phone && (
+                              <a href={`tel:${parent.phone}`} className="text-sky-700 font-mono text-[10px]">
+                                {parent.phone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ACTION FOOTER */}
+                  <div className="pt-2 border-t border-slate-200 flex gap-2">
                     <button
-                      onClick={() => {
-                        setLateStudentId(student.id);
-                        setShowLateCheckoutModal(true);
-                      }}
-                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-pill font-bold transition-all shadow active:scale-95 flex items-center gap-1 shrink-0"
+                      type="button"
+                      onClick={() => setViewPickupStudentId(null)}
+                      className="w-1/3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-pill transition-all cursor-pointer"
                     >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>{t('teacher.checkout_late')}</span>
+                      Đóng
                     </button>
-                  )}
+                    {!st.checkedOut && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleQuickCheckoutStudent(st.id, 'Người thân đón (Đã đối soát khuôn mặt & SĐT)');
+                          setViewPickupStudentId(null);
+                        }}
+                        className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-pill shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Xác nhận thông tin khớp - Trả trẻ</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {/* Late Checkout / Handover Verification Modal */}
           {showLateCheckoutModal && (() => {
@@ -1802,27 +2057,35 @@ export default function TeacherPwaPage() {
                         </div>
                       ))}
 
-                      {/* HARD GATE SAFETY FILTER: ONLY DISPLAY APPROVED PICKUPS */}
+                      {/* HARD GATE SAFETY FILTER: ONLY DISPLAY ACTIVE APPROVED PICKUPS */}
                       {currentLateStudent?.authorized_pickups
-                        ?.filter((pickup: AuthorizedPickup) => pickup.approval_status === 'APPROVED')
+                        ?.filter((pickup: AuthorizedPickup) => pickup.is_active !== false && pickup.approval_status !== 'REJECTED')
                         .map((pickup: AuthorizedPickup) => (
                           <div key={pickup.id} className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2 col-span-2">
-                            <img src={pickup.avatar_url} alt={pickup.name} className="w-9 h-9 rounded-full border-2 border-emerald-500 object-cover shrink-0" />
+                            {pickup.avatar_url ? (
+                              <img src={pickup.avatar_url} alt={pickup.name} className="w-10 h-10 rounded-full border-2 border-emerald-500 object-cover shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 border-2 border-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                {pickup.name.charAt(0)}
+                              </div>
+                            )}
                             <div className="min-w-0 text-[11px]">
                               <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[9px] rounded-pill border border-emerald-300 inline-block">
                                 {t('teacher.authorized_pickup')} {pickup.relationship} {t('teacher.approved_tag')}
                               </span>
                               <span className="font-bold block text-slate-800 truncate">{pickup.name}</span>
-                              <span className="text-slate-500 text-[10px] font-mono">{t('common.phone')}: {pickup.phone}</span>
+                              <a href={`tel:${pickup.phone}`} className="text-slate-600 text-[10px] font-mono hover:underline block">
+                                {t('common.phone')}: {pickup.phone}
+                              </a>
                             </div>
                           </div>
                         ))}
                     </div>
 
-                    {/* Pending Safety Notice */}
-                    {currentLateStudent?.authorized_pickups?.some((p) => p.approval_status !== 'APPROVED') && (
+                    {/* Pending / Inactive Safety Notice */}
+                    {currentLateStudent?.authorized_pickups?.some((p: AuthorizedPickup) => p.is_active === false || p.approval_status === 'REJECTED') && (
                       <p className="text-[10px] text-amber-700 font-semibold italic bg-amber-50 p-2 rounded-lg border border-amber-200">
-                        {t('teacher.pending_pickup_notice')}
+                        🔒 Hệ thống tự động ẩn hoặc cảnh báo người đón đang ở trạng thái Tạm ngưng đón để bảo vệ an toàn cho bé.
                       </p>
                     )}
                   </div>

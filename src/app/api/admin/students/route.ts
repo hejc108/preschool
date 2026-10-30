@@ -158,29 +158,43 @@ export async function GET() {
       );
     }
 
-    // 3.1. Fetch authorized pickups from public.authorized_pickups
+    // 3.1. Fetch authorized pickups from public.pickup_authorizations (with authorized_pickups fallback)
     const pickupsMap: Record<string, any[]> = {};
     try {
-      const { data: pickupsData } = await supabase
-        .from('authorized_pickups')
+      let pickupsData: any[] | null = null;
+      const { data: authData, error: authError } = await supabase
+        .from('pickup_authorizations')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (!authError && Array.isArray(authData)) {
+        pickupsData = authData;
+      } else {
+        const { data: legData } = await supabase
+          .from('authorized_pickups')
+          .select('*')
+          .order('created_at', { ascending: false });
+        pickupsData = legData || [];
+      }
 
       if (Array.isArray(pickupsData)) {
         pickupsData.forEach((p: any) => {
           if (!pickupsMap[p.student_id]) pickupsMap[p.student_id] = [];
           pickupsMap[p.student_id].push({
             id: p.id,
+            student_id: p.student_id,
             name: p.name,
             relationship: p.relationship,
             phone: p.phone,
-            avatar_url: p.avatar_url,
-            approval_status: p.approval_status || 'PENDING',
+            avatar_url: p.avatar_url || '',
+            is_active: p.is_active !== undefined ? Boolean(p.is_active) : (p.approval_status !== 'REJECTED'),
+            approval_status: p.approval_status || (p.is_active !== false ? 'APPROVED' : 'PENDING'),
+            created_at: p.created_at,
           });
         });
       }
     } catch (e) {
-      console.warn('Failed to fetch authorized_pickups:', e);
+      console.warn('Failed to fetch pickups:', e);
     }
 
     // 4. Map students with proper class names, citizen_id, and non-regular flags

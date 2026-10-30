@@ -59,13 +59,17 @@ export interface ParentContact {
 
 export interface AuthorizedPickup {
   id: string;
+  student_id?: string;
   name: string;
-  relationship: string; // e.g. 'Ông Nội', 'Bà Ngoại', 'Chú', 'Người Giúp Việc'
+  relationship: string; // e.g. 'Ông Nội', 'Bà Ngoại', 'Chú', 'Tài Xế'
   phone: string;
-  avatar_url: string;
-  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  avatar_url?: string;
+  is_active?: boolean;
+  approval_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
   approved_by?: string;
   approved_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Student {

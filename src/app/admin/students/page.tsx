@@ -884,7 +884,7 @@ export default function StudentsDirectoryPage() {
                           <div
                             onClick={() =>
                               setPreviewPhoto({
-                                url: pickup.avatar_url,
+                                url: pickup.avatar_url || '',
                                 title: pickup.name,
                                 subtitle: `Người đón ủy quyền cho bé ${selectedStudent.full_name}`,
                                 phone: pickup.phone,
@@ -941,7 +941,7 @@ export default function StudentsDirectoryPage() {
                               type="button"
                               onClick={() =>
                                 setPreviewPhoto({
-                                  url: pickup.avatar_url,
+                                  url: pickup.avatar_url || '',
                                   title: pickup.name,
                                   subtitle: `Người đón ủy quyền cho bé ${selectedStudent.full_name}`,
                                   phone: pickup.phone,
