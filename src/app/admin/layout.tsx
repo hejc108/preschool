@@ -123,6 +123,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       'suongmai_session',
       'suongmai_user_email',
       'suongmai_user_role',
+      'suongmai_active_role',
+      'suongmai_roles',
       'suongmai_username',
       'suongmai_has_children',
     ];

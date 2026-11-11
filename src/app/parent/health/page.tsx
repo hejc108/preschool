@@ -6,8 +6,6 @@ import { ChevronLeft, Activity, ShieldCheck, TrendingUp, RefreshCw, Calendar, Sc
 import Link from 'next/link';
 import { getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { supabase } from '@/lib/supabase/client';
-import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 
 interface ChildHealthDetail {
   id: string;
@@ -45,68 +43,32 @@ function ParentHealthContent() {
     async function loadStudentAndHealth() {
       try {
         setLoading(true);
-        let targetStudentId = studentIdParam;
-
-        // 1. If studentIdParam not passed in URL, resolve from parent stored relations or active user
-        if (!targetStudentId && typeof window !== 'undefined') {
-          try {
-            const storedRels = localStorage.getItem('suongmai_parent_relations_v1');
-            if (storedRels) {
-              const rels = JSON.parse(storedRels);
-              if (Array.isArray(rels) && rels.length > 0) {
-                targetStudentId = rels[0].student_id;
-              }
-            }
-          } catch (e) {}
-
-          // Fallback: check cookie email
-          if (!targetStudentId) {
-            const match = document.cookie.match(/suongmai_user_email=([^;]+)/);
-            if (match) {
-              const email = parseSignedCookieClient(match[1]).toLowerCase().trim();
-              if (email) {
-                const appRes = await fetch('/api/users/approvals').catch(() => null);
-                if (appRes && appRes.ok) {
-                  const appJson = await appRes.json();
-                  if (Array.isArray(appJson?.relations)) {
-                    const myRel = appJson.relations.find(
-                      (r: any) => r.parent_email?.toLowerCase().trim() === email
-                    );
-                    if (myRel?.student_id) {
-                      targetStudentId = myRel.student_id;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // 2. Fetch student profile details
+        let targetStudentId = studentIdParam || '';
         let studentName = 'Bé';
         let studentClassName = 'Mầm';
         let studentCode = '';
 
-        if (targetStudentId) {
-          const { data: stData } = await supabase
-            .from('students')
-            .select('id, full_name, class_name, student_code')
-            .eq('id', targetStudentId)
-            .maybeSingle();
+        // Resolve linked children securely through server-side session status endpoint
+        const statusRes = await fetch('/api/auth/check-my-status', { cache: 'no-store' });
+        if (statusRes.ok) {
+          const statusJson = await statusRes.json();
+          const linkedList: Array<{
+            id: string;
+            full_name: string;
+            class_name?: string;
+            student_code?: string;
+          }> = Array.isArray(statusJson.linkedStudents) ? statusJson.linkedStudents : [];
 
-          if (stData) {
-            studentName = stData.full_name;
-            studentClassName = stData.class_name || 'Mầm';
-            studentCode = stData.student_code || '';
-          }
-        } else {
-          // Last resort: pick first student
-          const { data: stList } = await supabase.from('students').select('*').limit(1);
-          if (stList && stList.length > 0) {
-            targetStudentId = stList[0].id;
-            studentName = stList[0].full_name;
-            studentClassName = stList[0].class_name || 'Mầm';
-            studentCode = stList[0].student_code || '';
+          const matched =
+            (targetStudentId
+              ? linkedList.find((s) => s.id === targetStudentId)
+              : null) || linkedList[0];
+
+          if (matched) {
+            targetStudentId = matched.id;
+            studentName = matched.full_name || 'Bé';
+            studentClassName = matched.class_name || 'Mầm';
+            studentCode = matched.student_code || '';
           }
         }
 
@@ -118,7 +80,6 @@ function ParentHealthContent() {
             studentCode,
           });
 
-          // 3. Fetch real health records from API
           const healthRes = await fetch(
             `/api/parent/health?student_id=${encodeURIComponent(targetStudentId)}`,
             { cache: 'no-store' }
@@ -155,17 +116,17 @@ function ParentHealthContent() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans pb-10">
       {/* Top Header */}
-      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
           <Link
             href="/parent"
-            className="w-9 h-9 rounded-full bg-primary-800 hover:bg-primary-900 flex items-center justify-center text-white transition-colors shrink-0"
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors shrink-0"
           >
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">Sổ Theo Dõi Thể Trạng Định Kỳ</h1>
-            <p className="text-xs text-rose-100 font-medium">
+            <p className="text-xs text-sky-100 font-medium">
               {childInfo.name} • Lớp {childInfo.className} {childInfo.studentCode ? `(${childInfo.studentCode})` : ''}
             </p>
           </div>

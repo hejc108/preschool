@@ -17,19 +17,33 @@ export default function ParentMenuPage() {
   const [menuList, setMenuList] = useState<WeeklyMenu[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(defaultDay);
-  const [studentAllergies] = useState<string>('Không');
+  const [studentAllergies, setStudentAllergies] = useState<string>('Không');
 
-  // Nạp thực đơn mới nhất trực tiếp từ CSDL Supabase qua API
+  // Nạp thực đơn và hồ sơ dị ứng của bé từ API phiên đã xác thực
   React.useEffect(() => {
     async function loadLiveMenu() {
       try {
-        const res = await fetch('/api/admin/menu', { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
+        const [menuRes, statusRes] = await Promise.all([
+          fetch('/api/admin/menu', { cache: 'no-store' }),
+          fetch('/api/auth/check-my-status', { cache: 'no-store' }).catch(() => null),
+        ]);
+        if (menuRes.ok) {
+          const json = await menuRes.json();
           if (json.has_db && Array.isArray(json.menu) && json.menu.length > 0) {
             setMenuList(json.menu);
           } else {
             setMenuList([]);
+          }
+        }
+        if (statusRes && statusRes.ok) {
+          const sJson = await statusRes.json().catch(() => ({}));
+          const linked = Array.isArray(sJson.linked_students) ? sJson.linked_students : [];
+          const combinedAllergies = linked
+            .map((c: any) => c.allergies)
+            .filter((a: any) => typeof a === 'string' && a.trim() && a.trim().toLowerCase() !== 'không')
+            .join(', ');
+          if (combinedAllergies) {
+            setStudentAllergies(combinedAllergies);
           }
         }
       } catch (err) {
@@ -62,15 +76,15 @@ export default function ParentMenuPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans pb-10">
-      {/* Top Header */}
-      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      {/* Top Header (Calm UI Sky Blue) */}
+      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/parent" className="w-9 h-9 rounded-full bg-primary-800 hover:bg-primary-900 flex items-center justify-center text-white transition-colors shrink-0">
+          <Link href="/parent" className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 border border-white/25 flex items-center justify-center text-white transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">Thực Đơn Xoay Vòng 4 Tuần</h1>
-            <p className="text-xs text-rose-100 font-medium">Mầm Non Sương Mai</p>
+            <p className="text-xs text-sky-100 font-medium">Mầm Non Sương Mai</p>
           </div>
         </div>
 
@@ -159,7 +173,7 @@ export default function ParentMenuPage() {
 
                   {/* TC-MENU-03 Allergen Badge */}
                   {allergenCheck.hasAllergen && (
-                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1 animate-pulse">
+                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1">
                       <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
                       <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
                     </span>

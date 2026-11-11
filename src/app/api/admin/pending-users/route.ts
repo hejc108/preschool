@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Profile } from '@/lib/types/schema';
+import { requireActiveRole } from '@/lib/auth/sessionContext';
 
 const INITIAL_SERVER_PROFILES: Profile[] = [
   {
@@ -50,7 +51,10 @@ function getSupabaseClient() {
   return null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+  if ('response' in auth) return auth.response;
+
   const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
   const supabaseAdmin = getSupabaseAdminClient();
   const supabase = supabaseAdmin || getSupabaseClient();

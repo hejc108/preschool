@@ -1,218 +1,174 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import {
+  getSessionContext,
+  normalizeRole,
+  parseCookieHeader,
+  resolveProfileAndRolesByEmail,
+} from '@/lib/auth/sessionContext';
+import {
+  COOKIE_NAMES,
+  setSignedCookie,
+  verifyAndExtractCookieValue,
+} from '@/lib/utils/cookieSigner';
+import {
+  getSupabaseAdminClient,
+  NO_CACHE_HEADERS,
+} from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient(preferAnon = false) {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey = preferAnon
-    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       FALLBACK_ANON_KEY)
-    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-       process.env.SUPABASE_PUBLISHABLE_KEY ||
-       FALLBACK_ANON_KEY);
-
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function isApiKeyError(err: any): boolean {
-  const msg = String(err?.message || err || '');
-  return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
+function computeDefaultRedirect(activeRole: string): string {
+  if (activeRole === 'SUPER_ADMIN' || activeRole === 'SCHOOL_ADMIN' || activeRole === 'ADMIN') {
+    return '/admin/dashboard';
+  }
+  if (activeRole === 'TEACHER') return '/teacher';
+  if (activeRole === 'PARENT') return '/parent';
+  if (activeRole === 'STAFF') return '/admin/menu';
+  return '/parent';
 }
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    let email = parseSignedCookieClient(searchParams.get('email') || '').toLowerCase().trim();
+    const rawCookies = parseCookieHeader(request.headers.get('cookie'));
+    const rawEmailCookie = rawCookies[COOKIE_NAMES.EMAIL];
+    const rawRoleCookie = rawCookies[COOKIE_NAMES.ROLE];
+    const rawActiveCookie = rawCookies[COOKIE_NAMES.ACTIVE_ROLE];
 
-    const cookieHeader = request.headers.get('cookie') || '';
-    const cookieRoleMatch = cookieHeader.match(/suongmai_user_role=([^;]+)/);
-    const currentCookieRole = cookieRoleMatch ? parseSignedCookieClient(cookieRoleMatch[1]).trim() : '';
+    const currentCookieRole = rawRoleCookie
+      ? (await verifyAndExtractCookieValue(rawRoleCookie)) || ''
+      : '';
+    const currentSignedActive = rawActiveCookie
+      ? (await verifyAndExtractCookieValue(rawActiveCookie)) || ''
+      : '';
 
-    if (!email) {
-      const cookieEmail = cookieHeader.match(/suongmai_user_email=([^;]+)/);
-      if (cookieEmail) {
-        email = parseSignedCookieClient(cookieEmail[1]).toLowerCase().trim();
+    // 1. Identify caller strictly via signed cookies or verified Supabase Bearer JWT
+    const { ctx: existingCtx } = await getSessionContext(request);
+    let verifiedEmail = existingCtx?.email || '';
+
+    if (!verifiedEmail && rawEmailCookie) {
+      verifiedEmail =
+        (await verifyAndExtractCookieValue(rawEmailCookie))?.toLowerCase().trim() || '';
+    }
+
+    if (!verifiedEmail) {
+      const authHeader = request.headers.get('authorization') || '';
+      if (authHeader.toLowerCase().startsWith('bearer ')) {
+        const token = authHeader.slice(7).trim();
+        if (token) {
+          const { data, error } = await getSupabaseAdminClient().auth.getUser(token);
+          if (!error && data?.user?.email) {
+            verifiedEmail = data.user.email.toLowerCase().trim();
+          }
+        }
       }
     }
 
-    if (!email) {
+    if (!verifiedEmail) {
       return NextResponse.json(
-        { isApproved: false, status: 'PENDING', message: 'Email không tìm thấy' },
-        { headers: NO_CACHE_HEADERS }
-      );
-    }
-
-    // Special check for sadmin@suongmai.edu.vn
-    if (email === 'sadmin@suongmai.edu.vn') {
-      const response = NextResponse.json(
         {
-          isApproved: true,
-          status: 'ACTIVE',
-          role: 'SUPER_ADMIN',
-          roleChanged: currentCookieRole !== 'SUPER_ADMIN',
-          redirectUrl: '/admin/dashboard',
+          isApproved: false,
+          status: 'UNAUTHENTICATED',
+          message: 'Phiên đăng nhập chưa được xác thực.',
         },
-        { headers: NO_CACHE_HEADERS }
+        { status: 401, headers: NO_CACHE_HEADERS }
       );
-      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_role', 'SUPER_ADMIN', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      return response;
     }
 
-    let profile: any = null;
-    let activeClient = getSupabaseClient(false);
+    const claimedActive = currentSignedActive ? normalizeRole(currentSignedActive) : null;
+    const ctx =
+      existingCtx || (await resolveProfileAndRolesByEmail(verifiedEmail, claimedActive));
 
-    // 1. Direct DB query using Service Role / Anon Key fallback on public.profiles
-    if (activeClient) {
-      try {
-        let { data, error } = await activeClient.from('profiles').select('*').ilike('email', email).maybeSingle();
-        if (error && isApiKeyError(error)) {
-          activeClient = getSupabaseClient(true);
-          if (activeClient) {
-            const retry = await activeClient.from('profiles').select('*').ilike('email', email).maybeSingle();
-            data = retry.data;
-            error = retry.error;
-          }
-        }
-        if (!error && data) {
-          profile = data;
-        }
-      } catch (e) {}
-    }
-
-    // 2. Global in-memory cache fallback
-    if (!profile && typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
-      profile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === email);
-    }
-
-    if (!profile) {
+    if (!ctx) {
       return NextResponse.json(
         { isApproved: false, status: 'PENDING', message: 'Tài khoản chưa có trong CSDL' },
         { headers: NO_CACHE_HEADERS }
       );
     }
 
-    const isApproved = profile.approval_status === 'ACTIVE';
-    const role =
-      email === 'luciaxuan178@gmail.com' && profile.role === 'SUPER_ADMIN'
-        ? 'SCHOOL_ADMIN'
-        : (profile.role || 'PARENT');
-    const roleChanged = Boolean(currentCookieRole && currentCookieRole !== role);
+    const activeRole =
+      ctx.activeRoleInvalid || ctx.activeRole === 'GUEST'
+        ? ctx.primaryRole
+        : ctx.activeRole;
 
-    // Query linked students directly from public.student_guardians on Supabase
-    let linkedStudents: any[] = [];
-    if (activeClient && profile.id) {
-      try {
-        let { data: gData, error: gErr } = await activeClient
-          .from('student_guardians')
-          .select(
-            'id, student_id, guardian_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
-          )
-          .eq('guardian_id', profile.id);
-
-        if (gErr && isApiKeyError(gErr)) {
-          activeClient = getSupabaseClient(true);
-          if (activeClient) {
-            const retry = await activeClient
-              .from('student_guardians')
-              .select(
-                'id, student_id, guardian_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
-              )
-              .eq('guardian_id', profile.id);
-            gData = retry.data;
-            gErr = retry.error;
-          }
-        }
-
-        if (!gErr && Array.isArray(gData)) {
-          linkedStudents = gData.map((row: any) => {
-            const st = Array.isArray(row.students) ? row.students[0] : row.students;
-            const cls = st?.classes ? (Array.isArray(st.classes) ? st.classes[0] : st.classes) : null;
-            return {
-              id: row.id,
-              parent_id: row.guardian_id,
-              parent_email: email,
-              student_id: row.student_id,
-              student_name: st?.full_name || 'Học sinh Sương Mai',
-              student_code: st?.student_code || '',
-              class_name: cls?.name || st?.class_name || 'Mầm',
-              allergies: st?.allergies || 'Không',
-              avatar_url: st?.avatar_url || '',
-              relationship: row.relationship || 'NGƯỜI GIÁM HỘ',
-              is_verified: true,
-              created_at: row.created_at,
-            };
-          });
-        }
-      } catch (e) {}
-    }
-
-    if (isApproved) {
-      let redirectUrl = '/parent';
-      if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(role)) {
-        redirectUrl = '/admin/dashboard';
-      } else if (role === 'TEACHER') {
-        redirectUrl = '/teacher';
-      } else if (role === 'PARENT') {
-        redirectUrl = '/parent';
-      } else if (role === 'STAFF' || role === 'KITCHEN_STAFF') {
-        redirectUrl = '/admin/menu';
-      } else if (role === 'NURSE_STAFF') {
-        redirectUrl = '/admin/health';
-      }
-
-      const hasChildren = linkedStudents.length > 0;
+    if (ctx.approvalStatus === 'ACTIVE') {
+      const hasChildren = ctx.linkedStudentIds.length > 0 || ctx.roles.includes('PARENT');
+      const roleChanged = Boolean(currentCookieRole && currentCookieRole !== ctx.primaryRole);
+      const redirectUrl = computeDefaultRedirect(activeRole);
 
       const response = NextResponse.json(
         {
           isApproved: true,
           status: 'ACTIVE',
-          role,
+          email: ctx.email,
+          fullName: ctx.fullName,
+          avatarUrl: ctx.avatarUrl || null,
+          profileId: ctx.profileId,
+          role: ctx.primaryRole,
+          roles: ctx.roles,
+          activeRole,
           previousCookieRole: currentCookieRole || null,
           roleChanged,
           hasChildren,
-          linkedStudents,
+          assignedClassIds: ctx.assignedClassIds,
+          linkedStudents: ctx.linkedStudents.map((st) => ({
+            id: st.id,
+            student_id: st.id,
+            full_name: st.full_name,
+            student_name: st.full_name,
+            student_code: st.student_code || '',
+            class_id: st.class_id || null,
+            class_name: st.class_name || 'Mầm',
+            allergies: st.allergies || 'Không',
+            avatar_url: st.avatar_url || '',
+            relationship: st.relationship || 'Phụ huynh',
+            parent_email: ctx.email,
+            is_verified: true,
+          })),
           redirectUrl,
-          profile,
+          profile: {
+            id: ctx.profileId,
+            auth_user_id: ctx.authUserId,
+            email: ctx.email,
+            full_name: ctx.fullName,
+            avatar_url: ctx.avatarUrl,
+            role: ctx.primaryRole,
+            roles: ctx.roles,
+            active_role: activeRole,
+            approval_status: ctx.approvalStatus,
+          },
         },
         { headers: NO_CACHE_HEADERS }
       );
 
-      // Always refresh signed cookies with the latest role & status from Supabase DB
-      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_role', role, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, COOKIE_NAMES.SESSION, 'active', {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      await setSignedCookie(response, COOKIE_NAMES.EMAIL, ctx.email, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      await setSignedCookie(response, COOKIE_NAMES.ROLE, ctx.primaryRole, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      await setSignedCookie(response, COOKIE_NAMES.ACTIVE_ROLE, activeRole, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
       if (hasChildren) {
-        await setSignedCookie(response, 'suongmai_has_children', 'true', { path: '/', maxAge: 86400, sameSite: 'lax' });
+        await setSignedCookie(response, COOKIE_NAMES.HAS_CHILDREN, 'true', {
+          path: '/',
+          maxAge: 86400,
+          sameSite: 'lax',
+        });
       } else {
-        response.cookies.delete('suongmai_has_children');
+        response.cookies.delete(COOKIE_NAMES.HAS_CHILDREN);
       }
 
       return response;
@@ -221,14 +177,17 @@ export async function GET(request: Request) {
     const pendingResponse = NextResponse.json(
       {
         isApproved: false,
-        status: profile.approval_status || 'PENDING',
-        role: profile.role || 'GUEST',
-        roleChanged,
-        linkedStudents,
+        status: ctx.approvalStatus || 'PENDING',
+        role: ctx.primaryRole || 'GUEST',
+        roles: ctx.roles,
+        activeRole: 'GUEST',
+        linkedStudents: [],
       },
       { headers: NO_CACHE_HEADERS }
     );
-    await setSignedCookie(pendingResponse, 'suongmai_user_role', profile.role || 'GUEST', {
+    pendingResponse.cookies.delete(COOKIE_NAMES.SESSION);
+    pendingResponse.cookies.delete(COOKIE_NAMES.ACTIVE_ROLE);
+    await setSignedCookie(pendingResponse, COOKIE_NAMES.ROLE, ctx.primaryRole || 'GUEST', {
       path: '/',
       maxAge: 86400,
       sameSite: 'lax',
@@ -236,7 +195,7 @@ export async function GET(request: Request) {
     return pendingResponse;
   } catch (error: any) {
     return NextResponse.json(
-      { isApproved: false, status: 'PENDING', message: error.message },
+      { isApproved: false, status: 'PENDING', message: error?.message || 'Error' },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }

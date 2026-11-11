@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
 import { WeeklyMenu } from '@/lib/types/schema';
 import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
+import { requireActiveRole } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -58,8 +59,11 @@ async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     let supabase = getSupabaseClient(false);
     let menu: WeeklyMenu[] = [];
 
@@ -148,6 +152,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const incomingMenu = body.menu;
 

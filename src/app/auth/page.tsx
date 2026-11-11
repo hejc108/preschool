@@ -39,14 +39,21 @@ function AuthContent() {
       }
     };
 
-    const processUserRouting = async (userEmail: string, fullName: string = '', avatarUrl: string = '') => {
+    const processUserRouting = async (
+      userEmail: string,
+      fullName: string = '',
+      avatarUrl: string = '',
+      accessToken: string = ''
+    ) => {
       const cleanEmail = userEmail.toLowerCase().trim();
 
-      // 1. Tự động ghi nhận/đồng bộ profile vào Supabase DB qua Service Role API
       try {
         await fetch('/api/users/approvals', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
           body: JSON.stringify({
             email: cleanEmail,
             full_name: fullName || cleanEmail.split('@')[0],
@@ -57,17 +64,19 @@ function AuthContent() {
         console.error('Lỗi tự động đồng bộ profile:', err);
       }
 
-      // 2. Kiểm tra live status từ CSDL để biết tài khoản đã được duyệt chưa và vai trò là gì
       try {
         const res = await fetch('/api/auth/refresh-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ email: cleanEmail, access_token: accessToken }),
         });
         const refreshData = await res.json();
 
         if (refreshData.success && refreshData.isApproved) {
-          const targetRole = refreshData.role || 'PARENT';
+          const targetRole = refreshData.activeRole || refreshData.role || 'PARENT';
           let targetUrl = refreshData.redirectUrl || '/parent';
           if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
             targetUrl = '/admin/dashboard';
@@ -75,27 +84,30 @@ function AuthContent() {
             targetUrl = '/teacher';
           } else if (targetRole === 'PARENT') {
             targetUrl = '/parent';
-          } else if (targetRole === 'KITCHEN_STAFF') {
+          } else if (targetRole === 'STAFF') {
             targetUrl = '/admin/menu';
-          } else if (targetRole === 'NURSE_STAFF') {
-            targetUrl = '/admin/health';
           }
 
           if (typeof window !== 'undefined') {
             localStorage.setItem(
               'suongmai_auth_user',
-              JSON.stringify({ email: cleanEmail, role: targetRole, authenticated: true, timestamp: Date.now() })
+              JSON.stringify({
+                email: cleanEmail,
+                role: targetRole,
+                roles: refreshData.roles || [targetRole],
+                authenticated: true,
+                timestamp: Date.now(),
+              })
             );
           }
 
           window.location.replace(targetUrl);
           return;
         } else {
-          // Tài khoản chưa được duyệt -> Chuyển đến màn hình chờ duyệt
           window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
           return;
         }
-      } catch (err) {
+      } catch {
         window.location.replace(`/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`);
       }
     };
@@ -108,14 +120,11 @@ function AuthContent() {
       const params = new URLSearchParams(search);
       const code = params.get('code');
 
-      // 1. Xử lý khi URL có query parameter ?code=... (PKCE OAuth Flow)
       if (code) {
         setLoading(true);
         try {
-          // Quy đổi PKCE code lấy Session chính thức từ Supabase Client
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
-            console.error('[PKCE EXCHANGE ERROR]:', error.message);
             setAuthError(error.message);
             window.history.replaceState({}, '', `/auth?error=${encodeURIComponent(error.message)}`);
             setLoading(false);
@@ -123,18 +132,37 @@ function AuthContent() {
           }
 
           let userEmail = data?.session?.user?.email || data?.user?.email;
-          let fullName = data?.session?.user?.user_metadata?.full_name || data?.session?.user?.user_metadata?.name || data?.user?.user_metadata?.full_name || '';
-          let avatarUrl = data?.session?.user?.user_metadata?.avatar_url || data?.session?.user?.user_metadata?.picture || data?.user?.user_metadata?.avatar_url || '';
+          let fullName =
+            data?.session?.user?.user_metadata?.full_name ||
+            data?.session?.user?.user_metadata?.name ||
+            data?.user?.user_metadata?.full_name ||
+            '';
+          let avatarUrl =
+            data?.session?.user?.user_metadata?.avatar_url ||
+            data?.session?.user?.user_metadata?.picture ||
+            data?.user?.user_metadata?.avatar_url ||
+            '';
+          let accessToken = data?.session?.access_token || '';
 
-          if (!userEmail) {
+          if (!userEmail || !accessToken) {
             const sessionRes = await supabase.auth.getSession();
-            userEmail = sessionRes.data?.session?.user?.email;
-            fullName = sessionRes.data?.session?.user?.user_metadata?.full_name || sessionRes.data?.session?.user?.user_metadata?.name || userEmail?.split('@')[0] || '';
-            avatarUrl = sessionRes.data?.session?.user?.user_metadata?.avatar_url || sessionRes.data?.session?.user?.user_metadata?.picture || '';
+            userEmail = userEmail || sessionRes.data?.session?.user?.email;
+            fullName =
+              fullName ||
+              sessionRes.data?.session?.user?.user_metadata?.full_name ||
+              sessionRes.data?.session?.user?.user_metadata?.name ||
+              userEmail?.split('@')[0] ||
+              '';
+            avatarUrl =
+              avatarUrl ||
+              sessionRes.data?.session?.user?.user_metadata?.avatar_url ||
+              sessionRes.data?.session?.user?.user_metadata?.picture ||
+              '';
+            accessToken = accessToken || sessionRes.data?.session?.access_token || '';
           }
 
           if (userEmail) {
-            await processUserRouting(userEmail, fullName, avatarUrl);
+            await processUserRouting(userEmail, fullName, avatarUrl, accessToken);
             return;
           } else {
             setAuthError('Không xác định được email từ mã đăng nhập');
@@ -143,8 +171,7 @@ function AuthContent() {
             return;
           }
         } catch (err: any) {
-          console.error('[AUTH RUNTIME CRASH]:', err);
-          setAuthError(err.message || 'Lỗi runtime khi xử lý xác thực');
+          setAuthError(err?.message || 'Lỗi runtime khi xử lý xác thực');
           window.history.replaceState({}, '', '/auth');
           setLoading(false);
           return;
@@ -153,7 +180,6 @@ function AuthContent() {
         }
       }
 
-      // 2. Xử lý khi URL có chứa Hash (#access_token=... hoặc #id_token=...) từ Implicit OAuth Flow
       if (hash.includes('access_token=') || hash.includes('id_token=')) {
         setLoading(true);
         let token = '';
@@ -167,10 +193,15 @@ function AuthContent() {
           const payload = parseJwt(token);
           const userEmail = payload?.email;
           if (userEmail) {
-            const fullName = payload.user_metadata?.full_name || payload.user_metadata?.name || payload.name || userEmail.split('@')[0];
-            const avatarUrl = payload.user_metadata?.avatar_url || payload.user_metadata?.picture || '';
+            const fullName =
+              payload.user_metadata?.full_name ||
+              payload.user_metadata?.name ||
+              payload.name ||
+              userEmail.split('@')[0];
+            const avatarUrl =
+              payload.user_metadata?.avatar_url || payload.user_metadata?.picture || '';
 
-            await processUserRouting(userEmail, fullName, avatarUrl);
+            await processUserRouting(userEmail, fullName, avatarUrl, token);
             return;
           }
         }
@@ -183,7 +214,7 @@ function AuthContent() {
         const fullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || userEmail.split('@')[0];
         const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || '';
 
-        await processUserRouting(userEmail, fullName, avatarUrl);
+        await processUserRouting(userEmail, fullName, avatarUrl, session.access_token || '');
       }
     });
 
@@ -193,58 +224,6 @@ function AuthContent() {
       subscription.unsubscribe();
     };
   }, []);
-
-  const processGoogleLogin = async (emailToLogin: string = '') => {
-    let cleanEmail = emailToLogin.toLowerCase().trim();
-    if (!cleanEmail) {
-      const input = typeof window !== 'undefined' ? prompt('Nhập email Google của bạn:') : null;
-      if (!input) return;
-      cleanEmail = input.toLowerCase().trim();
-    }
-    setLoading(true);
-
-    try {
-      await fetch('/api/users/approvals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      }).catch(() => {});
-
-      const res = await fetch('/api/auth/refresh-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-      const data = await res.json();
-
-      if (data.success && data.isApproved) {
-        const targetRole = data.role || 'PARENT';
-        let targetUrl = data.redirectUrl || '/parent';
-        if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
-          targetUrl = '/admin/dashboard';
-        } else if (targetRole === 'TEACHER') {
-          targetUrl = '/teacher';
-        } else if (targetRole === 'PARENT') {
-          targetUrl = '/parent';
-        }
-
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(
-            'suongmai_auth_user',
-            JSON.stringify({ email: cleanEmail, role: targetRole, authenticated: true, timestamp: Date.now() })
-          );
-        }
-
-        window.location.href = targetUrl;
-      } else {
-        window.location.href = `/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
-      }
-    } catch (err: any) {
-      window.location.href = `/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -279,12 +258,10 @@ function AuthContent() {
           errMsg = 'Khóa API Supabase không hợp lệ. Vui lòng kiểm tra giá trị SUPABASE_ANON_KEY hoặc SUPABASE_SERVICE_ROLE_KEY trên Vercel.';
         }
         setAuthError(errMsg);
-        await processGoogleLogin();
       }
     } catch (err: any) {
       console.error('OAuth exception:', err);
       setAuthError(err.message || 'Lỗi khởi tạo đăng nhập Google');
-      await processGoogleLogin();
     } finally {
       setLoading(false);
     }

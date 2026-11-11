@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Users,
   UserCheck,
-  Shield,
   Crown,
   Search,
   CheckCircle2,
@@ -14,13 +13,22 @@ import {
   Download,
   Filter,
   Settings2,
-  RefreshCw,
+  Baby,
+  SlidersHorizontal,
+  AlertCircle,
 } from 'lucide-react';
-import { Profile } from '@/lib/types/schema';
+import { Profile, Student, UserRole } from '@/lib/types/schema';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import { DEFAULT_CLASSES_LIST } from '@/lib/constants/classes';
+import { RoleBadges, normalizeDisplayRoles } from '@/components/admin/RoleBadges';
+import { MultiRoleEditorModal } from '@/components/admin/MultiRoleEditorModal';
 
 export default function UsersManagementPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>(DEFAULT_CLASSES_LIST);
+
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
@@ -28,11 +36,41 @@ export default function UsersManagementPage() {
   const [updatingSetting, setUpdatingSetting] = useState<boolean>(false);
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
-  const loadData = async () => {
+  const [editingRolesUser, setEditingRolesUser] = useState<Profile | null>(null);
+  const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const loadStudentsAndClasses = useCallback(async () => {
+    setLoadingStudents(true);
+    try {
+      const [sRes, aRes] = await Promise.all([
+        fetch('/api/admin/students', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/admin/teacher-assignments', { cache: 'no-store' }).catch(() => null),
+      ]);
+      if (sRes && sRes.ok) {
+        const sJson = await sRes.json().catch(() => ({}));
+        const list = Array.isArray(sJson) ? sJson : sJson.students || sJson.data || [];
+        if (Array.isArray(list)) setStudents(list);
+      }
+      if (aRes && aRes.ok) {
+        const aJson = await aRes.json().catch(() => ({}));
+        if (Array.isArray(aJson.classes) && aJson.classes.length > 0) {
+          setClasses(aJson.classes);
+        }
+      }
+    } finally {
+      setLoadingStudents(false);
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch live users from Server API Route (running Service Role with fallback)
-      const res = await fetch('/api/admin/users');
+      const res = await fetch('/api/admin/users', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.users) {
@@ -43,12 +81,13 @@ export default function UsersManagementPage() {
         }
       }
 
-      // 2. Double check system settings
-      const resSettings = await fetch('/api/admin/system-settings');
+      const resSettings = await fetch('/api/admin/system-settings', { cache: 'no-store' });
       if (resSettings.ok) {
         const jsonSettings = await resSettings.json();
         if (jsonSettings.settings) {
-          setGlobalAllowTempStaff(Boolean(jsonSettings.settings.allow_school_admin_view_temporary_staff));
+          setGlobalAllowTempStaff(
+            Boolean(jsonSettings.settings.allow_school_admin_view_temporary_staff)
+          );
         }
       }
     } catch (err) {
@@ -56,10 +95,11 @@ export default function UsersManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
+    loadStudentsAndClasses();
 
     if (typeof window !== 'undefined') {
       let role = '';
@@ -70,7 +110,7 @@ export default function UsersManagementPage() {
           const parsed = JSON.parse(savedUser);
           role = parsed.role || '';
           email = (parsed.email || '').toLowerCase().trim();
-        } catch (e) {}
+        } catch {}
       }
       const matchRole = document.cookie.match(/suongmai_user_role=([^;]+)/);
       if (matchRole) role = parseSignedCookieClient(matchRole[1]);
@@ -81,11 +121,10 @@ export default function UsersManagementPage() {
       const isSuper =
         cleanEmail !== 'hejc108@gmail.com' &&
         cleanEmail !== 'luciaxuan178@gmail.com' &&
-        (role === 'SUPER_ADMIN' ||
-          cleanEmail === 'sadmin@suongmai.edu.vn');
+        (role === 'SUPER_ADMIN' || cleanEmail === 'sadmin@suongmai.edu.vn');
       setIsSuperAdmin(isSuper);
     }
-  }, []);
+  }, [loadData, loadStudentsAndClasses]);
 
   // Super Admin: Bật/Tắt cờ cấu hình toàn trường lưu vào CSDL
   const handleToggleGlobalTempStaff = async (newValue: boolean) => {
@@ -117,46 +156,72 @@ export default function UsersManagementPage() {
   };
 
   const filtered = profiles.filter((p) => {
-    // QUY TẮC CẤU HÌNH TẬP TRUNG TOÀN TRƯỜNG:
-    // - SUPER_ADMIN: Luôn xem được đầy đủ 15 nhân sự (gồm cả thời vụ).
-    // - SCHOOL_ADMIN / ADMIN thường:
-    //   + Nếu Super Admin BẬT: Thấy toàn bộ nhân sự (gồm cả giáo viên thời vụ).
-    //   + Nếu Super Admin TẮT: Tự động ẩn giáo viên thời vụ, chỉ thấy nhân sự chính thức.
     if (!isSuperAdmin && !globalAllowTempStaff) {
       if (p.is_temporary) return false;
     }
 
+    const userRoles = normalizeDisplayRoles(p.roles, p.role);
+
     if (roleFilter !== 'ALL') {
       if (roleFilter === 'STAFF_TEACHER') {
-        const isPersonnel = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN', 'TEACHER', 'STAFF', 'KITCHEN_STAFF', 'NURSE_STAFF'].includes(p.role);
-        if (!isPersonnel) return false;
+        const personnelRoles: UserRole[] = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN', 'TEACHER', 'STAFF'];
+        if (!userRoles.some((r) => personnelRoles.includes(r))) return false;
       } else if (roleFilter === 'PARENT') {
-        if (p.role !== 'PARENT') return false;
+        if (!userRoles.includes('PARENT')) return false;
+      } else if (roleFilter === 'DUAL') {
+        if (!(userRoles.includes('TEACHER') && userRoles.includes('PARENT'))) return false;
       }
     }
 
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    const roleMatch = userRoles.some((r) => r.toLowerCase().includes(q));
+    const childMatch = (p.linked_students || []).some((ls) =>
+      ls.full_name.toLowerCase().includes(q)
+    );
     return (
-      p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.email.toLowerCase().includes(search.toLowerCase()) ||
-      (p.role && p.role.toLowerCase().includes(search.toLowerCase()))
+      p.full_name.toLowerCase().includes(q) ||
+      p.email.toLowerCase().includes(q) ||
+      roleMatch ||
+      childMatch
     );
   });
 
   const handleExportStaffReport = () => {
-    const staffProfiles = filtered.filter((p) =>
-      ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN', 'TEACHER', 'STAFF', 'KITCHEN_STAFF', 'NURSE_STAFF'].includes(p.role)
-    );
+    const staffProfiles = filtered.filter((p) => {
+      const userRoles = normalizeDisplayRoles(p.roles, p.role);
+      return userRoles.some((r) =>
+        ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN', 'TEACHER', 'STAFF'].includes(r)
+      );
+    });
 
-    const headers = ['STT', 'Họ Và Tên', 'Email', 'Vai Trò', 'Tính Chất Hợp Đồng', 'Lớp Phân Công', 'Trạng Thái Duyệt'];
-    const rows = staffProfiles.map((p, idx) => [
-      idx + 1,
-      `"${p.full_name}"`,
-      `"${p.email}"`,
-      `"${p.role}"`,
-      `"${p.is_temporary ? 'Thời vụ' : 'Chính thức'}"`,
-      `"${p.assigned_class_name || '—'}"`,
-      `"${p.approval_status === 'ACTIVE' ? 'Đã duyệt' : 'Chờ duyệt'}"`,
-    ]);
+    const headers = [
+      'STT',
+      'Họ Và Tên',
+      'Email',
+      'Các Vai Trò',
+      'Tính Chất Hợp Đồng',
+      'Lớp Phân Công',
+      'Con Đang Học',
+      'Trạng Thái Duyệt',
+    ];
+    const rows = staffProfiles.map((p, idx) => {
+      const userRoles = normalizeDisplayRoles(p.roles, p.role);
+      const childText =
+        (p.linked_students || [])
+          .map((c) => `${c.full_name}${c.class_name ? ` (${c.class_name})` : ''}`)
+          .join('; ') || '—';
+      return [
+        idx + 1,
+        `"${p.full_name}"`,
+        `"${p.email}"`,
+        `"${userRoles.join(' + ')}"`,
+        `"${p.is_temporary ? 'Thời vụ' : 'Chính thức'}"`,
+        `"${p.assigned_class_name || '—'}"`,
+        `"${childText}"`,
+        `"${p.approval_status === 'ACTIVE' ? 'Đã duyệt' : 'Chờ duyệt'}"`,
+      ];
+    });
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -172,20 +237,39 @@ export default function UsersManagementPage() {
 
   return (
     <div className="space-y-6 font-sans">
+      {toast && (
+        <div
+          className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg border text-sm font-semibold flex items-center gap-2 ${
+            toast.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+          )}
+          <span>{toast.text}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-rose-50 border border-rose-200 rounded-pill text-primary-800 text-xs font-bold mb-2">
             <Users className="w-3.5 h-3.5 text-primary-700" />
-            <span>Quản lý tài khoản</span>
+            <span>Quản lý tài khoản & Đa vai trò</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">Danh sách tất cả người dùng trong hệ thống</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">
+            Danh sách người dùng trong hệ thống
+          </h1>
           <p className="text-slate-500 text-sm mt-1">
             Tổng quan tài khoản Super Admin, Quản trị trường, Giáo viên, Cán bộ Bếp/Y tế & Phụ huynh ({filtered.length} tài khoản).
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleExportStaffReport}
             className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-pill shadow-sm transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
@@ -197,7 +281,7 @@ export default function UsersManagementPage() {
 
           <Link
             href="/admin/users/approvals"
-            className="px-4.5 py-2.5 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold text-xs rounded-pill shadow-sm transition-all flex items-center gap-2 self-start sm:self-auto active:scale-95"
+            className="px-4.5 py-2.5 bg-[#FB8C00] hover:bg-[#F57C00] text-white font-bold text-xs rounded-pill shadow-sm transition-all flex items-center gap-2 active:scale-95"
           >
             <UserCheck className="w-4 h-4" />
             <span>Duyệt phân quyền</span>
@@ -215,7 +299,7 @@ export default function UsersManagementPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên, email, vai trò..."
+              placeholder="Tìm theo tên, email, vai trò hoặc tên bé..."
               className="w-full bg-slate-50 border border-slate-200 focus:border-sky-500 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-800 placeholder-slate-400 focus:outline-none transition-colors"
             />
           </div>
@@ -230,6 +314,7 @@ export default function UsersManagementPage() {
               <option value="ALL">Tất cả đối tượng</option>
               <option value="STAFF_TEACHER">Cán bộ & Giáo viên (GVNV)</option>
               <option value="PARENT">Phụ huynh</option>
+              <option value="DUAL">Đa vai trò (Giáo viên + Phụ huynh)</option>
             </select>
           </div>
         </div>
@@ -238,7 +323,9 @@ export default function UsersManagementPage() {
         {isSuperAdmin && (
           <div className="flex items-center gap-2.5 bg-amber-50/90 border border-amber-300 rounded-pill px-4 py-2 text-xs text-amber-900 font-bold shadow-2xs select-none">
             <Settings2 className="w-4 h-4 text-amber-700 shrink-0" />
-            <span className="text-[11px] uppercase tracking-wider text-amber-800 hidden sm:inline">Cấu hình toàn trường:</span>
+            <span className="text-[11px] uppercase tracking-wider text-amber-800 hidden sm:inline">
+              Cấu hình toàn trường:
+            </span>
             <span>Cho phép Quản trị trường xem GV thời vụ</span>
             <button
               type="button"
@@ -276,78 +363,139 @@ export default function UsersManagementPage() {
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4">Họ tên & Email</th>
                   <th className="py-3.5 px-4">Số điện thoại</th>
-                  <th className="py-3.5 px-4">Vai trò (Role)</th>
-                  <th className="py-3.5 px-4">Trạng thái duyệt</th>
-                  <th className="py-3.5 px-4 text-right">Lớp phụ trách / Ngày tạo</th>
+                  <th className="py-3.5 px-4">Vai trò (Multi-Role)</th>
+                  <th className="py-3.5 px-4">Trạng thái</th>
+                  <th className="py-3.5 px-4">Lớp phụ trách / Con đang học</th>
+                  <th className="py-3.5 px-4 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-xs">
-                {filtered.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <span>{p.full_name}</span>
-                        {p.role === 'SUPER_ADMIN' && (
-                          <span title="Super Admin">
-                            <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          </span>
-                        )}
-                        {p.is_temporary && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            Thời vụ
-                          </span>
-                        )}
-                      </div>
-                      <div className="font-mono text-[11px] text-slate-400 font-normal">{p.email}</div>
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
-                      {p.phone || <span className="text-slate-300">—</span>}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[11px] font-bold">
-                        {p.role || 'GUEST'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {p.approval_status === 'ACTIVE' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Đã duyệt</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                          <XCircle className="w-3.5 h-3.5 text-amber-600" />
-                          <span>{p.approval_status || 'PENDING'}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {p.assigned_class_name ? (
-                        <div className="flex flex-wrap justify-end gap-1">
-                          {p.assigned_class_name.split(',').map((cName, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-md text-[10px] font-bold"
-                            >
-                              {cName.trim()}
+                {filtered.map((p) => {
+                  const linkedStudents = p.linked_students || [];
+                  const isSadminRow =
+                    p.role === 'SUPER_ADMIN' || p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn';
+
+                  return (
+                    <tr key={p.id || p.email} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span>{p.full_name}</span>
+                          {isSadminRow && (
+                            <span title="Super Admin">
+                              <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                             </span>
-                          ))}
+                          )}
+                          {p.is_temporary && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              Thời vụ
+                            </span>
+                          )}
                         </div>
-                      ) : p.created_at ? (
-                        <span className="font-mono text-[11px] text-slate-400">
-                          {new Date(p.created_at).toLocaleDateString('vi-VN')}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        <div className="font-mono text-[11px] text-slate-400 font-normal">{p.email}</div>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-600">
+                        {p.phone || <span className="text-slate-300">—</span>}
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <RoleBadges roles={p.roles} fallbackRole={p.role} compact />
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        {p.approval_status === 'ACTIVE' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Đã duyệt</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            <XCircle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>{p.approval_status || 'PENDING'}</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col gap-1.5">
+                          {p.assigned_class_name && (
+                            <div className="flex flex-wrap gap-1">
+                              {p.assigned_class_name.split(',').map((cName, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-md text-[10px] font-bold"
+                                >
+                                  GV lớp {cName.trim()}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {linkedStudents.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {linkedStudents.map((ls) => (
+                                <Link
+                                  key={ls.student_id}
+                                  href={`/admin/students/${ls.student_id}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-md text-[10px] font-bold transition-colors"
+                                >
+                                  <Baby className="w-3 h-3 text-emerald-600" />
+                                  <span>
+                                    {ls.full_name}
+                                    {ls.class_name ? ` (${ls.class_name})` : ''}
+                                  </span>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+
+                          {!p.assigned_class_name && linkedStudents.length === 0 && (
+                            <span className="font-mono text-[11px] text-slate-400">
+                              {p.created_at ? new Date(p.created_at).toLocaleDateString('vi-VN') : '—'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        {isSadminRow ? (
+                          <span className="text-[11px] text-slate-400 italic">Cố định</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingRolesUser(p)}
+                            className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-xl text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <span>Phân quyền</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Modal: Phân quyền Đa vai trò */}
+      {editingRolesUser && (
+        <MultiRoleEditorModal
+          user={editingRolesUser}
+          isSuperAdmin={isSuperAdmin}
+          students={students}
+          loadingStudents={loadingStudents}
+          availableClasses={classes}
+          onClose={() => setEditingRolesUser(null)}
+          onSaved={async (msg) => {
+            await loadData();
+            showToast(msg, 'success');
+          }}
+          onError={(errMsg) => showToast(errMsg, 'error')}
+        />
+      )}
     </div>
   );
 }

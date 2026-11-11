@@ -1,18 +1,76 @@
 // TypeScript schema definitions matching DATABASE_SCHEMA_SUPABASE_v2.0.sql (Section 2.4 DDL Aligned)
 
 export type UserRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'ADMIN' | 'TEACHER' | 'STAFF' | 'PARENT' | 'GUEST';
+export type AssignableRole = 'SUPER_ADMIN' | 'SCHOOL_ADMIN' | 'TEACHER' | 'PARENT' | 'STAFF';
+export type NotificationChannel = 'TEACHER' | 'PARENT';
 
 export interface Profile {
   id: string;
+  auth_user_id?: string | null;
   full_name: string;
   email: string;
   role: UserRole;
+  roles?: UserRole[];
+  active_role?: UserRole;
   phone?: string;
   avatar_url?: string;
   approval_status?: 'PENDING' | 'ACTIVE' | 'REJECTED';
   assigned_class_id?: string;
   assigned_class_name?: string;
+  assigned_classes?: Array<{ class_id: string; class_name: string }>;
+  linked_students?: Array<{
+    student_id: string;
+    full_name: string;
+    student_code?: string;
+    class_name?: string;
+    relationship?: string;
+  }>;
   is_temporary?: boolean;
+  created_at?: string;
+}
+
+export interface UserRoleRecord {
+  user_id: string;
+  role_name: AssignableRole;
+  created_at?: string;
+}
+
+export interface StudentParentLink {
+  student_id: string;
+  parent_user_id: string;
+  relationship: string;
+  is_primary: boolean;
+  created_at?: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  target_role: 'ALL' | 'TEACHER' | 'PARENT';
+  notification_channel: NotificationChannel;
+  class_id?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  is_read?: boolean;
+  read_at?: string | null;
+}
+
+export interface AnnouncementRead {
+  announcement_id: string;
+  user_id: string;
+  role_context: AssignableRole;
+  read_at: string;
+}
+
+export interface PushNotificationPayload {
+  id?: string;
+  title: string;
+  body: string;
+  notification_channel: NotificationChannel;
+  student_id?: string;
+  class_id?: string;
+  url?: string;
   created_at?: string;
 }
 

@@ -1,158 +1,170 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
-import { checkUserApprovalStatus } from '@/lib/utils/approvalHelper';
+import {
+  normalizeRole,
+  parseCookieHeader,
+  resolveProfileAndRolesByEmail,
+} from '@/lib/auth/sessionContext';
+import {
+  COOKIE_NAMES,
+  setSignedCookie,
+  verifyAndExtractCookieValue,
+} from '@/lib/utils/cookieSigner';
+import {
+  getSupabaseAdminClient,
+  NO_CACHE_HEADERS,
+} from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient(preferAnon = false) {
-  const url =
-    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co')
-      .trim()
-      .replace(/^["']|["']$/g, '');
-  const rawKey = preferAnon
-    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || FALLBACK_ANON_KEY)
-    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-       process.env.SUPABASE_PUBLISHABLE_KEY ||
-       FALLBACK_ANON_KEY);
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function isApiKeyError(err: any): boolean {
-  const msg = String(err?.message || err || '');
-  return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
+function computeDefaultRedirect(role: string): string {
+  if (role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN' || role === 'ADMIN') {
+    return '/admin/dashboard';
+  }
+  if (role === 'TEACHER') return '/teacher';
+  if (role === 'STAFF') return '/admin/menu';
+  return '/parent';
 }
 
 export async function POST(request: Request) {
   try {
-    let email = '';
-    try {
-      const body = await request.json();
-      email = parseSignedCookieClient(body.email || '').toLowerCase().trim();
-    } catch (e) {}
+    const rawCookies = parseCookieHeader(request.headers.get('cookie'));
+    const body = await request.json().catch(() => ({}));
 
-    if (!email) {
-      const cookieEmail = request.headers.get('cookie')?.match(/suongmai_user_email=([^;]+)/);
+    // Verify caller identity strictly via Supabase Bearer token OR signed email cookie
+    let verifiedEmail = '';
+    const authHeader = request.headers.get('authorization') || '';
+    const accessToken = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : typeof body?.access_token === 'string'
+        ? body.access_token.trim()
+        : '';
+
+    if (accessToken) {
+      const { data, error } = await getSupabaseAdminClient().auth.getUser(accessToken);
+      if (!error && data?.user?.email) {
+        verifiedEmail = data.user.email.toLowerCase().trim();
+      }
+    }
+
+    if (!verifiedEmail && rawCookies[COOKIE_NAMES.EMAIL]) {
+      const cookieEmail = await verifyAndExtractCookieValue(rawCookies[COOKIE_NAMES.EMAIL]);
       if (cookieEmail) {
-        email = parseSignedCookieClient(cookieEmail[1]).toLowerCase().trim();
+        verifiedEmail = cookieEmail.toLowerCase().trim();
       }
     }
 
-    if (!email) {
-      return NextResponse.json({ success: false, message: 'Email là bắt buộc' }, { status: 400 });
+    if (!verifiedEmail) {
+      return NextResponse.json(
+        { success: false, message: 'Thiếu token xác thực Google hoặc phiên đăng nhập hợp lệ.' },
+        { status: 401, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const isSadmin = email === 'sadmin@suongmai.edu.vn';
-    if (isSadmin) {
-      const response = NextResponse.json({
-        success: true,
-        isApproved: true,
-        role: 'SUPER_ADMIN',
-        redirectUrl: '/admin/dashboard',
+    const rawActive = rawCookies[COOKIE_NAMES.ACTIVE_ROLE];
+    const verifiedActive = rawActive ? await verifyAndExtractCookieValue(rawActive) : null;
+    const requestedActive = verifiedActive ? normalizeRole(verifiedActive) : null;
+
+    const ctx = await resolveProfileAndRolesByEmail(verifiedEmail, requestedActive);
+    if (!ctx) {
+      return NextResponse.json(
+        {
+          success: true,
+          isApproved: false,
+          status: 'PENDING',
+          message: 'Tài khoản chưa được khởi tạo',
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    if (ctx.approvalStatus === 'ACTIVE') {
+      const activeRole =
+        ctx.activeRoleInvalid || ctx.activeRole === 'GUEST'
+          ? ctx.primaryRole
+          : ctx.activeRole;
+      const hasChildren = ctx.linkedStudentIds.length > 0 || ctx.roles.includes('PARENT');
+      const redirectUrl = computeDefaultRedirect(activeRole);
+
+      const response = NextResponse.json(
+        {
+          success: true,
+          isApproved: true,
+          role: ctx.primaryRole,
+          roles: ctx.roles,
+          activeRole,
+          hasChildren,
+          redirectUrl,
+          profile: {
+            id: ctx.profileId,
+            email: ctx.email,
+            full_name: ctx.fullName,
+            role: ctx.primaryRole,
+            roles: ctx.roles,
+            active_role: activeRole,
+            approval_status: ctx.approvalStatus,
+          },
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
+
+      await setSignedCookie(response, COOKIE_NAMES.SESSION, 'active', {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
       });
-      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_role', 'SUPER_ADMIN', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      return response;
-    }
-
-    let profile: any = null;
-
-    // 1. Query Supabase PostgreSQL DB
-    let supabase = getSupabaseClient(false);
-    if (supabase) {
-      try {
-        let { data, error } = await supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
-        if (error && isApiKeyError(error)) {
-          supabase = getSupabaseClient(true);
-          if (supabase) {
-            const retry = await supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
-            data = retry.data;
-            error = retry.error;
-          }
-        }
-        if (!error && data) {
-          profile = data;
-        }
-      } catch (e) {}
-    }
-
-    // 2. Query in-memory / global profile fallback if DB fetch returned empty
-    if (!profile && typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
-      profile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === email);
-    }
-
-    if (!profile) {
-      return NextResponse.json({ success: true, isApproved: false, status: 'PENDING', message: 'Tài khoản chưa được khởi tạo' });
-    }
-
-    if (profile.approval_status === 'ACTIVE') {
-      const targetRole =
-        email === 'luciaxuan178@gmail.com' && profile.role === 'SUPER_ADMIN'
-          ? 'SCHOOL_ADMIN'
-          : (profile.role || 'PARENT');
-      let redirectUrl = '/parent';
-      if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(targetRole)) {
-        redirectUrl = '/admin/dashboard';
-      } else if (targetRole === 'TEACHER') {
-        redirectUrl = '/teacher';
-      }
-
-      const status = checkUserApprovalStatus(email);
-      const hasChildren = status.isParentVerified || (status.linkedStudents && status.linkedStudents.length > 0);
-
-      const response = NextResponse.json({
-        success: true,
-        isApproved: true,
-        role: targetRole,
-        hasChildren,
-        redirectUrl,
-        profile,
+      await setSignedCookie(response, COOKIE_NAMES.EMAIL, ctx.email, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
       });
-
-      await setSignedCookie(response, 'suongmai_session', 'active', { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_email', email, { path: '/', maxAge: 86400, sameSite: 'lax' });
-      await setSignedCookie(response, 'suongmai_user_role', targetRole, { path: '/', maxAge: 86400, sameSite: 'lax' });
+      await setSignedCookie(response, COOKIE_NAMES.ROLE, ctx.primaryRole, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      await setSignedCookie(response, COOKIE_NAMES.ACTIVE_ROLE, activeRole, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
       if (hasChildren) {
-        await setSignedCookie(response, 'suongmai_has_children', 'true', { path: '/', maxAge: 86400, sameSite: 'lax' });
+        await setSignedCookie(response, COOKIE_NAMES.HAS_CHILDREN, 'true', {
+          path: '/',
+          maxAge: 86400,
+          sameSite: 'lax',
+        });
       } else {
-        response.cookies.delete('suongmai_has_children');
+        response.cookies.delete(COOKIE_NAMES.HAS_CHILDREN);
       }
 
       return response;
     }
 
-    if (profile.approval_status === 'REJECTED') {
-      const response = NextResponse.json({
+    const response = NextResponse.json(
+      {
         success: true,
         isApproved: false,
-        status: 'REJECTED',
-        message: 'Yêu cầu truy cập của bạn đã bị từ chối',
-      });
-      response.cookies.delete('suongmai_session');
-      return response;
-    }
-
-    const response = NextResponse.json({
-      success: true,
-      isApproved: false,
-      status: 'PENDING',
-      message: 'Tài khoản của bạn đang chờ phê duyệt',
+        status: ctx.approvalStatus,
+        message:
+          ctx.approvalStatus === 'REJECTED'
+            ? 'Yêu cầu truy cập của bạn đã bị từ chối'
+            : 'Tài khoản của bạn đang chờ phê duyệt',
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
+    response.cookies.delete(COOKIE_NAMES.SESSION);
+    response.cookies.delete(COOKIE_NAMES.ACTIVE_ROLE);
+    await setSignedCookie(response, COOKIE_NAMES.EMAIL, ctx.email, {
+      path: '/',
+      maxAge: 86400,
+      sameSite: 'lax',
     });
-    response.cookies.delete('suongmai_session');
     return response;
   } catch (error: any) {
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error?.message || 'Internal Server Error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }

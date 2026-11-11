@@ -106,8 +106,28 @@ export async function setSignedCookie(
   response.cookies.set(name, signedValue, options);
 }
 
+export const COOKIE_NAMES = {
+  SESSION: 'suongmai_session',
+  EMAIL: 'suongmai_user_email',
+  ROLE: 'suongmai_user_role',
+  ACTIVE_ROLE: 'suongmai_active_role',
+  USERNAME: 'suongmai_username',
+  HAS_CHILDREN: 'suongmai_has_children',
+} as const;
+
+export const ALL_AUTH_COOKIES: string[] = [
+  COOKIE_NAMES.SESSION,
+  COOKIE_NAMES.EMAIL,
+  COOKIE_NAMES.ROLE,
+  COOKIE_NAMES.ACTIVE_ROLE,
+  COOKIE_NAMES.USERNAME,
+  COOKIE_NAMES.HAS_CHILDREN,
+];
+
 /**
- * Client-side safe helper to extract the raw value from a cookie string if signed.
+ * Client-side display helper to strip signature suffix from a signed cookie value.
+ * SECURITY WARNING: Never trust this on the server for authentication or RBAC;
+ * always call verifyAndExtractCookieValue() in API routes and Middleware.
  */
 export function parseSignedCookieClient(cookieValue: string | undefined | null): string {
   if (!cookieValue) return '';

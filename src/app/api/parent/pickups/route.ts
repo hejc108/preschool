@@ -1,37 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdminClient, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import {
+  assertParentStudentAccess,
+  assertTeacherStudentAccess,
+  requireActiveRole,
+} from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient() {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    FALLBACK_ANON_KEY;
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
 
 function normalizePickup(row: any) {
   return {
@@ -41,16 +17,47 @@ function normalizePickup(row: any) {
     relationship: row.relationship,
     phone: row.phone,
     avatar_url: row.avatar_url || '',
-    is_active: row.is_active !== undefined ? Boolean(row.is_active) : (row.approval_status !== 'REJECTED'),
+    is_active: row.is_active !== undefined ? Boolean(row.is_active) : row.approval_status !== 'REJECTED',
     approval_status: row.approval_status || (row.is_active !== false ? 'APPROVED' : 'PENDING'),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-// GET: Lấy danh sách người đón được ủy quyền theo student_id từ Supabase
+async function resolvePickupOwnerStudentId(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  pickupId: string
+): Promise<{ studentId: string | null; table: 'pickup_authorizations' | 'authorized_pickups' | null }> {
+  const { data: authRow, error: authErr } = await supabase
+    .from('pickup_authorizations')
+    .select('id, student_id')
+    .eq('id', pickupId)
+    .maybeSingle();
+
+  if (!authErr && authRow?.student_id) {
+    return { studentId: authRow.student_id, table: 'pickup_authorizations' };
+  }
+
+  const { data: legacyRow, error: legacyErr } = await supabase
+    .from('authorized_pickups')
+    .select('id, student_id')
+    .eq('id', pickupId)
+    .maybeSingle();
+
+  if (!legacyErr && legacyRow?.student_id) {
+    return { studentId: legacyRow.student_id, table: 'authorized_pickups' };
+  }
+
+  return { studentId: null, table: null };
+}
+
+// GET: Lấy danh sách người đón được ủy quyền theo student_id
 export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'TEACHER', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('student_id');
 
@@ -61,13 +68,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, error: 'Chưa cấu hình Supabase Client.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      );
+    if (ctx.activeRole === 'PARENT') {
+      const denied = assertParentStudentAccess(ctx, [studentId]);
+      if (denied) return denied;
+    } else if (ctx.activeRole === 'TEACHER') {
+      const denied = await assertTeacherStudentAccess(ctx, [studentId]);
+      if (denied) return denied;
     }
+
+    const supabase = getSupabaseAdminClient(false);
 
     // 1. Thử truy vấn bảng pickup_authorizations
     const { data: authData, error: authError } = await supabase
@@ -114,6 +123,10 @@ export async function GET(request: Request) {
 // POST: Phụ huynh đăng ký thêm người đón ủy quyền mới
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const body = await request.json().catch(() => ({}));
     const { student_id, name, relationship, phone, avatar_url, is_active } = body;
 
@@ -124,14 +137,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, error: 'Chưa cấu hình Supabase Client.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      );
-    }
+    const denied = assertParentStudentAccess(ctx, [student_id]);
+    if (denied) return denied;
 
+    const supabase = getSupabaseAdminClient(false);
     const activeFlag = is_active !== undefined ? Boolean(is_active) : true;
 
     // 1. Thử insert vào bảng pickup_authorizations
@@ -209,6 +218,10 @@ export async function POST(request: Request) {
 // PUT: Cập nhật thông tin hoặc Bật/Tắt trạng thái is_active của người đón
 export async function PUT(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const body = await request.json().catch(() => ({}));
     const { id, name, relationship, phone, avatar_url, is_active } = body;
 
@@ -219,13 +232,17 @@ export async function PUT(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
+    const supabase = getSupabaseAdminClient(false);
+    const owner = await resolvePickupOwnerStudentId(supabase, id);
+    if (!owner.studentId) {
       return NextResponse.json(
-        { success: false, error: 'Chưa cấu hình Supabase Client.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { success: false, error: 'Không tìm thấy bản ghi người đón.' },
+        { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
+
+    const denied = assertParentStudentAccess(ctx, [owner.studentId]);
+    if (denied) return denied;
 
     const updateFields: any = { updated_at: new Date().toISOString() };
     if (name !== undefined) updateFields.name = name.trim();
@@ -234,15 +251,21 @@ export async function PUT(request: Request) {
     if (avatar_url !== undefined) updateFields.avatar_url = avatar_url;
     if (is_active !== undefined) updateFields.is_active = Boolean(is_active);
 
-    // 1. Thử cập nhật trên bảng pickup_authorizations
-    const { data: authData, error: authError } = await supabase
-      .from('pickup_authorizations')
-      .update(updateFields)
-      .eq('id', id)
-      .select()
-      .single();
+    if (owner.table === 'pickup_authorizations') {
+      const { data: authData, error: authError } = await supabase
+        .from('pickup_authorizations')
+        .update(updateFields)
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (!authError && authData) {
+      if (authError) {
+        return NextResponse.json(
+          { success: false, error: authError.message },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
+      }
+
       return NextResponse.json(
         {
           success: true,
@@ -253,7 +276,6 @@ export async function PUT(request: Request) {
       );
     }
 
-    // 2. Fallback nếu bảng pickup_authorizations chưa có
     const legacyUpdateFields: any = {};
     if (name !== undefined) legacyUpdateFields.name = name.trim();
     if (relationship !== undefined) legacyUpdateFields.relationship = relationship.trim();
@@ -298,6 +320,10 @@ export async function PUT(request: Request) {
 // DELETE: Xóa người đón ủy quyền
 export async function DELETE(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const { searchParams } = new URL(request.url);
     const pickupId = searchParams.get('id');
 
@@ -308,37 +334,28 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
+    const supabase = getSupabaseAdminClient(false);
+    const owner = await resolvePickupOwnerStudentId(supabase, pickupId);
+    if (!owner.studentId) {
       return NextResponse.json(
-        { success: false, error: 'Chưa cấu hình Supabase Client.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { success: false, error: 'Không tìm thấy bản ghi người đón.' },
+        { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
 
-    // 1. Thử xóa từ pickup_authorizations
-    const { error: authError } = await supabase
-      .from('pickup_authorizations')
+    const denied = assertParentStudentAccess(ctx, [owner.studentId]);
+    if (denied) return denied;
+
+    const targetTable = owner.table || 'pickup_authorizations';
+    const { error: deleteErr } = await supabase
+      .from(targetTable)
       .delete()
       .eq('id', pickupId);
 
-    if (!authError) {
+    if (deleteErr) {
+      console.error(`[API DELETE /api/parent/pickups] Delete error (${targetTable}):`, deleteErr.message);
       return NextResponse.json(
-        { success: true, message: 'Đã xóa người đón ủy quyền thành công.' },
-        { headers: NO_CACHE_HEADERS }
-      );
-    }
-
-    // 2. Fallback xóa từ authorized_pickups
-    const { error: legacyError } = await supabase
-      .from('authorized_pickups')
-      .delete()
-      .eq('id', pickupId);
-
-    if (legacyError) {
-      console.error('[API DELETE /api/parent/pickups] Delete error:', legacyError.message);
-      return NextResponse.json(
-        { success: false, error: legacyError.message },
+        { success: false, error: deleteErr.message },
         { status: 500, headers: NO_CACHE_HEADERS }
       );
     }

@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HealthRecord } from '@/lib/types/schema';
 import { calculateBMI, classifyWHOGrowthStatus } from '@/lib/utils/healthHelper';
 import defaultHealthCatalog from '@/lib/data/health_catalog.json';
+import { getSupabaseAdminClient, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import {
+  assertParentStudentAccess,
+  assertTeacherStudentAccess,
+  requireActiveRole,
+} from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
 
 // Global in-memory cache for durable persistence across requests in Node/Serverless
 declare global {
@@ -22,29 +21,6 @@ declare global {
 
 if (!globalThis.__SUONGMAI_HEALTH_CATALOG__) {
   globalThis.__SUONGMAI_HEALTH_CATALOG__ = (defaultHealthCatalog as HealthRecord[]) || [];
-}
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient() {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    FALLBACK_ANON_KEY;
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 }
 
 function loadHealthCatalog(): HealthRecord[] {
@@ -75,6 +51,16 @@ function safeParseFloat(val: any): number | null {
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, [
+      'PARENT',
+      'TEACHER',
+      'STAFF',
+      'SCHOOL_ADMIN',
+      'SUPER_ADMIN',
+    ]);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('student_id');
 
@@ -90,7 +76,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    if (ctx.activeRole === 'PARENT') {
+      const denied = assertParentStudentAccess(ctx, [studentId]);
+      if (denied) return denied;
+    } else if (ctx.activeRole === 'TEACHER') {
+      const denied = await assertTeacherStudentAccess(ctx, [studentId]);
+      if (denied) return denied;
+    }
+
+    const supabase = getSupabaseAdminClient(false);
     let records: any[] = [];
 
     // 1. Try querying Supabase health_records

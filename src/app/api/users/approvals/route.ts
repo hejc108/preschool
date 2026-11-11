@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { Profile, ParentStudentRelation } from '@/lib/types/schema';
+import {
+  executeWithAdminFallback,
+  getSupabaseAdminClient,
+  NO_CACHE_HEADERS,
+} from '@/lib/supabase/server';
+import {
+  getHighestPriorityRole,
+  getSessionContext,
+  isAdminRole,
+  normalizeRole,
+  requireActiveRole,
+  sortRolesByPriority,
+} from '@/lib/auth/sessionContext';
+import {
+  DEFAULT_UUID_TO_NAME,
+  resolveCanonicalClassId,
+  resolveClassDisplayName,
+} from '@/lib/constants/classes';
+import { AssignableRole, ParentStudentRelation, Profile, UserRole } from '@/lib/types/schema';
 
 export const dynamic = 'force-dynamic';
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
+export const revalidate = 0;
 
 const INITIAL_SERVER_PROFILES: Profile[] = [
   {
@@ -13,14 +28,15 @@ const INITIAL_SERVER_PROFILES: Profile[] = [
     full_name: 'Quản Trị Tối Cao (Super Admin)',
     email: 'sadmin@suongmai.edu.vn',
     role: 'SUPER_ADMIN',
+    roles: ['SUPER_ADMIN'],
     approval_status: 'ACTIVE',
     created_at: '2026-01-01T00:00:00Z',
   },
 ];
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ASSIGNABLE_ROLES: AssignableRole[] = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'PARENT', 'STAFF'];
 
-// Global in-memory storage on node server to persist profiles across sessions
 declare global {
   var __SUONGMAI_PROFILES_CACHE__: Profile[] | undefined;
   var __SUONGMAI_RELATIONS_CACHE__: ParentStudentRelation[] | undefined;
@@ -33,69 +49,51 @@ if (!globalThis.__SUONGMAI_RELATIONS_CACHE__) {
   globalThis.__SUONGMAI_RELATIONS_CACHE__ = [];
 }
 
-function getSupabaseClient(preferAnon = false) {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey = preferAnon
-    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       FALLBACK_ANON_KEY)
-    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-       process.env.SUPABASE_PUBLISHABLE_KEY ||
-       FALLBACK_ANON_KEY);
-
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+function ensureValidUuid(candidate?: string): string {
+  if (candidate && UUID_REGEX.test(String(candidate))) return String(candidate);
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12);
 }
 
-function isApiKeyError(err: any): boolean {
-  const msg = String(err?.message || err || '');
-  return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
+function toGuardianRelationship(input: string): 'BỐ' | 'MẸ' | 'ÔNG' | 'BÀ' | 'NGƯỜI GIÁM HỘ' {
+  const s = (input || '').toLowerCase().trim();
+  if (s === 'bố' || s === 'bo' || s === 'father') return 'BỐ';
+  if (s === 'mẹ' || s === 'me' || s === 'mother') return 'MẸ';
+  if (s === 'ông' || s === 'ong') return 'ÔNG';
+  if (s === 'bà' || s === 'ba') return 'BÀ';
+  return 'NGƯỜI GIÁM HỘ';
 }
 
-async function fetchRelationsFromSupabase(client: any): Promise<ParentStudentRelation[]> {
-  if (!client) return globalThis.__SUONGMAI_RELATIONS_CACHE__ || [];
-
+async function fetchRelationsFromSupabase(): Promise<ParentStudentRelation[]> {
   try {
-    let activeClient = client;
-    let { data, error } = await activeClient
-      .from('student_guardians')
-      .select(
-        'id, student_id, guardian_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, classes(id, name)), profiles(id, email, full_name)'
-      )
-      .order('created_at', { ascending: true });
-
-    if (error && isApiKeyError(error)) {
-      activeClient = getSupabaseClient(true);
-      if (activeClient) {
-        const retry = await activeClient
+    const [spRes, sgRes] = await Promise.all([
+      executeWithAdminFallback(async (sb) =>
+        await sb
+          .from('student_parents')
+          .select(
+            'student_id, parent_user_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, classes(id, name)), profiles(id, email, full_name)'
+          )
+          .order('created_at', { ascending: true })
+      ),
+      executeWithAdminFallback(async (sb) =>
+        await sb
           .from('student_guardians')
           .select(
             'id, student_id, guardian_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, classes(id, name)), profiles(id, email, full_name)'
           )
-          .order('created_at', { ascending: true });
-        data = retry.data;
-        error = retry.error;
-      }
-    }
+          .order('created_at', { ascending: true })
+      ),
+    ]);
 
-    if (error) {
-      console.warn('[API GET RELATIONS WARN]:', error.message || error);
-      return globalThis.__SUONGMAI_RELATIONS_CACHE__ || [];
-    }
+    const dedupe = new Map<string, ParentStudentRelation>();
 
-    const mapped: ParentStudentRelation[] = (data || []).map((row: any) => {
+    const collect = (row: any, parentKey: 'parent_user_id' | 'guardian_id') => {
+      const parentId = row[parentKey];
+      const studentId = row.student_id;
+      if (!parentId || !studentId) return;
+      const key = `${studentId}:${parentId}`;
+      if (dedupe.has(key)) return;
+
       const studentObj = Array.isArray(row.students) ? row.students[0] : row.students;
       const profileObj = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       const classObj = studentObj?.classes
@@ -104,20 +102,28 @@ async function fetchRelationsFromSupabase(client: any): Promise<ParentStudentRel
           : studentObj.classes
         : null;
 
-      return {
-        id: row.id,
-        parent_id: row.guardian_id,
+      dedupe.set(key, {
+        id: row.id || key,
+        parent_id: parentId,
         parent_email: (profileObj?.email || '').toLowerCase().trim(),
-        student_id: row.student_id,
+        student_id: studentId,
         student_name: studentObj?.full_name || 'Học sinh Sương Mai',
         student_code: studentObj?.student_code || '',
-        class_name: classObj?.name || studentObj?.class_name || 'Mầm',
-        relationship: row.relationship || 'NGƯỜI GIÁM HỘ',
+        class_name: classObj?.name || 'Mầm',
+        relationship: row.relationship || 'Phụ huynh',
         is_verified: true,
         created_at: row.created_at,
-      };
-    });
+      });
+    };
 
+    if (!spRes.error && Array.isArray(spRes.data)) {
+      spRes.data.forEach((r: any) => collect(r, 'parent_user_id'));
+    }
+    if (!sgRes.error && Array.isArray(sgRes.data)) {
+      sgRes.data.forEach((r: any) => collect(r, 'guardian_id'));
+    }
+
+    const mapped = Array.from(dedupe.values());
     globalThis.__SUONGMAI_RELATIONS_CACHE__ = mapped;
     return mapped;
   } catch (e: any) {
@@ -126,72 +132,65 @@ async function fetchRelationsFromSupabase(client: any): Promise<ParentStudentRel
   }
 }
 
-export async function GET() {
-  const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
-  const hasServiceRoleKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+export async function GET(request: Request) {
+  const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+  if ('response' in auth) return auth.response;
+
+  const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
+  const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   let dbProfilesCount = 0;
   let dbErrorDetail: string | null = null;
   let relations: ParentStudentRelation[] = [];
+  const rolesByUserId = new Map<string, UserRole[]>();
 
   try {
-    let supabaseClient = getSupabaseClient(false);
+    const [profRes, urRes, rels] = await Promise.all([
+      executeWithAdminFallback(async (sb) =>
+        await sb.from('profiles').select('*').order('created_at', { ascending: false })
+      ),
+      executeWithAdminFallback(async (sb) =>
+        await sb.from('user_roles').select('user_id, role_name')
+      ),
+      fetchRelationsFromSupabase(),
+    ]);
 
-    if (supabaseClient) {
-      let { data, error } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+    relations = rels;
 
-      if (error && isApiKeyError(error)) {
-        supabaseClient = getSupabaseClient(true);
-        if (supabaseClient) {
-          const retry = await supabaseClient
-            .from('profiles')
-            .select('*')
-            .order('created_at', { ascending: false });
-          data = retry.data;
-          error = retry.error;
+    if (!urRes.error && Array.isArray(urRes.data)) {
+      urRes.data.forEach((row: any) => {
+        const list = rolesByUserId.get(row.user_id) || [];
+        list.push(normalizeRole(row.role_name));
+        rolesByUserId.set(row.user_id, list);
+      });
+    }
+
+    if (profRes.error) {
+      dbErrorDetail = profRes.error.message;
+      console.error('[API GET APPROVALS ERROR]:', profRes.error.message);
+    } else if (Array.isArray(profRes.data) && profRes.data.length > 0) {
+      dbProfilesCount = profRes.data.length;
+      for (const dbProfile of profRes.data as Profile[]) {
+        const idx = serverCache.findIndex(
+          (p) => p.email.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim()
+        );
+        if (idx !== -1) {
+          serverCache[idx] = { ...serverCache[idx], ...dbProfile };
+        } else {
+          serverCache.push(dbProfile);
         }
       }
-
-      if (error) {
-        dbErrorDetail = error.message;
-        console.error('[API GET APPROVALS ERROR]:', error.message || error);
-      } else if (data && data.length > 0) {
-        dbProfilesCount = data.length;
-        for (const dbProfile of data as Profile[]) {
-          const idx = serverCache.findIndex(
-            (p) => p.email.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim()
-          );
-          if (idx !== -1) {
-            serverCache[idx] = { ...serverCache[idx], ...dbProfile };
-          } else {
-            serverCache.push(dbProfile);
-          }
-        }
-      }
-
-      relations = await fetchRelationsFromSupabase(supabaseClient);
     }
   } catch (e: any) {
-    dbErrorDetail = e.message || String(e);
-    console.warn('[API GET APPROVALS EXCEPTION]:', e.message || e);
+    dbErrorDetail = e?.message || String(e);
+    console.warn('[API GET APPROVALS EXCEPTION]:', dbErrorDetail);
   }
 
-  // Guarantee sadmin@suongmai.edu.vn is ALWAYS active SUPER_ADMIN
   const sadminIdx = serverCache.findIndex(
     (p) => p.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn'
   );
   if (sadminIdx === -1) {
-    serverCache.unshift({
-      id: 'u-super-admin-sadmin',
-      full_name: 'Quản Trị Tối Cao (Super Admin)',
-      email: 'sadmin@suongmai.edu.vn',
-      role: 'SUPER_ADMIN',
-      approval_status: 'ACTIVE',
-      created_at: '2026-01-01T00:00:00Z',
-    });
+    serverCache.unshift(INITIAL_SERVER_PROFILES[0]);
   } else {
     serverCache[sadminIdx].role = 'SUPER_ADMIN';
     serverCache[sadminIdx].approval_status = 'ACTIVE';
@@ -209,350 +208,498 @@ export async function GET() {
   const sanitized = serverCache
     .filter((p) => {
       const clean = (p.email || '').toLowerCase().trim();
-      if (!clean) return false;
-      if (DEPRECATED_MOCK_EMAILS.includes(clean)) return false;
-      return true;
+      return Boolean(clean) && !DEPRECATED_MOCK_EMAILS.includes(clean);
     })
     .map((p) => {
       const clean = (p.email || '').toLowerCase().trim();
-      if (clean === 'luciaxuan178@gmail.com' && p.role === 'SUPER_ADMIN') {
-        return { ...p, role: 'SCHOOL_ADMIN' as const };
-      }
-      return p;
+      const baseRole =
+        clean === 'luciaxuan178@gmail.com' && p.role === 'SUPER_ADMIN'
+          ? 'SCHOOL_ADMIN'
+          : normalizeRole(p.role);
+
+      const hasRel = relations.some(
+        (r) => r.parent_id === p.id || r.parent_email?.toLowerCase().trim() === clean
+      );
+      const heldRoles = sortRolesByPriority([
+        ...(rolesByUserId.get(p.id) || []),
+        ...(baseRole !== 'GUEST' ? [baseRole] : []),
+        ...(hasRel ? (['PARENT'] as UserRole[]) : []),
+      ]);
+
+      return {
+        ...p,
+        role: heldRoles[0] || baseRole,
+        roles: heldRoles,
+      };
     });
 
   globalThis.__SUONGMAI_PROFILES_CACHE__ = sanitized;
-  return NextResponse.json({
-    success: true,
-    profiles: sanitized,
-    data: sanitized,
-    users: sanitized,
-    relations,
-    pendingProfiles: sanitized.filter(
-      (p) => (p.approval_status || 'PENDING').toUpperCase() === 'PENDING'
-    ),
-    debug: {
-      hasServiceRoleKey,
-      dbProfilesCount,
-      totalProfilesCount: sanitized.length,
-      relationsCount: relations.length,
-      dbError: dbErrorDetail,
+  return NextResponse.json(
+    {
+      success: true,
+      profiles: sanitized,
+      data: sanitized,
+      users: sanitized,
+      relations,
+      pendingProfiles: sanitized.filter(
+        (p) => (p.approval_status || 'PENDING').toUpperCase() === 'PENDING'
+      ),
+      debug: {
+        hasServiceRoleKey,
+        dbProfilesCount,
+        totalProfilesCount: sanitized.length,
+        relationsCount: relations.length,
+        dbError: dbErrorDetail,
+      },
     },
-  });
+    { headers: NO_CACHE_HEADERS }
+  );
 }
 
-function ensureValidUuid(candidate?: string): string {
-  if (candidate && UUID_REGEX.test(String(candidate))) return String(candidate);
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12);
-}
-
+/**
+ * Registers or resolves the caller's own Google OAuth profile cleanly.
+ * Requires either an active Admin session OR a valid Supabase Bearer JWT matching body.email.
+ */
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const email = (body.email || '').toLowerCase().trim();
-    const fullName = body.full_name || email.split('@')[0];
+    const body = await request.json().catch(() => ({}));
+    let email = (body.email || '').toLowerCase().trim();
+    const fullName = body.full_name || '';
     const avatarUrl = body.avatar_url;
 
-    if (!email) {
-      return NextResponse.json({ success: false, message: 'Email là bắt buộc' }, { status: 400 });
+    // Authenticate caller: Admin session OR matching Supabase Bearer JWT
+    const { ctx } = await getSessionContext(request);
+    let bearerUser: { id?: string; email?: string } | null = null;
+
+    if (!ctx || !isAdminRole(ctx.activeRole)) {
+      const authHeader = request.headers.get('authorization') || '';
+      const token = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+      if (token) {
+        const sb = getSupabaseAdminClient();
+        const { data } = await sb.auth.getUser(token);
+        if (data?.user?.email) {
+          bearerUser = { id: data.user.id, email: data.user.email.toLowerCase().trim() };
+        }
+      }
     }
 
-    const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
+    if (bearerUser?.email) {
+      if (email && email !== bearerUser.email) {
+        return NextResponse.json(
+          { success: false, message: 'Email không khớp với phiên đăng nhập.' },
+          { status: 403, headers: NO_CACHE_HEADERS }
+        );
+      }
+      email = bearerUser.email;
+    } else if (!ctx || (!isAdminRole(ctx.activeRole) && ctx.email !== email)) {
+      return NextResponse.json(
+        { success: false, message: 'Yêu cầu xác thực hợp lệ.' },
+        { status: 401, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    if (!email) {
+      return NextResponse.json(
+        { success: false, message: 'Email là bắt buộc' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
     const existing = serverCache.find((p) => p.email.toLowerCase().trim() === email);
 
     const isSadmin = email === 'sadmin@suongmai.edu.vn';
+    const isSchoolAdmin = email === 'luciaxuan178@gmail.com';
     const generatedId = ensureValidUuid(existing?.id);
 
     const newProfile: Profile = existing || {
       id: generatedId,
+      auth_user_id: bearerUser?.id || null,
       email,
       full_name: fullName || (isSadmin ? 'Quản Trị Tối Cao (Super Admin)' : email.split('@')[0]),
-      role: isSadmin ? 'SUPER_ADMIN' : 'GUEST',
-      approval_status: isSadmin ? 'ACTIVE' : 'PENDING',
+      role: isSadmin ? 'SUPER_ADMIN' : isSchoolAdmin ? 'SCHOOL_ADMIN' : 'GUEST',
+      approval_status: isSadmin || isSchoolAdmin ? 'ACTIVE' : 'PENDING',
       avatar_url:
         avatarUrl ||
         'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString(),
     };
 
-    if (!existing) {
-      serverCache.push(newProfile);
-      globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
-    }
+    const { data: dbExisting } = await executeWithAdminFallback(async (sb) =>
+      await sb
+        .from('profiles')
+        .select('id, auth_user_id, role, approval_status, full_name, avatar_url')
+        .ilike('email', email)
+        .maybeSingle()
+    );
 
-    try {
-      let supabaseClient = getSupabaseClient(false);
-      if (supabaseClient) {
-        let { data: dbExisting, error: findErr } = await supabaseClient
-          .from('profiles')
-          .select('id, role, approval_status')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (findErr && isApiKeyError(findErr)) {
-          supabaseClient = getSupabaseClient(true);
-          if (supabaseClient) {
-            const retry = await supabaseClient
-              .from('profiles')
-              .select('id, role, approval_status')
-              .eq('email', email)
-              .maybeSingle();
-            dbExisting = retry.data;
-          }
-        }
-
-        if (dbExisting) {
-          newProfile.role = dbExisting.role;
-          newProfile.approval_status = dbExisting.approval_status;
-          if (dbExisting.id) newProfile.id = dbExisting.id;
-          const cacheIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
-          if (cacheIdx !== -1) {
-            serverCache[cacheIdx] = { ...serverCache[cacheIdx], ...dbExisting };
-          }
-        } else if (supabaseClient) {
-          const insertPayload = {
-            id: ensureValidUuid(newProfile.id),
-            email: newProfile.email,
-            full_name: newProfile.full_name,
-            role: newProfile.role,
-            approval_status: newProfile.approval_status,
-            avatar_url: newProfile.avatar_url,
-            created_at: newProfile.created_at,
-          };
-          let { error: insErr } = await supabaseClient.from('profiles').insert(insertPayload);
-          if (insErr && isApiKeyError(insErr)) {
-            supabaseClient = getSupabaseClient(true);
-            if (supabaseClient) {
-              await supabaseClient.from('profiles').insert(insertPayload);
-            }
-          }
-        }
+    if (dbExisting) {
+      newProfile.id = dbExisting.id;
+      newProfile.role = normalizeRole(dbExisting.role);
+      newProfile.approval_status = dbExisting.approval_status;
+      newProfile.full_name = dbExisting.full_name || newProfile.full_name;
+      if (bearerUser?.id && !dbExisting.auth_user_id) {
+        await executeWithAdminFallback(async (sb) =>
+          await sb.from('profiles').update({ auth_user_id: bearerUser!.id }).eq('id', dbExisting.id)
+        );
       }
-    } catch (e: any) {
-      console.error('[APPROVE POST ERROR] Failed to sync new profile to Supabase DB:', e.message || e);
+    } else {
+      const insertPayload: Record<string, any> = {
+        id: ensureValidUuid(newProfile.id),
+        email: newProfile.email,
+        full_name: newProfile.full_name,
+        role: newProfile.role,
+        approval_status: newProfile.approval_status,
+        avatar_url: newProfile.avatar_url,
+        created_at: newProfile.created_at,
+      };
+      if (bearerUser?.id) insertPayload.auth_user_id = bearerUser.id;
+      await executeWithAdminFallback(async (sb) => await sb.from('profiles').insert(insertPayload));
+
+      if (newProfile.role === 'SUPER_ADMIN' || newProfile.role === 'SCHOOL_ADMIN') {
+        await executeWithAdminFallback(async (sb) =>
+          await sb.from('user_roles').upsert(
+            { user_id: insertPayload.id, role_name: newProfile.role },
+            { onConflict: 'user_id,role_name', ignoreDuplicates: true }
+          )
+        );
+      }
     }
 
-    return NextResponse.json({ success: true, profile: newProfile });
+    return NextResponse.json({ success: true, profile: newProfile }, { headers: NO_CACHE_HEADERS });
   } catch (error: any) {
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error?.message || 'Internal Server Error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
+    const body = await request.json().catch(() => ({}));
     const email = (body.email || '').toLowerCase().trim();
 
     if (!email) {
-      return NextResponse.json({ success: false, message: 'Email là bắt buộc' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: 'Email là bắt buộc' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const serverCache = globalThis.__SUONGMAI_PROFILES_CACHE__ || [...INITIAL_SERVER_PROFILES];
+    const { data: existingDbProfile } = await executeWithAdminFallback(async (sb) =>
+      await sb.from('profiles').select('*').ilike('email', email).maybeSingle()
+    );
+
+    const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
     const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
+    const resolvedId = ensureValidUuid(
+      existingDbProfile?.id || (idx !== -1 ? serverCache[idx].id : undefined)
+    );
 
-    let supabaseClient = getSupabaseClient(false);
-    let existingDbProfile: any = null;
-
-    if (supabaseClient) {
-      let { data: foundRow, error: findErr } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (findErr && isApiKeyError(findErr)) {
-        supabaseClient = getSupabaseClient(true);
-        if (supabaseClient) {
-          const retry = await supabaseClient
-            .from('profiles')
-            .select('*')
-            .eq('email', email)
-            .maybeSingle();
-          foundRow = retry.data;
-        }
-      }
-      existingDbProfile = foundRow;
+    // Fetch existing user_roles
+    const { data: existingRoleRows } = await executeWithAdminFallback(async (sb) =>
+      await sb.from('user_roles').select('role_name').eq('user_id', resolvedId)
+    );
+    const currentRoles = (existingRoleRows || []).map((r: any) => normalizeRole(r.role_name));
+    if (existingDbProfile?.role && normalizeRole(existingDbProfile.role) !== 'GUEST') {
+      currentRoles.push(normalizeRole(existingDbProfile.role));
     }
 
-    const resolvedId = ensureValidUuid(existingDbProfile?.id || (idx !== -1 ? serverCache[idx].id : undefined));
-    const resolvedRole = body.role || existingDbProfile?.role || (idx !== -1 ? serverCache[idx].role : 'PARENT');
-    const resolvedStatus =
-      body.approval_status || existingDbProfile?.approval_status || (idx !== -1 ? serverCache[idx].approval_status : 'ACTIVE');
+    // Resolve requested multi-role list vs legacy single role
+    let effectiveRoles: AssignableRole[] = [];
+    const isExplicitRolesArray = Array.isArray(body.roles);
 
-    // Clean two-way transition: if switching to PARENT, clear teacher class assignment; if switching to TEACHER/STAFF, keep or update class assignment
-    const resolvedClassId =
-      resolvedRole === 'PARENT' || resolvedRole === 'STAFF'
-        ? null
-        : body.assigned_class_id !== undefined
-        ? body.assigned_class_id
+    if (isExplicitRolesArray) {
+      effectiveRoles = sortRolesByPriority(
+        body.roles
+          .map((r: unknown) => normalizeRole(r))
+          .filter((r: UserRole): r is AssignableRole =>
+            ASSIGNABLE_ROLES.includes(r as AssignableRole)
+          )
+      ) as AssignableRole[];
+    } else if (body.role) {
+      const requestedSingle = normalizeRole(body.role);
+      const retainedParent =
+        body.clear_student_links !== true &&
+        (requestedSingle === 'TEACHER' || requestedSingle === 'STAFF') &&
+        currentRoles.includes('PARENT');
+
+      effectiveRoles = sortRolesByPriority([
+        ...(ASSIGNABLE_ROLES.includes(requestedSingle as AssignableRole)
+          ? [requestedSingle]
+          : []),
+        ...(retainedParent ? (['PARENT'] as UserRole[]) : []),
+      ]) as AssignableRole[];
+    } else {
+      effectiveRoles = sortRolesByPriority(
+        currentRoles.filter((r): r is AssignableRole =>
+          ASSIGNABLE_ROLES.includes(r as AssignableRole)
+        )
+      ) as AssignableRole[];
+    }
+
+    // Only SUPER_ADMIN can assign/grant SUPER_ADMIN or SCHOOL_ADMIN
+    const tryingAdminGrant = effectiveRoles.some(
+      (r) => (r === 'SUPER_ADMIN' || r === 'SCHOOL_ADMIN') && !currentRoles.includes(r)
+    );
+    if (tryingAdminGrant && ctx.activeRole !== 'SUPER_ADMIN') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'FORBIDDEN_ROLE_ESCALATION',
+          message: 'Chỉ Quản trị tối cao (SUPER_ADMIN) mới có quyền cấp vai trò Quản trị trường.',
+        },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const resolvedStatus =
+      body.approval_status ||
+      existingDbProfile?.approval_status ||
+      (idx !== -1 ? serverCache[idx].approval_status : 'ACTIVE');
+
+    const primaryRole: UserRole =
+      resolvedStatus === 'REJECTED'
+        ? existingDbProfile?.role || 'GUEST'
+        : getHighestPriorityRole(effectiveRoles) ||
+          (body.role ? normalizeRole(body.role) : existingDbProfile?.role || 'GUEST');
+
+    const holdsTeacher = effectiveRoles.includes('TEACHER');
+    const holdsParent = effectiveRoles.includes('PARENT');
+
+    let canonicalClassIds: string[] = [];
+    let liveClassesList: Array<{ id: string; name: string }> = [];
+
+    if (holdsTeacher && Array.isArray(body.assigned_class_ids)) {
+      const { data: classesData } = await executeWithAdminFallback(async (sb) =>
+        await sb.from('classes').select('id, name')
+      );
+      liveClassesList = Array.isArray(classesData) ? classesData : [];
+      canonicalClassIds = Array.from(
+        new Set(
+          body.assigned_class_ids
+            .filter(Boolean)
+            .map((rawId: unknown) => resolveCanonicalClassId(String(rawId), liveClassesList))
+            .filter(Boolean)
+        )
+      );
+    }
+
+    const derivedClassId =
+      canonicalClassIds.length > 0
+        ? canonicalClassIds[0]
+        : body.assigned_class_id !== undefined && body.assigned_class_id !== null
+        ? resolveCanonicalClassId(String(body.assigned_class_id), liveClassesList)
         : existingDbProfile?.assigned_class_id ?? (idx !== -1 ? serverCache[idx].assigned_class_id : null);
 
-    const resolvedClassName =
-      resolvedRole === 'PARENT' || resolvedRole === 'STAFF'
-        ? null
+    const derivedClassNames =
+      canonicalClassIds.length > 0
+        ? canonicalClassIds
+            .map((cid) => resolveClassDisplayName(cid, liveClassesList) || DEFAULT_UUID_TO_NAME[cid] || cid)
+            .filter(Boolean)
+            .join(', ')
         : body.assigned_class_name !== undefined
         ? body.assigned_class_name
         : existingDbProfile?.assigned_class_name ?? (idx !== -1 ? serverCache[idx].assigned_class_name : null);
 
-    let targetProfile: any = {
-      ...(idx !== -1 ? serverCache[idx] : {}),
-      ...(existingDbProfile || {}),
+    const resolvedClassId = !holdsTeacher ? null : derivedClassId;
+    const resolvedClassName = !holdsTeacher ? null : derivedClassNames;
+
+    const upsertPayload: Record<string, any> = {
       id: resolvedId,
+      email,
       full_name:
         body.full_name ||
         existingDbProfile?.full_name ||
         (idx !== -1 ? serverCache[idx].full_name : email.split('@')[0]),
-      email,
-      role: resolvedRole,
+      role: primaryRole,
       approval_status: resolvedStatus,
       assigned_class_id: resolvedClassId,
       assigned_class_name: resolvedClassName,
       updated_at: new Date().toISOString(),
     };
 
-    if (idx === -1) {
-      serverCache.push(targetProfile);
-    } else {
-      serverCache[idx] = targetProfile;
+    const { data: upsertedData, error: upsertErr } = await executeWithAdminFallback(async (sb) =>
+      await sb.from('profiles').upsert(upsertPayload, { onConflict: 'email' }).select()
+    );
+
+    if (upsertErr) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Không thể lưu vai trò vào Supabase: ${upsertErr.message}`,
+        },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
     }
-    globalThis.__SUONGMAI_PROFILES_CACHE__ = serverCache;
 
-    let relations: ParentStudentRelation[] = globalThis.__SUONGMAI_RELATIONS_CACHE__ || [];
+    const persistedId =
+      upsertedData && upsertedData.length > 0 ? upsertedData[0].id : resolvedId;
 
-    if (supabaseClient) {
-      try {
-        const upsertPayload: any = {
-          id: resolvedId,
-          email: targetProfile.email,
-          full_name: targetProfile.full_name,
-          role: targetProfile.role,
-          approval_status: targetProfile.approval_status,
-          assigned_class_id: targetProfile.assigned_class_id,
-          assigned_class_name: targetProfile.assigned_class_name,
-          updated_at: new Date().toISOString(),
-        };
+    // 1. Sync public.user_roles
+    if (resolvedStatus !== 'REJECTED' && (isExplicitRolesArray || body.role)) {
+      if (effectiveRoles.length > 0) {
+        await executeWithAdminFallback(async (sb) =>
+          await sb.from('user_roles').upsert(
+            effectiveRoles.map((role_name) => ({ user_id: persistedId, role_name })),
+            { onConflict: 'user_id,role_name', ignoreDuplicates: true }
+          )
+        );
+      }
 
-        let { data: upsertedData, error: upsertErr } = await supabaseClient
-          .from('profiles')
-          .upsert(upsertPayload, { onConflict: 'email' })
-          .select();
-
-        if (upsertErr && isApiKeyError(upsertErr)) {
-          supabaseClient = getSupabaseClient(true);
-          if (supabaseClient) {
-            const retry = await supabaseClient
-              .from('profiles')
-              .upsert(upsertPayload, { onConflict: 'email' })
-              .select();
-            upsertedData = retry.data;
-            upsertErr = retry.error;
-          }
-        }
-
-        if (upsertErr) {
-          console.error('[APPROVE PUT ERROR] Failed to upsert profile in Supabase:', upsertErr.message);
-          return NextResponse.json(
-            {
-              success: false,
-              message: `Không thể lưu vai trò vào Supabase: ${upsertErr.message}`,
-            },
-            { status: 500 }
+      if (isExplicitRolesArray) {
+        const removedRoles = ASSIGNABLE_ROLES.filter((r) => !effectiveRoles.includes(r));
+        if (removedRoles.length > 0) {
+          await executeWithAdminFallback(async (sb) =>
+            await sb
+              .from('user_roles')
+              .delete()
+              .eq('user_id', persistedId)
+              .in('role_name', removedRoles)
           );
         }
-
-        const resolvedGuardianId =
-          upsertedData && upsertedData.length > 0 ? upsertedData[0].id : resolvedId;
-
-        if (upsertedData && upsertedData.length > 0) {
-          targetProfile = { ...targetProfile, ...upsertedData[0] };
-          const cacheIdx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
-          if (cacheIdx !== -1) serverCache[cacheIdx] = targetProfile;
-        }
-
-        // CASE 1: Transition to PARENT -> Sync student_guardians with selected student_ids
-        if (Array.isArray(body.student_ids) && supabaseClient && UUID_REGEX.test(String(resolvedGuardianId))) {
-          const uniqueStudentIds = Array.from(
-            new Set(
-              body.student_ids
-                .map((id: any) => String(id || '').trim())
-                .filter((id: string) => UUID_REGEX.test(id))
-            )
-          );
-
-          // Step 1: Delete all existing links for this guardian
-          const { error: delError } = await supabaseClient
-            .from('student_guardians')
-            .delete()
-            .eq('guardian_id', resolvedGuardianId);
-
-          if (delError) {
-            console.error('[APPROVE SYNC] Failed to delete old student_guardians:', delError.message);
-          }
-
-          // Step 2: Insert newly selected students
-          if (uniqueStudentIds.length > 0) {
-            const rowsToInsert = uniqueStudentIds.map((studentId, index) => ({
-              student_id: studentId,
-              guardian_id: resolvedGuardianId,
-              relationship: 'NGƯỜI GIÁM HỘ',
-              is_primary: index === 0,
-            }));
-
-            const { error: insError } = await supabaseClient
-              .from('student_guardians')
-              .insert(rowsToInsert);
-
-            if (insError) {
-              console.error('[APPROVE SYNC] Failed to insert student_guardians:', insError.message);
-              return NextResponse.json(
-                {
-                  success: false,
-                  message: `Không thể lưu liên kết học sinh vào Supabase: ${insError.message}`,
-                },
-                { status: 500 }
-              );
-            }
-          }
-        }
-        // CASE 2: Transition from PARENT -> TEACHER / STAFF (when clear_student_links is true or role != PARENT)
-        else if (
-          (resolvedRole === 'TEACHER' || resolvedRole === 'STAFF') &&
-          body.clear_student_links !== false &&
-          supabaseClient &&
-          UUID_REGEX.test(String(resolvedGuardianId))
-        ) {
-          await supabaseClient
-            .from('student_guardians')
-            .delete()
-            .eq('guardian_id', resolvedGuardianId);
-        }
-
-        // Refresh relations list from Supabase after sync
-        relations = await fetchRelationsFromSupabase(supabaseClient);
-      } catch (dbErr: any) {
-        console.warn('[APPROVE DB SYNC WARN]:', dbErr?.message || dbErr);
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      profile: targetProfile,
-      relations,
-    });
+    // 2. Sync teacher_class_assignments cleanly when TEACHER role changes or class_ids provided
+    if (holdsTeacher && Array.isArray(body.assigned_class_ids)) {
+      await executeWithAdminFallback(async (sb) =>
+        await sb.from('teacher_class_assignments').delete().eq('teacher_email', email)
+      );
+
+      if (canonicalClassIds.length > 0) {
+        await executeWithAdminFallback(async (sb) =>
+          await sb.from('teacher_class_assignments').insert(
+            canonicalClassIds.map((cid) => ({
+              teacher_email: email,
+              teacher_id: persistedId,
+              class_id: cid,
+              class_name: resolveClassDisplayName(cid, liveClassesList) || DEFAULT_UUID_TO_NAME[cid] || '',
+              academic_year: '2026-2027',
+              is_main_teacher: true,
+            }))
+          )
+        );
+      }
+    } else if (!holdsTeacher && isExplicitRolesArray) {
+      await executeWithAdminFallback(async (sb) =>
+        await sb.from('teacher_class_assignments').delete().eq('teacher_email', email)
+      );
+    }
+
+    // 3. Sync student_parents & student_guardians ONLY when student_ids passed or explicit clear requested
+    // CR-01 BUGFIX: NEVER auto-delete student links when approving/granting TEACHER or STAFF!
+    if (Array.isArray(body.student_ids) && UUID_REGEX.test(String(persistedId))) {
+      const uniqueStudentIds: string[] = Array.from(
+        new Set<string>(
+          body.student_ids
+            .map((id: any) => String(id || '').trim())
+            .filter((id: string) => UUID_REGEX.test(id))
+        )
+      );
+
+      await Promise.all([
+        executeWithAdminFallback(async (sb) =>
+          await sb.from('student_parents').delete().eq('parent_user_id', persistedId)
+        ),
+        executeWithAdminFallback(async (sb) =>
+          await sb.from('student_guardians').delete().eq('guardian_id', persistedId)
+        ),
+      ]);
+
+      if (uniqueStudentIds.length > 0) {
+        await Promise.all([
+          executeWithAdminFallback(async (sb) =>
+            await sb.from('student_parents').upsert(
+              uniqueStudentIds.map((studentId, index) => ({
+                student_id: studentId,
+                parent_user_id: persistedId,
+                relationship: String(body.relationship || 'Phụ huynh'),
+                is_primary: index === 0,
+              })),
+              { onConflict: 'student_id,parent_user_id' }
+            )
+          ),
+          executeWithAdminFallback(async (sb) =>
+            await sb.from('student_guardians').upsert(
+              uniqueStudentIds.map((studentId, index) => ({
+                student_id: studentId,
+                guardian_id: persistedId,
+                relationship: toGuardianRelationship(String(body.relationship || 'NGƯỜI GIÁM HỘ')),
+                is_primary: index === 0,
+              })),
+              { onConflict: 'student_id,guardian_id' }
+            )
+          ),
+        ]);
+
+        if (!holdsParent) {
+          await executeWithAdminFallback(async (sb) =>
+            await sb.from('user_roles').upsert(
+              { user_id: persistedId, role_name: 'PARENT' },
+              { onConflict: 'user_id,role_name', ignoreDuplicates: true }
+            )
+          );
+          effectiveRoles = sortRolesByPriority([
+            ...effectiveRoles,
+            'PARENT' as AssignableRole,
+          ]) as AssignableRole[];
+        }
+      }
+    } else if (body.clear_student_links === true && UUID_REGEX.test(String(persistedId))) {
+      await Promise.all([
+        executeWithAdminFallback(async (sb) =>
+          await sb.from('student_parents').delete().eq('parent_user_id', persistedId)
+        ),
+        executeWithAdminFallback(async (sb) =>
+          await sb.from('student_guardians').delete().eq('guardian_id', persistedId)
+        ),
+      ]);
+    }
+
+    const relations = await fetchRelationsFromSupabase();
+    const targetProfile = {
+      ...(existingDbProfile || {}),
+      ...(upsertedData?.[0] || upsertPayload),
+      id: persistedId,
+      roles: effectiveRoles,
+    };
+
+    return NextResponse.json(
+      {
+        success: true,
+        profile: targetProfile,
+        relations,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: any) {
     console.error('[APPROVE EXCEPTION] PUT handler error:', error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error?.message || 'Internal Server Error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const email = (searchParams.get('email') || '').toLowerCase().trim();
 
     if (!email) {
-      return NextResponse.json({ success: false, message: 'Email là bắt buộc' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: 'Email là bắt buộc' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (globalThis.__SUONGMAI_PROFILES_CACHE__) {
@@ -561,21 +708,18 @@ export async function DELETE(request: Request) {
       );
     }
 
-    try {
-      let supabaseClient = getSupabaseClient(false);
-      if (supabaseClient) {
-        const { error } = await supabaseClient.from('profiles').delete().eq('email', email);
-        if (error && isApiKeyError(error)) {
-          supabaseClient = getSupabaseClient(true);
-          if (supabaseClient) {
-            await supabaseClient.from('profiles').delete().eq('email', email);
-          }
-        }
-      }
-    } catch (e) {}
+    await executeWithAdminFallback(async (sb) =>
+      await sb.from('profiles').delete().eq('email', email)
+    );
 
-    return NextResponse.json({ success: true, message: `Đã xóa tài khoản ${email}` });
+    return NextResponse.json(
+      { success: true, message: `Đã xóa tài khoản ${email}` },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: any) {
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error?.message || 'Internal Server Error' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }

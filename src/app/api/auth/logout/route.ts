@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
+import { ALL_AUTH_COOKIES } from '@/lib/utils/cookieSigner';
 
 export async function POST() {
   const response = NextResponse.json({ success: true, message: 'Đăng xuất thành công' });
 
-  // Clear all authentication & session cookies on the response
-  const cookiesToClear = [
-    'suongmai_session',
-    'suongmai_user_email',
-    'suongmai_user_role',
-    'suongmai_username',
-    'suongmai_has_children',
-  ];
-
-  cookiesToClear.forEach((name) => {
+  ALL_AUTH_COOKIES.forEach((name) => {
     response.cookies.set(name, '', {
       path: '/',
       maxAge: 0,

@@ -278,9 +278,9 @@ export default function TeacherAILessonPlanNewPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Header: Clean & Standard Compliant Title */}
-      <header className="p-4 bg-sky-600 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
+      <header className="p-4 bg-primary-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-3">
-          <Link href="/admin/dashboard" className="p-2 bg-sky-700 rounded-pill text-white hover:bg-sky-500 transition-colors">
+          <Link href="/teacher" className="p-2 bg-white/15 hover:bg-white/25 rounded-pill text-white transition-colors border border-white/20">
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>

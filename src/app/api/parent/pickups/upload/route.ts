@@ -1,41 +1,17 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdminClient, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { assertParentStudentAccess, requireActiveRole } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient() {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    FALLBACK_ANON_KEY;
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
 // POST: Upload ảnh chân dung người đón vào Supabase Storage bucket `pickup-avatars`
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['PARENT', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const contentType = request.headers.get('content-type') || '';
     let studentId = '';
     let buffer: Buffer | null = null;
@@ -80,6 +56,11 @@ export async function POST(request: Request) {
       buffer = Buffer.from(parts[1], 'base64');
     }
 
+    if (studentId !== 'common') {
+      const denied = assertParentStudentAccess(ctx, [studentId]);
+      if (denied) return denied;
+    }
+
     if (!buffer || buffer.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Dữ liệu ảnh rỗng.' },
@@ -87,8 +68,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    const fileName = `${studentId}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    const supabase = getSupabaseAdminClient(false);
+    const safePrefix = studentId.replace(/[^a-zA-Z0-9_-]/g, '') || ctx.profileId.slice(0, 8);
+    const fileName = `${safePrefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
 
     // Thử tải lên Supabase Storage bucket `pickup-avatars`
     if (supabase) {

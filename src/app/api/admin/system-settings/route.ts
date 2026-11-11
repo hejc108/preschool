@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireActiveRole } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +37,11 @@ function getSupabaseClient() {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     const supabase = getSupabaseClient();
     const settings = { ...globalThis.__SUONGMAI_SYSTEM_SETTINGS__! };
 
@@ -83,6 +87,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const supabase = getSupabaseClient();
 

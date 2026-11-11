@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Utensils, Lock, Unlock, RefreshCw, Sparkles, AlertTriangle, ShieldCheck, Clock, Check, X, AlertCircle } from 'lucide-react';
-import { INITIAL_KITCHEN_ORDERS, supabase } from '@/lib/supabase/client';
+import { INITIAL_KITCHEN_ORDERS } from '@/lib/supabase/client';
 import { KitchenMealOrder, Student } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
@@ -18,14 +18,14 @@ export default function KitchenMonitorPage() {
   useEffect(() => {
     async function fetchAllergies() {
       try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .neq('allergies', 'Không')
-          .order('full_name', { ascending: true });
-        if (data && !error) {
-          setAllergyStudents(data as Student[]);
-        }
+        const res = await fetch('/api/admin/students', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        const list: Student[] = Array.isArray(json) ? json : json.students || json.data || [];
+        const withAllergies = list
+          .filter((s) => s.allergies && s.allergies.trim() !== '' && s.allergies.trim() !== 'Không')
+          .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'vi'));
+        setAllergyStudents(withAllergies);
       } catch (e) {
         console.error(e);
       }

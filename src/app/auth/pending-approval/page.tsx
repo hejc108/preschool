@@ -47,7 +47,7 @@ function PendingApprovalContent() {
         .then((r) => r.json())
         .then((data) => {
           if (data.isApproved && data.status === 'ACTIVE') {
-            const role = data.role || 'PARENT';
+            const role = data.active_role || data.role || 'PARENT';
             let targetUrl = data.redirectUrl || '/parent';
             if (role === 'TEACHER') {
               targetUrl = '/teacher';
@@ -80,7 +80,7 @@ function PendingApprovalContent() {
       const data = await res.json();
 
       if (data.isApproved && data.status === 'ACTIVE') {
-        const role = data.role || 'PARENT';
+        const role = data.active_role || data.role || 'PARENT';
         let targetUrl = data.redirectUrl || '/parent';
         if (role === 'TEACHER') {
           targetUrl = '/teacher';
@@ -113,7 +113,7 @@ function PendingApprovalContent() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {}
-    const cookiesToClear = ['suongmai_session', 'suongmai_user_email', 'suongmai_user_role', 'suongmai_username', 'suongmai_has_children'];
+    const cookiesToClear = ['suongmai_session', 'suongmai_user_email', 'suongmai_user_role', 'suongmai_active_role', 'suongmai_roles', 'suongmai_username', 'suongmai_has_children'];
     cookiesToClear.forEach((name) => {
       document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
     });

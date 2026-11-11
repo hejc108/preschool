@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isNonRegularStudent } from '@/lib/utils/studentClassification';
+import { requireActiveRole } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -90,8 +91,11 @@ async function saveCitizenIdToMap(supabase: any, studentId: string, citizenId: s
   } catch (e) {}
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF']);
+    if ('response' in auth) return auth.response;
+
     const supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(
@@ -257,6 +261,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     let supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(
@@ -357,6 +364,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     let supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(

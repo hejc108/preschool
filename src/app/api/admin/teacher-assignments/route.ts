@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isAdminRole, requireActiveRole } from '@/lib/auth/sessionContext';
+import {
+  DEFAULT_CLASS_NAME_TO_UUID,
+  DEFAULT_UUID_TO_NAME,
+  resolveCanonicalClassId,
+  resolveClassDisplayName,
+} from '@/lib/constants/classes';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -46,26 +53,16 @@ function isApiKeyError(err: any): boolean {
   return msg.includes('Invalid API key') || msg.includes('JWT') || err?.code === 'PGRST301';
 }
 
-const DEFAULT_CLASS_NAME_TO_UUID: Record<string, string> = {
-  'Nhà trẻ': '14ccdb7e-c341-4fe4-8a59-78b2a2914096',
-  'Mầm': '5b61ec3a-11ef-4ca0-b914-97b35f9f3762',
-  'Chồi': '9d953115-1de9-4a56-a75c-eadcf903f398',
-  'Lá 1': 'ebe8ec4d-1cf5-406a-9483-f0d90ccc71fd',
-  'Lá 2': '86b1e783-b643-41a5-9833-194b5a29d2e1',
-};
-
-const DEFAULT_UUID_TO_NAME: Record<string, string> = Object.entries(DEFAULT_CLASS_NAME_TO_UUID).reduce(
-  (acc, [name, id]) => {
-    acc[id] = name;
-    return acc;
-  },
-  {} as Record<string, string>
-);
-
 export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'TEACHER']);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email')?.toLowerCase().trim();
+    const requestedEmail = searchParams.get('email')?.toLowerCase().trim();
+    const email = !isAdminRole(auth.ctx.activeRole)
+      ? auth.ctx.email.toLowerCase().trim()
+      : requestedEmail;
 
     let supabase = getSupabaseClient(false);
     if (!supabase) {
@@ -185,6 +182,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+
     const body = await request.json();
     const { teacher_email, teacher_id, class_ids, academic_year } = body;
 
@@ -193,11 +193,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'teacher_email is required' }, { status: 400 });
     }
 
-    const selectedClassIds: string[] = Array.isArray(class_ids) ? class_ids : [];
+    const rawSelectedClassIds: string[] = Array.isArray(class_ids) ? class_ids : [];
 
     let supabase = getSupabaseClient(false);
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
+    }
+
+    // Resolve teacher_id from profiles if caller omitted it
+    let resolvedTeacherId: string | null = teacher_id || null;
+    try {
+      const { data: teacherProf } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+      if (teacherProf?.id) {
+        resolvedTeacherId = teacherProf.id;
+      }
+    } catch {
+      // Ignore profile lookup errors
     }
 
     // 1. Fetch classes for reference
@@ -213,14 +228,19 @@ export async function POST(request: Request) {
     if (!supabase) {
       return NextResponse.json({ success: false, error: 'Database client unavailable' }, { status: 500 });
     }
-    const classIdToNameMap: Record<string, string> = { ...DEFAULT_UUID_TO_NAME };
-    if (classesData && classesData.length > 0) {
-      classesData.forEach((c: { id: string; name: string }) => {
-        classIdToNameMap[c.id] = c.name;
-      });
-    }
+    const classesList = Array.isArray(classesData) ? classesData : [];
+    const selectedClassIds: string[] = Array.from(
+      new Set(
+        rawSelectedClassIds
+          .filter(Boolean)
+          .map((cid) => resolveCanonicalClassId(cid, classesList))
+          .filter(Boolean)
+      )
+    );
 
-    const assignedNames = selectedClassIds.map((cid) => classIdToNameMap[cid] || cid).filter(Boolean);
+    const assignedNames = selectedClassIds
+      .map((cid) => resolveClassDisplayName(cid, classesList) || DEFAULT_UUID_TO_NAME[cid] || cid)
+      .filter(Boolean);
     const joinedNames = assignedNames.join(', ');
     const primaryClassId = selectedClassIds[0] || null;
 
@@ -237,9 +257,9 @@ export async function POST(request: Request) {
       if (selectedClassIds.length > 0) {
         const rows = selectedClassIds.map((cid) => ({
           teacher_email: cleanEmail,
-          teacher_id: teacher_id || null,
+          teacher_id: resolvedTeacherId,
           class_id: cid,
-          class_name: classIdToNameMap[cid] || '',
+          class_name: resolveClassDisplayName(cid, classesList) || DEFAULT_UUID_TO_NAME[cid] || '',
           academic_year: academic_year || '2026-2027',
           is_main_teacher: true,
         }));
@@ -252,6 +272,18 @@ export async function POST(request: Request) {
           tableSyncSuccess = true;
         } else {
           console.warn('teacher_class_assignments insert notice:', insertErr.message);
+        }
+
+        // Ensure TEACHER role is recorded in user_roles (supports multi-role Teacher+Parent)
+        if (resolvedTeacherId) {
+          try {
+            await supabase.from('user_roles').upsert(
+              { user_id: resolvedTeacherId, role_name: 'TEACHER' },
+              { onConflict: 'user_id,role_name' }
+            );
+          } catch {
+            // Table optional prior to migration
+          }
         }
       } else {
         tableSyncSuccess = true;
@@ -299,7 +331,7 @@ export async function POST(request: Request) {
         formatted_class_name: joinedNames,
         assignments: selectedClassIds.map((cid) => ({
           class_id: cid,
-          class_name: classIdToNameMap[cid] || cid,
+          class_name: resolveClassDisplayName(cid, classesList) || DEFAULT_UUID_TO_NAME[cid] || cid,
           is_main_teacher: true,
         })),
       },

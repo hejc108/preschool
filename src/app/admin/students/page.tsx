@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   Users,
   Search,
   Eye,
   Edit3,
+  Link2,
   X,
   Phone,
   Heart,
@@ -328,18 +330,8 @@ export default function StudentsDirectoryPage() {
         }),
       });
       if (!res.ok) {
-        await supabase
-          .from('students')
-          .update({
-            citizen_id: normalizedCitizenId,
-            full_name: updatedStudent.full_name,
-            gender: updatedStudent.gender,
-            dob: updatedStudent.dob,
-            allergies: updatedStudent.allergies,
-            status: updatedStudent.status,
-            avatar_url: updatedStudent.avatar_url,
-          })
-          .eq('id', updatedStudent.id);
+        const errJson = await res.json().catch(() => ({}));
+        console.error('Failed saving student edits via API:', errJson.error || res.status);
       }
     } catch (err) {
       console.error('Error saving student edits:', err);
@@ -615,7 +607,7 @@ export default function StudentsDirectoryPage() {
                             : t('admin.students.status_graduated')}
                         </span>
                       </td>
-                      <td className="py-4 px-4 text-center w-36 whitespace-nowrap">
+                      <td className="py-4 px-4 text-center w-44 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-2">
                           {/* 1. XEM ICON BUTTON */}
                           <button
@@ -626,7 +618,16 @@ export default function StudentsDirectoryPage() {
                             <Eye className="w-4 h-4" />
                           </button>
 
-                          {/* 2. SỬA ICON BUTTON */}
+                          {/* 2. LIÊN KẾT PHỤ HUYNH / ĐA VAI TRÒ */}
+                          <Link
+                            href={`/admin/students/${s.id}`}
+                            className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition-colors shadow-xs"
+                            title="Liên kết tài khoản Phụ huynh (GV / PH)"
+                          >
+                            <Link2 className="w-4 h-4" />
+                          </Link>
+
+                          {/* 3. SỬA ICON BUTTON */}
                           <button
                             onClick={() => setEditStudent({ ...s, citizen_id: s.citizen_id || '' })}
                             className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-200 transition-colors shadow-xs"
@@ -635,7 +636,7 @@ export default function StudentsDirectoryPage() {
                             <Edit3 className="w-4 h-4 text-amber-600" />
                           </button>
 
-                          {/* 3. CHUYỂN LỚP ICON BUTTON */}
+                          {/* 4. CHUYỂN LỚP ICON BUTTON */}
                           <button
                             onClick={() => {
                               setTransferStudent(s);
@@ -792,10 +793,19 @@ export default function StudentsDirectoryPage() {
 
             {/* SECTION 1: PARENTS (CHA / MẸ) */}
             <div>
-              <h4 className="text-sm font-bold text-sky-900 mb-3 flex items-center gap-2 border-b border-slate-100 pb-2">
-                <Heart className="w-4 h-4 text-rose-500" />
-                <span>Hồ Sơ Cha / Mẹ (Phụ Huynh Trực Tiếp)</span>
-              </h4>
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-3">
+                <h4 className="text-sm font-bold text-sky-900 flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-rose-500" />
+                  <span>Hồ Sơ Cha / Mẹ (Phụ Huynh Trực Tiếp)</span>
+                </h4>
+                <Link
+                  href={`/admin/students/${selectedStudent.id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold transition-colors"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>Quản lý tài khoản Phụ huynh</span>
+                </Link>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {selectedStudent.parents?.map((parent, idx) => (

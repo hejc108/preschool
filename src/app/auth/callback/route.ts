@@ -2,7 +2,16 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { setSignedCookie, parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import {
+  COOKIE_NAMES,
+  setSignedCookie,
+  verifyAndExtractCookieValue,
+} from '@/lib/utils/cookieSigner';
+import {
+  normalizeRole,
+  parseCookieHeader,
+  resolveProfileAndRolesByEmail,
+} from '@/lib/auth/sessionContext';
 
 const FALLBACK_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
@@ -57,17 +66,14 @@ export async function GET(request: Request) {
     return response;
   }
 
-  let userEmail = searchParams.get('email') || '';
+  let userEmail = '';
   let fullName = '';
   let avatarUrl = '';
   let userId = '';
 
-  if (!userEmail) {
-    const cookieHeader = request.headers.get('cookie') || '';
-    const match = cookieHeader.match(/suongmai_user_email=([^;]+)/);
-    if (match) {
-      userEmail = parseSignedCookieClient(match[1]);
-    }
+  const rawCookies = parseCookieHeader(request.headers.get('cookie'));
+  if (!code && rawCookies[COOKIE_NAMES.EMAIL]) {
+    userEmail = (await verifyAndExtractCookieValue(rawCookies[COOKIE_NAMES.EMAIL])) || '';
   }
 
   if (code) {
@@ -171,8 +177,11 @@ export async function GET(request: Request) {
         });
         dbProfileSaved = existingDbProfile;
 
-        // Chỉ cập nhật avatar hoặc tên mới nếu trước đó chưa có hoặc cập nhật từ Google OAuth (KHÔNG ĐỤNG ĐẾN ROLE HAY STATUS)
+        // Chỉ cập nhật avatar, tên mới hoặc auth_user_id (KHÔNG ĐỤNG ĐẾN ROLE HAY STATUS)
         const updateFields: any = {};
+        if (userId && UUID_REGEX.test(userId) && existingDbProfile.auth_user_id !== userId) {
+          updateFields.auth_user_id = userId;
+        }
         if (resolvedName && (!existingDbProfile.full_name || existingDbProfile.full_name === cleanEmail.split('@')[0])) {
           updateFields.full_name = resolvedName;
         }
@@ -181,7 +190,16 @@ export async function GET(request: Request) {
         }
         if (Object.keys(updateFields).length > 0) {
           updateFields.updated_at = new Date().toISOString();
-          await supabaseAdmin.from('profiles').update(updateFields).eq('id', existingDbProfile.id);
+          const { error: upErr } = await supabaseAdmin
+            .from('profiles')
+            .update(updateFields)
+            .eq('id', existingDbProfile.id);
+          if (upErr && upErr.message?.includes('auth_user_id')) {
+            delete updateFields.auth_user_id;
+            if (Object.keys(updateFields).length > 1) {
+              await supabaseAdmin.from('profiles').update(updateFields).eq('id', existingDbProfile.id);
+            }
+          }
           dbProfileSaved = { ...existingDbProfile, ...updateFields };
         }
       } else {
@@ -189,8 +207,10 @@ export async function GET(request: Request) {
         console.log('[AUTH CALLBACK] Tài khoản đăng nhập lần đầu tiên, tạo hồ sơ PENDING mới:', cleanEmail);
         const initialRole = isSuper ? 'SUPER_ADMIN' : isPrincipal ? 'SCHOOL_ADMIN' : 'GUEST';
         const initialStatus = isSuper || isPrincipal ? 'ACTIVE' : 'PENDING';
-        const newRecord = {
-          id: ensureValidUuid(userId),
+        const validUid = ensureValidUuid(userId);
+        const newRecord: any = {
+          id: validUid,
+          auth_user_id: userId && UUID_REGEX.test(userId) ? userId : validUid,
           email: cleanEmail,
           full_name: resolvedName,
           avatar_url: resolvedAvatar,
@@ -200,17 +220,36 @@ export async function GET(request: Request) {
           updated_at: new Date().toISOString(),
         };
 
-        const { data: insData, error: insErr } = await supabaseAdmin
+        let { data: insData, error: insErr } = await supabaseAdmin
           .from('profiles')
           .insert(newRecord)
           .select()
           .maybeSingle();
+
+        if (insErr && insErr.message?.includes('auth_user_id')) {
+          delete newRecord.auth_user_id;
+          const retry = await supabaseAdmin
+            .from('profiles')
+            .insert(newRecord)
+            .select()
+            .maybeSingle();
+          insData = retry.data;
+          insErr = retry.error;
+        }
 
         if (insErr) {
           console.error('[AUTH CALLBACK INSERT ERROR]:', insErr.message);
           dbProfileSaved = newRecord;
         } else {
           dbProfileSaved = insData || newRecord;
+        }
+
+        if (dbProfileSaved?.id && (initialRole === 'SUPER_ADMIN' || initialRole === 'SCHOOL_ADMIN')) {
+          try {
+            await supabaseAdmin
+              .from('user_roles')
+              .upsert({ user_id: dbProfileSaved.id, role_name: initialRole }, { onConflict: 'user_id,role_name' });
+          } catch {}
         }
       }
     } catch (adminErr: any) {
@@ -235,96 +274,93 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. Phân quyền và điều hướng hoàn toàn dựa trên dữ liệu chuẩn từ Database Supabase
-    let liveProfile: any = dbProfileSaved;
-    if (!liveProfile && typeof globalThis !== 'undefined' && globalThis.__SUONGMAI_PROFILES_CACHE__) {
-      liveProfile = globalThis.__SUONGMAI_PROFILES_CACHE__.find((p) => p.email.toLowerCase().trim() === cleanEmail);
-    }
+    // 3. Phân quyền đa vai trò dựa trên CSDL Supabase
+    const previousSignedActive = rawCookies[COOKIE_NAMES.ACTIVE_ROLE]
+      ? await verifyAndExtractCookieValue(rawCookies[COOKIE_NAMES.ACTIVE_ROLE])
+      : null;
+    const requestedCookieRole = previousSignedActive ? normalizeRole(previousSignedActive) : null;
 
+    const sessionCtx = await resolveProfileAndRolesByEmail(cleanEmail, requestedCookieRole);
+    const liveProfile: any = dbProfileSaved;
     const isSuper = cleanEmail === 'sadmin@suongmai.edu.vn';
-    const isApproved = isSuper || (liveProfile && liveProfile.approval_status === 'ACTIVE');
-    let resolvedRole = liveProfile?.role || 'GUEST';
-    if (cleanEmail === 'luciaxuan178@gmail.com' && resolvedRole === 'SUPER_ADMIN') {
-      resolvedRole = 'SCHOOL_ADMIN';
-    }
+    const isApproved =
+      isSuper ||
+      sessionCtx?.approvalStatus === 'ACTIVE' ||
+      (liveProfile && liveProfile.approval_status === 'ACTIVE');
 
+    const roles = sessionCtx?.roles?.length
+      ? sessionCtx.roles
+      : [normalizeRole(liveProfile?.role || 'GUEST')].filter((r) => r !== 'GUEST');
+    const resolvedPrimaryRole =
+      roles[0] || normalizeRole(liveProfile?.role || (isSuper ? 'SUPER_ADMIN' : 'GUEST'));
     const nextParam = searchParams.get('next') || searchParams.get('returnUrl');
 
     if (isApproved) {
+      let activeRole =
+        sessionCtx && !sessionCtx.activeRoleInvalid
+          ? sessionCtx.activeRole
+          : resolvedPrimaryRole;
       let targetUrl = '/parent';
-      let hasChildren = false;
-      try {
-        if (liveProfile?.id) {
-          let supabaseAdmin = getSupabaseAdminClient(false);
-          const { count } = await supabaseAdmin
-            .from('student_guardians')
-            .select('*', { count: 'exact', head: true })
-            .eq('guardian_id', liveProfile.id);
-          hasChildren = Boolean(count && count > 0);
-        }
-      } catch (e) {}
+      const hasChildren = Boolean(sessionCtx?.linkedStudentIds?.length || roles.includes('PARENT'));
 
-      if (['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMIN'].includes(resolvedRole)) {
+      if (nextParam && nextParam.startsWith('/parent') && roles.includes('PARENT')) {
+        activeRole = 'PARENT';
+        targetUrl = nextParam;
+      } else if (nextParam && nextParam.startsWith('/teacher') && roles.includes('TEACHER')) {
+        activeRole = 'TEACHER';
+        targetUrl = nextParam;
+      } else if (activeRole === 'SUPER_ADMIN' || activeRole === 'SCHOOL_ADMIN') {
         targetUrl = nextParam && nextParam.startsWith('/') ? nextParam : '/admin/dashboard';
-      } else if (resolvedRole === 'TEACHER') {
-        if (nextParam && nextParam.startsWith('/parent') && hasChildren) {
-          targetUrl = nextParam;
-        } else if (nextParam && nextParam.startsWith('/teacher')) {
-          targetUrl = nextParam;
-        } else {
-          targetUrl = '/teacher';
-        }
-      } else if (resolvedRole === 'PARENT') {
-        if (nextParam && nextParam.startsWith('/parent')) {
-          targetUrl = nextParam;
-        } else if (nextParam && nextParam.startsWith('/teacher')) {
-          targetUrl = '/parent?warning=wrong_role';
-        } else {
-          targetUrl = '/parent';
-        }
-      } else if (resolvedRole === 'KITCHEN_STAFF') {
+      } else if (activeRole === 'TEACHER') {
+        targetUrl = '/teacher';
+      } else if (activeRole === 'PARENT') {
+        targetUrl = nextParam && nextParam.startsWith('/teacher') ? '/parent?warning=wrong_role' : '/parent';
+      } else if (activeRole === 'STAFF') {
         targetUrl = '/admin/menu';
-      } else if (resolvedRole === 'NURSE_STAFF') {
-        targetUrl = '/admin/health';
       }
 
       const response = NextResponse.redirect(`${origin}${targetUrl}`);
-      await setSignedCookie(response, 'suongmai_session', 'active', {
+      await setSignedCookie(response, COOKIE_NAMES.SESSION, 'active', {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      await setSignedCookie(response, 'suongmai_user_email', cleanEmail, {
+      await setSignedCookie(response, COOKIE_NAMES.EMAIL, cleanEmail, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      await setSignedCookie(response, 'suongmai_user_role', resolvedRole, {
+      await setSignedCookie(response, COOKIE_NAMES.ROLE, resolvedPrimaryRole, {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+      });
+      await setSignedCookie(response, COOKIE_NAMES.ACTIVE_ROLE, activeRole, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
       if (hasChildren) {
-        await setSignedCookie(response, 'suongmai_has_children', 'true', {
+        await setSignedCookie(response, COOKIE_NAMES.HAS_CHILDREN, 'true', {
           path: '/',
           maxAge: 86400,
           sameSite: 'lax',
         });
       } else {
-        response.cookies.delete('suongmai_has_children');
+        response.cookies.delete(COOKIE_NAMES.HAS_CHILDREN);
       }
       return response;
     } else {
-      // Pending user: Redirect to /auth/pending-approval
       const pendingRedirect = `${origin}/auth/pending-approval?email=${encodeURIComponent(cleanEmail)}`;
       const response = NextResponse.redirect(pendingRedirect);
-      response.cookies.delete('suongmai_session');
-      await setSignedCookie(response, 'suongmai_user_email', cleanEmail, {
+      response.cookies.delete(COOKIE_NAMES.SESSION);
+      response.cookies.delete(COOKIE_NAMES.ACTIVE_ROLE);
+      await setSignedCookie(response, COOKIE_NAMES.EMAIL, cleanEmail, {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
       });
-      await setSignedCookie(response, 'suongmai_user_role', 'GUEST', {
+      await setSignedCookie(response, COOKIE_NAMES.ROLE, 'GUEST', {
         path: '/',
         maxAge: 86400,
         sameSite: 'lax',
@@ -333,9 +369,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // Fallback if no user email could be identified: redirect with explicit error parameter
   console.error('[AUTH CALLBACK ERROR] Không thể xác định email người dùng');
   const response = NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent('Không thể xác thực thông tin đăng nhập từ Google. Vui lòng thử lại.')}`);
-  response.cookies.delete('suongmai_session');
+  response.cookies.delete(COOKIE_NAMES.SESSION);
+  response.cookies.delete(COOKIE_NAMES.ACTIVE_ROLE);
   return response;
 }

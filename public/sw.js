@@ -1,5 +1,5 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
-const CACHE_NAME = 'suongmai-pwa-v2';
+const CACHE_NAME = 'suongmai-pwa-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -39,24 +39,20 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event - Strict PKCE Cookie & Auth Bypass
 self.addEventListener('fetch', (event) => {
-  // 1. Only handle GET requests
   if (event.request.method !== 'GET') return;
-  
+
   const url = new URL(event.request.url);
 
-  // 2. EXPLICIT BYPASS: Never intercept or cache Auth, API, or Supabase requests
-  // This guarantees zero conflicts with @supabase/ssr Cookie PKCE authentication flow.
   if (
-    url.pathname.startsWith('/auth') || 
-    url.pathname.startsWith('/api') || 
+    url.pathname.startsWith('/auth') ||
+    url.pathname.startsWith('/api') ||
     url.origin.includes('supabase.co') ||
     url.searchParams.has('code') ||
     url.searchParams.has('state')
   ) {
-    return; // Pass through directly to network
+    return;
   }
 
-  // 3. For all other static navigation or assets: Network-First with Cache Fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -80,3 +76,83 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+// Web Push Handler (Q4): Preserve & display channel tag ('TEACHER' | 'PARENT')
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'Mầm Non Sương Mai',
+    body: 'Bạn có thông báo mới.',
+    notification_channel: 'PARENT',
+    target_url: '/parent',
+    student_id: null,
+    class_id: null,
+    entity_type: 'announcement',
+    entity_id: null,
+  };
+
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    }
+  } catch {
+    if (event.data) {
+      payload.body = event.data.text();
+    }
+  }
+
+  const channel = payload.notification_channel === 'TEACHER' ? 'TEACHER' : 'PARENT';
+  const defaultUrl = channel === 'TEACHER' ? '/teacher' : '/parent';
+  const channelBadgeLabel = channel === 'TEACHER' ? 'Giáo viên' : 'Phụ huynh';
+  const title = payload.title || `Mầm Non Sương Mai (${channelBadgeLabel})`;
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-192x192.png',
+      tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
+      data: {
+        notification_channel: channel,
+        target_url: payload.target_url || defaultUrl,
+        student_id: payload.student_id || null,
+        class_id: payload.class_id || null,
+        entity_type: payload.entity_type || 'announcement',
+        entity_id: payload.entity_id || null,
+      },
+    })
+  );
+});
+
+// Notification Click Handler (Q4): Auto-switch active PWA context when opening channel URL
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const channel = data.notification_channel === 'TEACHER' ? 'TEACHER' : 'PARENT';
+  const targetUrl = data.target_url || (channel === 'TEACHER' ? '/teacher' : '/parent');
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        try {
+          client.postMessage({
+            type: 'SWITCH_ROLE_AND_FOCUS',
+            notification_channel: channel,
+            target_url: targetUrl,
+            student_id: data.student_id || null,
+            class_id: data.class_id || null,
+          });
+          if ('focus' in client) {
+            return client.focus();
+          }
+        } catch {
+          // Continue looking for usable window client
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

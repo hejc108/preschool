@@ -6,6 +6,8 @@ import { calculateBMI, classifyWHOGrowthStatus } from '@/lib/utils/healthHelper'
 import { HealthRecord } from '@/lib/types/schema';
 import { isNonRegularStudent } from '@/lib/utils/studentClassification';
 import defaultHealthCatalog from '@/lib/data/health_catalog.json';
+import { requireActiveRole } from '@/lib/auth/sessionContext';
+import { expandClassIdAliases } from '@/lib/constants/classes';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -90,6 +92,9 @@ function safeParseFloat(val: any): number | null {
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF', 'TEACHER']);
+    if ('response' in auth) return auth.response;
+
     const supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json(
@@ -102,6 +107,21 @@ export async function GET(request: Request) {
     const term = searchParams.get('term') || 'Q1';
     const academicYear = searchParams.get('academic_year') || '2026-2027';
     const classIdParam = searchParams.get('class_id');
+
+    const teacherScopedIds =
+      auth.ctx.activeRole === 'TEACHER'
+        ? auth.ctx.assignedClassIds.flatMap((id) => expandClassIdAliases(id))
+        : null;
+
+    if (teacherScopedIds !== null && classIdParam) {
+      const requestedAliases = expandClassIdAliases(classIdParam);
+      if (!requestedAliases.some((a) => teacherScopedIds.includes(a))) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden: Class is not assigned to active teacher' },
+          { status: 403, headers: NO_CACHE_HEADERS }
+        );
+      }
+    }
 
     // 1. Fetch classes
     const { data: classesData } = await supabase
@@ -127,7 +147,9 @@ export async function GET(request: Request) {
       .order('student_code');
 
     if (classIdParam) {
-      query = query.eq('class_id', classIdParam);
+      query = query.in('class_id', expandClassIdAliases(classIdParam));
+    } else if (teacherScopedIds !== null) {
+      query = query.in('class_id', teacherScopedIds.length > 0 ? teacherScopedIds : ['00000000-0000-0000-0000-000000000000']);
     }
 
     const { data: studentsData, error: stErr } = await query;
@@ -259,8 +281,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF']);
+    if ('response' in auth) return auth.response;
+
     const supabase = getSupabaseClient();
     const body = await request.json().catch(() => ({}));
+
+    const defaultTerm = body.term || 'Q1';
+    const defaultAcademicYear = body.academic_year || '2026-2027';
+    const defaultDate = body.record_date || body.measured_date || new Date().toISOString().split('T')[0];
 
     // Support sync all catalog, batch { records: [...] }, and single { record: {...} }
     let rawRecords: any[] = [];
@@ -286,10 +315,6 @@ export async function POST(request: Request) {
     } else if (body.record && typeof body.record === 'object') {
       rawRecords = [body.record];
     }
-
-    const defaultTerm = body.term || 'Q1';
-    const defaultAcademicYear = body.academic_year || '2026-2027';
-    const defaultDate = body.record_date || body.measured_date || new Date().toISOString().split('T')[0];
 
     if (rawRecords.length === 0) {
       return NextResponse.json(

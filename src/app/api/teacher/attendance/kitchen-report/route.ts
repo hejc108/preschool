@@ -1,41 +1,19 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import {
+  getSupabaseAdminClient,
+  NO_CACHE_HEADERS,
+} from '@/lib/supabase/server';
+import { DEFAULT_SLUG_TO_UUID } from '@/lib/constants/classes';
+import {
+  assertTeacherClassAccess,
+  requireActiveRole,
+} from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
 function getSupabaseClient() {
-  const url = (
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co'
-  )
-    .trim()
-    .replace(/^["']|["']$/g, '');
-
-  const rawKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    FALLBACK_ANON_KEY;
-
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return getSupabaseAdminClient(false);
 }
 
 interface VietnamTimeInfo {
@@ -147,8 +125,13 @@ function computeUiState(
 
 export async function GET(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const { searchParams } = new URL(request.url);
-    const classId = searchParams.get('class_id') || '';
+    const rawClassId = searchParams.get('class_id') || '';
+    const classId = DEFAULT_SLUG_TO_UUID[rawClassId] || rawClassId;
     const dateParam = searchParams.get('date') || '';
     const mockTime = searchParams.get('mock_time') || '';
     const mockDayParam = searchParams.get('mock_day_of_week');
@@ -162,6 +145,11 @@ export async function GET(request: Request) {
         { success: false, error: 'Thiếu class_id' },
         { status: 400, headers: NO_CACHE_HEADERS }
       );
+    }
+
+    if (ctx.activeRole === 'TEACHER') {
+      const denied = assertTeacherClassAccess(ctx, classId);
+      if (denied) return denied;
     }
 
     const sb = getSupabaseClient();
@@ -245,8 +233,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireActiveRole(request, ['TEACHER', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
+    if ('response' in auth) return auth.response;
+    const { ctx } = auth;
+
     const body = await request.json();
-    const { class_id, present_count, submitted_by, date: dateParam, mock_time, mock_day_of_week } = body;
+    const { class_id: rawClassId, present_count, submitted_by: rawSubmittedBy, date: dateParam, mock_time, mock_day_of_week } = body;
+    const class_id = DEFAULT_SLUG_TO_UUID[rawClassId] || rawClassId;
+    const submitted_by = rawSubmittedBy || ctx.fullName;
 
     if (!class_id || present_count === undefined) {
       return NextResponse.json(
@@ -254,6 +248,9 @@ export async function POST(request: Request) {
         { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
+
+    const denied = assertTeacherClassAccess(ctx, class_id);
+    if (denied) return denied;
 
     const timeInfo = getVietnamTimeInfo(
       undefined,

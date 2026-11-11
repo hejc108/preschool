@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
+import { ActiveRoleProvider } from '@/components/auth/ActiveRoleContext';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Script from 'next/script';
 
@@ -43,8 +44,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-surface-base text-slate-800 min-h-screen font-sans">
         <LanguageProvider>
-          {children}
-          <PwaInstallPrompt />
+          <ActiveRoleProvider>
+            {children}
+            <PwaInstallPrompt />
+          </ActiveRoleProvider>
         </LanguageProvider>
 
         {/* Register Service Worker (Root Scope: /) */}

@@ -1,4 +1,4 @@
-import { Profile, ParentStudentRelation } from '../types/schema';
+import { Profile, ParentStudentRelation, UserRole } from '../types/schema';
 import { INITIAL_STUDENTS, supabase } from '../supabase/client';
 
 export interface PendingUserApproval {
@@ -407,24 +407,8 @@ export async function fetchLiveProfilesFromSupabase(): Promise<Profile[]> {
       } catch (e) {}
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
     const localProfiles = getStoredProfiles();
     let merged: Profile[] = apiProfiles.length > 0 ? [...apiProfiles] : [];
-
-    if (!error && data && data.length > 0) {
-      for (const dbProfile of data as Profile[]) {
-        const idx = merged.findIndex((m) => m.email?.toLowerCase().trim() === dbProfile.email?.toLowerCase().trim());
-        if (idx !== -1) {
-          merged[idx] = { ...merged[idx], ...dbProfile };
-        } else {
-          merged.push(dbProfile);
-        }
-      }
-    }
 
     // Merge local profiles if missing from DB/API cache
     for (const lp of localProfiles) {
@@ -528,6 +512,54 @@ export async function promoteToSchoolAdmin(targetEmail: string, operatorEmail?: 
 /**
  * Approve user as Teacher with optional assigned class
  */
+export async function saveMultiRoleUser(params: {
+  email: string;
+  roles: UserRole[];
+  approval_status?: 'ACTIVE' | 'PENDING' | 'REJECTED';
+  assigned_class_id?: string | null;
+  assigned_class_name?: string | null;
+  assigned_class_ids?: string[];
+  student_ids?: string[];
+  clear_student_links?: boolean;
+}): Promise<{ profile: Profile | null; relations: ParentStudentRelation[] }> {
+  const cleanEmail = params.email.toLowerCase().trim();
+  const res = await fetch('/api/users/approvals', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: cleanEmail,
+      roles: params.roles,
+      approval_status: params.approval_status || 'ACTIVE',
+      assigned_class_id: params.assigned_class_id,
+      assigned_class_name: params.assigned_class_name,
+      assigned_class_ids: params.assigned_class_ids,
+      student_ids: params.student_ids,
+      clear_student_links: params.clear_student_links ?? false,
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || json.error || 'Cập nhật phân quyền đa vai trò thất bại.');
+  }
+  if (Array.isArray(json.relations)) {
+    saveStoredRelations(json.relations);
+  }
+  if (json.profile) {
+    const profiles = getStoredProfiles();
+    const idx = profiles.findIndex((p) => p.email?.toLowerCase().trim() === cleanEmail);
+    if (idx !== -1) {
+      profiles[idx] = { ...profiles[idx], ...json.profile };
+    } else {
+      profiles.push(json.profile);
+    }
+    saveStoredProfiles(profiles);
+  }
+  return {
+    profile: json.profile || null,
+    relations: Array.isArray(json.relations) ? json.relations : getStoredRelations(),
+  };
+}
+
 export async function approveTeacherUser(email: string, classId?: string, className?: string): Promise<Profile | null> {
   const cleanEmail = email.toLowerCase().trim();
   let profiles = getStoredProfiles();
@@ -553,6 +585,7 @@ export async function approveTeacherUser(email: string, classId?: string, classN
         approval_status: 'ACTIVE',
         assigned_class_id: classId,
         assigned_class_name: className,
+        clear_student_links: false,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -586,12 +619,6 @@ export async function approveTeacherUser(email: string, classId?: string, classN
     profiles.push(fallback);
     idx = profiles.length - 1;
   }
-
-  // Remove any stale parent-student relations locally when switching to TEACHER
-  const cleanedRelations = getStoredRelations().filter(
-    (r) => r.parent_email?.toLowerCase().trim() !== cleanEmail
-  );
-  saveStoredRelations(cleanedRelations);
 
   saveStoredProfiles(profiles);
   return profiles[idx];
