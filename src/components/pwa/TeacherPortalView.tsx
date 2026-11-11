@@ -35,7 +35,9 @@ import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 import {
+  readCachedClassAttendance,
   readVerifiedTeacherClasses,
+  writeCachedClassAttendance,
   writeVerifiedTeacherClasses,
 } from '@/lib/utils/teacherClassCache';
 
@@ -84,9 +86,10 @@ export function TeacherPortalView() {
   const { t, language } = useLanguage();
   const {
     activeRole,
+    serverSyncedRole,
     profileId,
     isLoading: isLoadingSession,
-    isSwitching,
+    waitForRoleSync,
     email,
     fullName,
     avatarUrl,
@@ -96,14 +99,15 @@ export function TeacherPortalView() {
   } = useActiveRole();
 
   const [activeTab, setActiveTab] = useState<'ATTENDANCE' | 'MEDICATION' | 'MEALS' | 'CHECKOUT'>('ATTENDANCE');
-  const [activeClass, setActiveClass] = useState<AssignedClass | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [refreshingClass, setRefreshingClass] = useState<boolean>(false);
   const [isFinalizingKitchen, setIsFinalizingKitchen] = useState<boolean>(false);
 
-  // Local optimistic student list mirrored from SWR per class
-  const [students, setStudents] = useState<TeacherStudent[]>([]);
-  const [medications, setMedications] = useState<MedicationRequest[]>([]);
-  const [mealExceptions, setMealExceptions] = useState<MealException[]>([]);
+  // Per-class local optimistic state synced from SWR + sessionStorage cache
+  const [localRosterClassId, setLocalRosterClassId] = useState<string>('');
+  const [localStudents, setLocalStudents] = useState<TeacherStudent[]>([]);
+  const [localMedications, setLocalMedications] = useState<MedicationRequest[]>([]);
+  const [localMealExceptions, setLocalMealExceptions] = useState<MealException[]>([]);
 
   // Medication Modal
   const [showAddMedModal, setShowAddMedModal] = useState(false);
@@ -124,9 +128,21 @@ export function TeacherPortalView() {
   const [lateReason, setLateReason] = useState('Phụ huynh bận công việc đột xuất');
   const [viewPickupStudentId, setViewPickupStudentId] = useState<string | null>(null);
 
-  const isTeacherReady = Boolean(email && activeRole === 'TEACHER' && !isSwitching);
+  const isTeacherReady = Boolean(email && activeRole === 'TEACHER');
+  const isTeacherRealtimeReady = isTeacherReady && serverSyncedRole === 'TEACHER';
 
-  // Per-email verified class cache prevents blank/unassigned flash during role switch,
+  const fetchAsTeacher = useCallback(
+    async (url: string) => {
+      const aligned = await waitForRoleSync('TEACHER');
+      if (!aligned) {
+        throw new Error('ROLE_SWITCH_CANCELLED');
+      }
+      return jsonFetcher(url);
+    },
+    [waitForRoleSync]
+  );
+
+  // Per-email verified class cache prevents blank/unassigned flash during role switch or reload,
   // while SWR ALWAYS revalidates in background on mount to pick up live BGH changes.
   const cachedClasses = useMemo(() => readVerifiedTeacherClasses(email), [email]);
 
@@ -135,14 +151,14 @@ export function TeacherPortalView() {
     data: classesPayload,
     error: classesError,
     isLoading: loadingClasses,
-    isValidating: validatingClasses,
     mutate: mutateClasses,
   } = useSWR(
     isTeacherReady ? ['role', 'TEACHER', 'classes', email] : null,
-    () => jsonFetcher(`/api/teacher/classes?email=${encodeURIComponent(email)}`),
+    () => fetchAsTeacher(`/api/teacher/classes?email=${encodeURIComponent(email)}`),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 60000,
     }
   );
@@ -175,35 +191,35 @@ export function TeacherPortalView() {
     return cachedClasses;
   }, [hasVerifiedClassPayload, serverClasses, cachedClasses]);
 
-  // Preselect class from per-email sessionStorage or first assigned class
-  useEffect(() => {
-    if (assignedClasses.length === 0) {
-      setActiveClass(null);
-      return;
+  // Synchronously resolve activeClass on first render from selectedClassId -> sessionStorage -> assignedClasses[0]
+  const activeClass: AssignedClass | null = useMemo(() => {
+    if (assignedClasses.length === 0) return null;
+    if (selectedClassId) {
+      const exact = assignedClasses.find((c) => c.id === selectedClassId);
+      if (exact) return exact;
     }
-    setActiveClass((prev) => {
-      if (prev && assignedClasses.some((c) => c.id === prev.id)) return prev;
-      const savedClassId =
-        typeof window !== 'undefined'
-          ? window.sessionStorage.getItem(getActiveClassStorageKey(email))
-          : null;
-      return assignedClasses.find((c) => c.id === savedClassId) || assignedClasses[0];
-    });
-  }, [assignedClasses, email]);
+    if (typeof window !== 'undefined' && email) {
+      const savedClassId = window.sessionStorage.getItem(getActiveClassStorageKey(email));
+      const fromStorage = assignedClasses.find((c) => c.id === savedClassId);
+      if (fromStorage) return fromStorage;
+    }
+    return assignedClasses[0];
+  }, [assignedClasses, selectedClassId, email]);
 
   const handleSelectClass = (c: AssignedClass) => {
     if (activeClass?.id === c.id) return;
-    // Clear previous class student arrays immediately so no other class data flickers while loading
-    setStudents([]);
-    setMedications([]);
-    setMealExceptions([]);
-    setActiveClass(c);
+    setSelectedClassId(c.id);
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(getActiveClassStorageKey(email), c.id);
     }
   };
 
-  // 2. Class roster, attendance, medications, meal exceptions (role-prefixed SWR key)
+  const cachedAttendance = useMemo(
+    () => readCachedClassAttendance(email, activeClass?.id),
+    [email, activeClass?.id]
+  );
+
+  // 2. Class roster, attendance, medications, meal exceptions (role-prefixed SWR key + keepPreviousData)
   const {
     data: attendancePayload,
     isLoading: loadingStudents,
@@ -211,7 +227,7 @@ export function TeacherPortalView() {
   } = useSWR(
     isTeacherReady && activeClass ? ['role', 'TEACHER', 'attendance', activeClass.id] : null,
     () =>
-      jsonFetcher(
+      fetchAsTeacher(
         `/api/teacher/attendance?class_id=${encodeURIComponent(
           activeClass!.id
         )}&class_name=${encodeURIComponent(activeClass!.name)}`
@@ -219,31 +235,88 @@ export function TeacherPortalView() {
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 30000,
     }
   );
 
+  // Guard against showing Class A's keepPreviousData temporarily while switching to Class B
+  const matchingAttendancePayload = useMemo(() => {
+    if (!attendancePayload || !activeClass) return null;
+    if (attendancePayload.class_id && attendancePayload.class_id !== activeClass.id) {
+      return null;
+    }
+    return attendancePayload;
+  }, [attendancePayload, activeClass]);
+
+  const isLocalRosterReady = Boolean(activeClass && localRosterClassId === activeClass.id);
+
+  const students: TeacherStudent[] = useMemo(() => {
+    if (isLocalRosterReady) return localStudents;
+    if (Array.isArray(matchingAttendancePayload?.students)) {
+      return matchingAttendancePayload.students;
+    }
+    if (Array.isArray(cachedAttendance?.students)) {
+      return cachedAttendance.students;
+    }
+    return [];
+  }, [isLocalRosterReady, localStudents, matchingAttendancePayload, cachedAttendance]);
+
+  const medications: MedicationRequest[] = useMemo(() => {
+    if (isLocalRosterReady) return localMedications;
+    if (Array.isArray(matchingAttendancePayload?.medications)) {
+      return matchingAttendancePayload.medications;
+    }
+    if (Array.isArray(cachedAttendance?.medications)) {
+      return cachedAttendance.medications;
+    }
+    return [];
+  }, [isLocalRosterReady, localMedications, matchingAttendancePayload, cachedAttendance]);
+
+  const mealExceptions: MealException[] = useMemo(() => {
+    if (isLocalRosterReady) return localMealExceptions;
+    if (Array.isArray(matchingAttendancePayload?.meal_exceptions)) {
+      return matchingAttendancePayload.meal_exceptions;
+    }
+    if (Array.isArray(cachedAttendance?.meal_exceptions)) {
+      return cachedAttendance.meal_exceptions;
+    }
+    return [];
+  }, [isLocalRosterReady, localMealExceptions, matchingAttendancePayload, cachedAttendance]);
+
+  const hasCachedRoster = Boolean(
+    isLocalRosterReady ||
+      (matchingAttendancePayload && Array.isArray(matchingAttendancePayload.students)) ||
+      cachedAttendance
+  );
+
+  const showLoadingStudents = Boolean(activeClass) && !hasCachedRoster && loadingStudents;
+
   useEffect(() => {
     if (!activeClass) {
-      setStudents([]);
-      setMedications([]);
-      setMealExceptions([]);
+      setLocalRosterClassId('');
+      setLocalStudents([]);
+      setLocalMedications([]);
+      setLocalMealExceptions([]);
       return;
     }
-    if (!attendancePayload) return;
-    const nextStudents: TeacherStudent[] = Array.isArray(attendancePayload.students)
-      ? attendancePayload.students
+    if (!matchingAttendancePayload) return;
+
+    const nextStudents: TeacherStudent[] = Array.isArray(matchingAttendancePayload.students)
+      ? matchingAttendancePayload.students
       : [];
-    const nextMeds: MedicationRequest[] = Array.isArray(attendancePayload.medications)
-      ? attendancePayload.medications
+    const nextMeds: MedicationRequest[] = Array.isArray(matchingAttendancePayload.medications)
+      ? matchingAttendancePayload.medications
       : [];
-    const nextMeals: MealException[] = Array.isArray(attendancePayload.meal_exceptions)
-      ? attendancePayload.meal_exceptions
+    const nextMeals: MealException[] = Array.isArray(matchingAttendancePayload.meal_exceptions)
+      ? matchingAttendancePayload.meal_exceptions
       : [];
 
-    setStudents(nextStudents);
-    setMedications(nextMeds);
-    setMealExceptions(nextMeals);
+    setLocalRosterClassId(activeClass.id);
+    setLocalStudents(nextStudents);
+    setLocalMedications(nextMeds);
+    setLocalMealExceptions(nextMeals);
+    writeCachedClassAttendance(email, activeClass.id, matchingAttendancePayload);
 
     if (nextStudents.length > 0) {
       setNewMedStudentId((prev) =>
@@ -253,18 +326,124 @@ export function TeacherPortalView() {
         nextStudents.some((s) => s.id === prev) ? prev : nextStudents[0].id
       );
     }
-  }, [activeClass, attendancePayload]);
+  }, [activeClass, matchingAttendancePayload, email]);
+
+  const updateStudentsOptimistic = useCallback(
+    (updater: (prev: TeacherStudent[]) => TeacherStudent[]) => {
+      const next = updater(students);
+      if (activeClass) {
+        setLocalRosterClassId(activeClass.id);
+        setLocalStudents(next);
+        setLocalMedications(medications);
+        setLocalMealExceptions(mealExceptions);
+        const nextPayload = {
+          ...(matchingAttendancePayload || {}),
+          success: true,
+          class_id: activeClass.id,
+          class_name: activeClass.name,
+          students: next,
+          medications,
+          meal_exceptions: mealExceptions,
+        };
+        writeCachedClassAttendance(email, activeClass.id, nextPayload);
+        void mutateAttendance(nextPayload, { revalidate: false });
+      } else {
+        setLocalStudents(next);
+      }
+      return next;
+    },
+    [
+      students,
+      medications,
+      mealExceptions,
+      activeClass,
+      matchingAttendancePayload,
+      email,
+      mutateAttendance,
+    ]
+  );
+
+  const updateMedicationsOptimistic = useCallback(
+    (updater: (prev: MedicationRequest[]) => MedicationRequest[]) => {
+      const next = updater(medications);
+      if (activeClass) {
+        setLocalRosterClassId(activeClass.id);
+        setLocalStudents(students);
+        setLocalMedications(next);
+        setLocalMealExceptions(mealExceptions);
+        const nextPayload = {
+          ...(matchingAttendancePayload || {}),
+          success: true,
+          class_id: activeClass.id,
+          class_name: activeClass.name,
+          students,
+          medications: next,
+          meal_exceptions: mealExceptions,
+        };
+        writeCachedClassAttendance(email, activeClass.id, nextPayload);
+        void mutateAttendance(nextPayload, { revalidate: false });
+      } else {
+        setLocalMedications(next);
+      }
+      return next;
+    },
+    [
+      students,
+      medications,
+      mealExceptions,
+      activeClass,
+      matchingAttendancePayload,
+      email,
+      mutateAttendance,
+    ]
+  );
+
+  const updateMealExceptionsOptimistic = useCallback(
+    (updater: (prev: MealException[]) => MealException[]) => {
+      const next = updater(mealExceptions);
+      if (activeClass) {
+        setLocalRosterClassId(activeClass.id);
+        setLocalStudents(students);
+        setLocalMedications(medications);
+        setLocalMealExceptions(next);
+        const nextPayload = {
+          ...(matchingAttendancePayload || {}),
+          success: true,
+          class_id: activeClass.id,
+          class_name: activeClass.name,
+          students,
+          medications,
+          meal_exceptions: next,
+        };
+        writeCachedClassAttendance(email, activeClass.id, nextPayload);
+        void mutateAttendance(nextPayload, { revalidate: false });
+      } else {
+        setLocalMealExceptions(next);
+      }
+      return next;
+    },
+    [
+      students,
+      medications,
+      mealExceptions,
+      activeClass,
+      matchingAttendancePayload,
+      email,
+      mutateAttendance,
+    ]
+  );
 
   // 3. Kitchen report status
   const { data: kitchenReportData, mutate: mutateKitchenReport } = useSWR(
     isTeacherReady && activeClass ? ['role', 'TEACHER', 'kitchen-report', activeClass.id] : null,
     () =>
-      jsonFetcher(
+      fetchAsTeacher(
         `/api/teacher/attendance/kitchen-report?class_id=${encodeURIComponent(activeClass!.id)}`
       ),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 30000,
     }
   );
@@ -277,10 +456,11 @@ export function TeacherPortalView() {
   // 4. Class absence requests via Postgres-backed /api/absences
   const { data: absencesPayload, mutate: mutateAbsences } = useSWR(
     isTeacherReady && activeClass ? ['role', 'TEACHER', 'absences', activeClass.id] : null,
-    () => jsonFetcher(`/api/absences?class_id=${encodeURIComponent(activeClass!.id)}`),
+    () => fetchAsTeacher(`/api/absences?class_id=${encodeURIComponent(activeClass!.id)}`),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 30000,
     }
   );
@@ -309,7 +489,7 @@ export function TeacherPortalView() {
   // Supabase Realtime sync scoped cleanly to TEACHER role + assigned class
   useRoleRealtimeSync({
     channelName: email ? `teacher-portal-${profileId || email}` : null,
-    enabled: isTeacherReady,
+    enabled: isTeacherRealtimeReady,
     debounceMs: 250,
     handlers: [
       {
@@ -402,6 +582,10 @@ export function TeacherPortalView() {
     payload: Record<string, any>
   ): Promise<{ ok: boolean; json: any; error?: string }> => {
     try {
+      const aligned = await waitForRoleSync('TEACHER');
+      if (!aligned) {
+        return { ok: false, json: {}, error: 'ROLE_SWITCH_CANCELLED' };
+      }
       const res = await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -424,7 +608,7 @@ export function TeacherPortalView() {
       action: 'UPSERT_ATTENDANCE',
       records,
     });
-    if (!result.ok) {
+    if (!result.ok && result.error !== 'ROLE_SWITCH_CANCELLED') {
       console.error('Failed to sync attendance to DB:', result.error);
     }
     return result;
@@ -432,21 +616,18 @@ export function TeacherPortalView() {
 
   const handleSelectAllPresent = () => {
     if (isKitchenLocked) return;
-    const updated = students.map((s) => {
-      const hasAbsence = absences.some(
-        (a) =>
-          a.student_id === s.id &&
-          (a.status === 'SUBMITTED_VALID' || a.status === 'APPROVED')
-      );
-      return {
-        ...s,
-        attendance: (hasAbsence ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
-      };
-    });
-    setStudents(updated);
-    mutateAttendance(
-      (prev: any) => (prev ? { ...prev, students: updated } : prev),
-      { revalidate: false }
+    const updated = updateStudentsOptimistic((prev) =>
+      prev.map((s) => {
+        const hasAbsence = absences.some(
+          (a) =>
+            a.student_id === s.id &&
+            (a.status === 'SUBMITTED_VALID' || a.status === 'APPROVED')
+        );
+        return {
+          ...s,
+          attendance: (hasAbsence ? 'ABSENT' : 'PRESENT') as 'PRESENT' | 'PRESENT_LATE' | 'ABSENT',
+        };
+      })
     );
     void syncAttendanceToDb(
       updated.map((s) => ({
@@ -461,11 +642,8 @@ export function TeacherPortalView() {
     status: 'PRESENT' | 'PRESENT_LATE' | 'ABSENT'
   ) => {
     if (isKitchenLocked) return;
-    const updated = students.map((s) => (s.id === id ? { ...s, attendance: status } : s));
-    setStudents(updated);
-    mutateAttendance(
-      (prev: any) => (prev ? { ...prev, students: updated } : prev),
-      { revalidate: false }
+    updateStudentsOptimistic((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, attendance: status } : s))
     );
     void syncAttendanceToDb([
       {
@@ -495,6 +673,8 @@ export function TeacherPortalView() {
     );
 
     try {
+      const aligned = await waitForRoleSync('TEACHER');
+      if (!aligned) return;
       const res = await fetch('/api/absences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -533,6 +713,9 @@ export function TeacherPortalView() {
 
     setIsFinalizingKitchen(true);
     try {
+      const aligned = await waitForRoleSync('TEACHER');
+      if (!aligned) return;
+
       await syncAttendanceToDb(
         students.map((s) => ({
           student_id: s.id,
@@ -583,8 +766,7 @@ export function TeacherPortalView() {
       instructions: newMedNotes,
       status: 'PENDING',
     };
-    const nextMeds = [tempMed, ...medications];
-    setMedications(nextMeds);
+    updateMedicationsOptimistic((prev) => [tempMed, ...prev]);
     setShowAddMedModal(false);
     setNewMedName('');
     setNewMedDosage('');
@@ -600,16 +782,18 @@ export function TeacherPortalView() {
     });
     if (result.ok) {
       if (result.json?.medication) {
-        setMedications((prev) => prev.map((m) => (m.id === tempMed.id ? result.json.medication : m)));
+        updateMedicationsOptimistic((prev) =>
+          prev.map((m) => (m.id === tempMed.id ? result.json.medication : m))
+        );
       }
       mutateAttendance();
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể lưu phiếu dặn thuốc: ${result.error}`);
     }
   };
 
   const handleAdministerMed = async (medId: string) => {
-    setMedications((prev) =>
+    updateMedicationsOptimistic((prev) =>
       prev.map((m) => (m.id === medId ? { ...m, status: 'ADMINISTERED' } : m))
     );
     const result = await postTeacherAction({
@@ -618,7 +802,7 @@ export function TeacherPortalView() {
     });
     if (result.ok) {
       mutateAttendance();
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể cập nhật trạng thái uống thuốc: ${result.error}`);
     }
   };
@@ -636,7 +820,7 @@ export function TeacherPortalView() {
       reason_tags: selectedTags,
       created_at: new Date().toISOString(),
     };
-    setMealExceptions([newEx, ...mealExceptions]);
+    updateMealExceptionsOptimistic((prev) => [newEx, ...prev]);
     const result = await postTeacherAction({
       action: 'ADD_MEAL_EXCEPTION',
       student_id: selectedStudentForMeal,
@@ -647,7 +831,7 @@ export function TeacherPortalView() {
     if (result.ok) {
       mutateAttendance();
       alert(`${t('teacher.btn_save_meal_exception')}: ${student?.full_name}`);
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể lưu ghi chú bữa ăn: ${result.error}`);
     }
   };
@@ -659,8 +843,7 @@ export function TeacherPortalView() {
   };
 
   const handleMassCheckout = async () => {
-    const updated = students.map((s) => ({ ...s, checkedOut: true }));
-    setStudents(updated);
+    updateStudentsOptimistic((prev) => prev.map((s) => ({ ...s, checkedOut: true })));
     const result = await postTeacherAction({
       action: 'CHECKOUT',
       student_ids: students.map((s) => s.id),
@@ -668,7 +851,7 @@ export function TeacherPortalView() {
     if (result.ok) {
       mutateAttendance();
       alert(`✅ ${t('teacher.checkout_done')}`);
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể cập nhật trả trẻ: ${result.error}`);
     }
   };
@@ -677,7 +860,7 @@ export function TeacherPortalView() {
     studentId: string,
     reason = 'Người thân đón (Đã đối soát khuôn mặt)'
   ) => {
-    setStudents((prev) =>
+    updateStudentsOptimistic((prev) =>
       prev.map((s) => (s.id === studentId ? { ...s, checkedOut: true, checkoutReason: reason } : s))
     );
     const result = await postTeacherAction({
@@ -687,7 +870,7 @@ export function TeacherPortalView() {
     });
     if (result.ok) {
       mutateAttendance();
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể xác nhận trả trẻ: ${result.error}`);
     }
   };
@@ -696,7 +879,7 @@ export function TeacherPortalView() {
     if (!lateStudentId) return;
     const targetId = lateStudentId;
     const targetReason = lateReason;
-    setStudents((prev) =>
+    updateStudentsOptimistic((prev) =>
       prev.map((s) =>
         s.id === targetId ? { ...s, checkedOut: true, checkoutReason: targetReason } : s
       )
@@ -710,73 +893,49 @@ export function TeacherPortalView() {
     });
     if (result.ok) {
       mutateAttendance();
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'ROLE_SWITCH_CANCELLED') {
       alert(`⚠️ Không thể lưu ghi nhận đón muộn: ${result.error}`);
     }
   };
 
-  // Strict gates so transient loading/switching/API errors NEVER flash the "Chưa phân công lớp" screen
+  // Strict non-blocking gates so transitions never render fullscreen blocking cards
   const isWaitingInitialClasses =
-    !hasVerifiedClassPayload &&
-    !classesError &&
-    assignedClasses.length === 0 &&
-    (loadingClasses || validatingClasses || isLoadingSession || isSwitching || !isTeacherReady);
+    !hasVerifiedClassPayload && !classesError && assignedClasses.length === 0;
 
   const hasFatalClassLoadError =
     !hasVerifiedClassPayload && Boolean(classesError) && assignedClasses.length === 0;
 
   const isAuthoritativeUnassigned =
     !isLoadingSession &&
-    !isSwitching &&
     !loadingClasses &&
     !classesError &&
     hasVerifiedClassPayload &&
     serverClasses.length === 0;
 
   const renderCalmHeaderBar = () => (
-    <header className="px-3 py-2.5 bg-primary-700 text-white flex items-center justify-between gap-2 shadow-md">
-      <div className="flex items-center gap-2 min-w-0">
+    <header className="px-2.5 sm:px-3 py-2 bg-primary-700 text-white flex items-center justify-between gap-1.5 sm:gap-2 shadow-md overflow-hidden">
+      <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
         {avatarUrl ? (
           <img
             src={avatarUrl}
             alt={fullName || 'Giáo viên'}
-            className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white/40 shrink-0"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
             SM
           </div>
         )}
-        <span className="font-bold text-sm truncate">{t('teacher.app_title')}</span>
+        <span className="font-bold text-xs sm:text-sm leading-tight truncate line-clamp-1">
+          {t('teacher.app_title')}
+        </span>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         <RoleSwitcher currentPortal="TEACHER" />
-        <LanguageSwitcher />
+        <LanguageSwitcher compact />
       </div>
     </header>
   );
-
-  // Loading state when class list has never been verified yet and cache is empty
-  if (isWaitingInitialClasses) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
-        {renderCalmHeaderBar()}
-        <div className="flex-1 flex flex-col justify-center items-center p-4">
-          <div className="w-full bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-lg space-y-4">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-rose-50 border border-rose-200 rounded-2xl text-primary-700">
-              <RefreshCw className="w-7 h-7 animate-spin" />
-            </div>
-            <h2 className="text-base font-bold text-slate-900">
-              Đang tải danh sách lớp phân công...
-            </h2>
-            <p className="text-xs text-slate-500">
-              Hệ thống đang đồng bộ dữ liệu phân công mới nhất từ nhà trường.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // API / Auth / RLS error state (distinct from genuinely having 0 assigned classes!)
   if (hasFatalClassLoadError) {
@@ -859,35 +1018,35 @@ export function TeacherPortalView() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-20">
-      {/* Mobile Top Header — Calm UI Hướng A: Warm Brand Red + Frosted Glass Pill Toggle, Zero /admin links, Zero animate-pulse */}
-      <header className="px-3 py-2.5 bg-primary-700 text-white flex items-center justify-between gap-2 sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-2 min-w-0">
+      {/* Mobile Top Header — Calm UI Hướng A: Warm Brand Red + Frosted Glass Pill Toggle, Zero /admin links, Zero overflow */}
+      <header className="px-2.5 sm:px-3 py-2 bg-primary-700 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md overflow-hidden">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
           {avatarUrl ? (
             <img
               src={avatarUrl}
               alt={fullName || 'Giáo viên'}
-              className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white/40 shrink-0"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
               SM
             </div>
           )}
-          <div className="min-w-0">
-            <h1 className="font-extrabold text-white text-sm leading-tight truncate">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate line-clamp-1">
               {t('teacher.app_title')}
             </h1>
 
             {assignedClasses.length > 1 ? (
-              <div className="flex items-center gap-1 mt-0.5">
-                <div className="relative inline-block">
+              <div className="flex items-center gap-1 mt-0.5 max-w-full overflow-hidden">
+                <div className="relative inline-block max-w-full">
                   <select
                     value={activeClass?.id || ''}
                     onChange={(e) => {
                       const sel = assignedClasses.find((c) => c.id === e.target.value);
                       if (sel) handleSelectClass(sel);
                     }}
-                    className="bg-white/15 hover:bg-white/25 text-white font-bold text-[11px] py-0.5 pl-2 pr-5 rounded-full border border-white/25 appearance-none cursor-pointer focus:outline-none max-w-[115px] truncate"
+                    className="bg-white/15 hover:bg-white/25 text-white font-bold text-[11px] leading-tight py-0.5 pl-2 pr-5 rounded-full border border-white/25 appearance-none cursor-pointer focus:outline-none max-w-full truncate"
                   >
                     {assignedClasses.map((c) => (
                       <option key={c.id} value={c.id} className="text-slate-900 font-bold bg-white">
@@ -899,22 +1058,22 @@ export function TeacherPortalView() {
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-rose-100 font-medium truncate">
-                Lớp {activeClass?.name || '...'}
+              <p className="text-[11px] text-rose-100 font-medium leading-tight truncate line-clamp-1">
+                {activeClass ? `Lớp ${activeClass.name}` : t('common.school_name')}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <RoleSwitcher currentPortal="TEACHER" />
-          <LanguageSwitcher />
+          <LanguageSwitcher compact />
           <button
             onClick={logout}
-            className="p-1.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer shrink-0"
+            className="p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer shrink-0"
             title="Đăng xuất"
           >
-            <LogOut className="w-4 h-4 text-white" />
+            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
           </button>
         </div>
       </header>
@@ -938,7 +1097,7 @@ export function TeacherPortalView() {
 
       {/* Multi-Class Quick Switch Bar (Calm UI) */}
       {assignedClasses.length > 1 && (
-        <div className="bg-primary-800/95 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto border-b border-primary-600/40 sticky top-[52px] z-10 shadow-2xs">
+        <div className="bg-primary-800/95 px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto border-b border-primary-600/40 sticky top-[44px] sm:top-[48px] z-10 shadow-2xs">
           <span className="text-[10px] text-rose-200 whitespace-nowrap font-semibold flex items-center gap-1 shrink-0">
             <Layers className="w-3 h-3 text-rose-200" /> Chọn lớp:
           </span>
@@ -1043,7 +1202,13 @@ export function TeacherPortalView() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-600 font-bold">{t('teacher.class_headcount')}</span>
               <span className="px-2 py-0.5 bg-rose-50 text-primary-800 border border-rose-200 rounded-full font-extrabold text-xs">
-                {officialStudents.filter((s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE').length} / {officialStudents.length}
+                {(isWaitingInitialClasses || showLoadingStudents) && officialStudents.length === 0
+                  ? '-- / --'
+                  : `${
+                      officialStudents.filter(
+                        (s) => s.attendance === 'PRESENT' || s.attendance === 'PRESENT_LATE'
+                      ).length
+                    } / ${officialStudents.length}`}
               </span>
             </div>
 
@@ -1133,12 +1298,11 @@ export function TeacherPortalView() {
           })}
 
           {/* Student Roll Call List */}
-          {loadingStudents ? (
-            <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-rose-100 p-6 shadow-2xs">
-              <div className="w-8 h-8 border-3 border-primary-700 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-slate-600 font-semibold">
-                Đang tải danh sách học sinh Lớp {activeClass?.name || '...'}
-              </p>
+          {(isWaitingInitialClasses || showLoadingStudents) && students.length === 0 ? (
+            <div className="space-y-2.5">
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
             </div>
           ) : students.length === 0 ? (
             <div className="py-14 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs">
@@ -1674,12 +1838,11 @@ export function TeacherPortalView() {
             </button>
           </div>
 
-          {loadingStudents ? (
-            <div className="py-20 text-center space-y-3 bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs">
-              <div className="w-8 h-8 border-3 border-primary-700 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-slate-600 font-semibold">
-                Đang tải danh sách học sinh Lớp {activeClass?.name || '...'}
-              </p>
+          {(isWaitingInitialClasses || showLoadingStudents) && students.length === 0 ? (
+            <div className="space-y-2.5">
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
+              <div className="h-24 bg-white rounded-2xl border border-slate-200" />
             </div>
           ) : students.length === 0 ? (
             <div className="py-14 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs">

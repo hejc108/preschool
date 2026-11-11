@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { LogOut, RefreshCw, ShieldAlert } from 'lucide-react';
+import { LogOut, ShieldAlert } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { TeacherPortalView } from '@/components/pwa/TeacherPortalView';
 import { ParentPortalView } from '@/components/pwa/ParentPortalView';
@@ -11,7 +11,7 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 /**
  * DualRoleShell hosts both Teacher and Parent mobile PWA portals in a single
  * layout wrapper so dual-role users switch between /teacher and /parent
- * cleanly via React state + history.replaceState without full page reloads.
+ * cleanly via Optimistic React state + history.replaceState without blocking screens.
  * Mobile PWA stays completely decoupled from Admin Web (no Admin toggle, no /admin links).
  */
 export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRole }) {
@@ -27,20 +27,12 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
   } = useActiveRole();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [initialSyncDone, setInitialSyncDone] = useState(false);
+  const didAlignInitialPortalRef = useRef(false);
 
-  const needsInitialSync =
-    !isLoading &&
-    isAuthenticated &&
-    isApproved &&
-    ((roles.includes(initialPortal) && activeRole !== initialPortal) ||
-      (activeRole !== 'TEACHER' &&
-        activeRole !== 'PARENT' &&
-        (roles.includes('TEACHER') || roles.includes('PARENT'))));
-
-  // Sync cookie/session active_role to initialPortal on direct entry before mounting portal views
+  // Align active_role silently in background on direct entry without blocking render
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !isApproved || initialSyncDone) return;
+    if (isLoading || !isAuthenticated || !isApproved || didAlignInitialPortalRef.current) return;
+    didAlignInitialPortalRef.current = true;
 
     const targetRole: MobilePortalRole | null =
       roles.includes(initialPortal) && activeRole !== initialPortal
@@ -53,19 +45,13 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
           : null
         : null;
 
-    if (!targetRole) {
-      setInitialSyncDone(true);
-      return;
+    if (targetRole) {
+      void switchRole(targetRole, { syncUrl: targetRole !== initialPortal });
     }
-
-    void switchRole(targetRole, { syncUrl: targetRole !== initialPortal }).finally(() => {
-      setInitialSyncDone(true);
-    });
   }, [
     isLoading,
     isAuthenticated,
     isApproved,
-    initialSyncDone,
     roles,
     activeRole,
     initialPortal,
@@ -101,27 +87,9 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
     }
   };
 
-  if (isLoading || (!initialSyncDone && needsInitialSync)) {
+  if (isLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
-        <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-8 text-center shadow-lg space-y-4">
-          <div
-            className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl border shadow-2xs ${
-              initialPortal === 'TEACHER'
-                ? 'bg-rose-50 border-rose-200 text-primary-700'
-                : 'bg-sky-50 border-sky-200 text-sky-600'
-            }`}
-          >
-            <RefreshCw className="w-7 h-7 animate-spin" />
-          </div>
-          <h2 className="text-base font-bold text-slate-800">
-            Đang đồng bộ không gian làm việc...
-          </h2>
-          <p className="text-xs text-slate-500">
-            Hệ thống đang xác thực phiên và vai trò hiện tại của bạn.
-          </p>
-        </div>
-      </div>
+      <div className="min-h-screen bg-slate-50 max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans" />
     );
   }
 

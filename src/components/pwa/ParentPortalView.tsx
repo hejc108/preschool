@@ -77,12 +77,13 @@ export function ParentPortalView() {
   const { t } = useLanguage();
   const {
     activeRole,
+    serverSyncedRole,
     profileId,
     fullName,
     avatarUrl,
     linkedStudents,
     isLoading: isLoadingSession,
-    isSwitching,
+    waitForRoleSync,
     refreshSession,
     logout,
   } = useActiveRole();
@@ -113,7 +114,19 @@ export function ParentPortalView() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isParentReady = activeRole === 'PARENT' && !isSwitching;
+  const isParentReady = activeRole === 'PARENT';
+  const isParentRealtimeReady = isParentReady && serverSyncedRole === 'PARENT';
+
+  const fetchAsParent = useCallback(
+    async (url: string) => {
+      const aligned = await waitForRoleSync('PARENT');
+      if (!aligned) {
+        throw new Error('ROLE_SWITCH_CANCELLED');
+      }
+      return jsonFetcher(url);
+    },
+    [waitForRoleSync]
+  );
 
   const childIdsKey = useMemo(
     () =>
@@ -127,10 +140,11 @@ export function ParentPortalView() {
   // 1. Daily activities (attendance, medications, meal exceptions) via strictly scoped /api/daily-activities
   const { data: activitiesPayload, mutate: mutateActivities } = useSWR(
     isParentReady && childIdsKey ? ['role', 'PARENT', 'daily-activities', childIdsKey] : null,
-    () => jsonFetcher(`/api/daily-activities?student_ids=${encodeURIComponent(childIdsKey)}`),
+    () => fetchAsParent(`/api/daily-activities?student_ids=${encodeURIComponent(childIdsKey)}`),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 30000,
     }
   );
@@ -138,9 +152,10 @@ export function ParentPortalView() {
   // 2. Weekly Menu via /api/admin/menu (server allows PARENT role)
   const { data: menuPayload, mutate: mutateMenu } = useSWR(
     isParentReady ? ['role', 'PARENT', 'menu'] : null,
-    () => jsonFetcher('/api/admin/menu'),
+    () => fetchAsParent('/api/admin/menu'),
     {
       revalidateOnMount: true,
+      keepPreviousData: true,
       refreshInterval: 120000,
     }
   );
@@ -155,12 +170,15 @@ export function ParentPortalView() {
     return map;
   }, [activitiesPayload]);
 
-  const dailyMedications: any[] = Array.isArray(activitiesPayload?.medications)
-    ? activitiesPayload.medications
-    : [];
-  const dailyMealExceptions: any[] = Array.isArray(activitiesPayload?.meal_exceptions)
-    ? activitiesPayload.meal_exceptions
-    : [];
+  const dailyMedications: any[] = useMemo(
+    () => (Array.isArray(activitiesPayload?.medications) ? activitiesPayload.medications : []),
+    [activitiesPayload]
+  );
+  const dailyMealExceptions: any[] = useMemo(
+    () =>
+      Array.isArray(activitiesPayload?.meal_exceptions) ? activitiesPayload.meal_exceptions : [],
+    [activitiesPayload]
+  );
   const liveMenuList: WeeklyMenu[] =
     menuPayload?.has_db && Array.isArray(menuPayload.menu) ? menuPayload.menu : [];
 
@@ -206,10 +224,11 @@ export function ParentPortalView() {
     mutate: mutatePickups,
   } = useSWR(
     isParentReady && selectedChild ? ['role', 'PARENT', 'pickups', selectedChild.id] : null,
-    () => jsonFetcher(`/api/parent/pickups?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    () => fetchAsParent(`/api/parent/pickups?student_id=${encodeURIComponent(selectedChild!.id)}`),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 60000,
     }
   );
@@ -220,9 +239,10 @@ export function ParentPortalView() {
   // 4. Health latest record for selected child (role-prefixed SWR key)
   const { data: healthPayload, mutate: mutateHealth } = useSWR(
     isParentReady && selectedChild ? ['role', 'PARENT', 'health', selectedChild.id] : null,
-    () => jsonFetcher(`/api/parent/health?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    () => fetchAsParent(`/api/parent/health?student_id=${encodeURIComponent(selectedChild!.id)}`),
     {
       revalidateOnMount: true,
+      keepPreviousData: true,
       refreshInterval: 120000,
     }
   );
@@ -235,10 +255,11 @@ export function ParentPortalView() {
   // 5. Absences for selected child from Postgres (/api/absences)
   const { data: absencesPayload, mutate: mutateAbsences } = useSWR(
     isParentReady && selectedChild ? ['role', 'PARENT', 'absences', selectedChild.id] : null,
-    () => jsonFetcher(`/api/absences?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    () => fetchAsParent(`/api/absences?student_id=${encodeURIComponent(selectedChild!.id)}`),
     {
       revalidateOnMount: true,
       revalidateOnFocus: true,
+      keepPreviousData: true,
       refreshInterval: 30000,
     }
   );
@@ -260,7 +281,7 @@ export function ParentPortalView() {
   // Supabase Realtime strictly isolated to parent's own children
   useRoleRealtimeSync({
     channelName: profileId ? `parent-portal-${profileId}` : null,
-    enabled: isParentReady && Boolean(profileId),
+    enabled: isParentRealtimeReady && Boolean(profileId),
     debounceMs: 250,
     handlers: [
       {
@@ -362,6 +383,8 @@ export function ParentPortalView() {
 
     setSubmittingAbsence(true);
     try {
+      const aligned = await waitForRoleSync('PARENT');
+      if (!aligned) return;
       const res = await fetch('/api/absences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -425,6 +448,12 @@ export function ParentPortalView() {
             ctx.drawImage(img, 0, 0, width, height);
             const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
             try {
+              const aligned = await waitForRoleSync('PARENT');
+              if (!aligned) {
+                setPickupFormAvatar(compressedDataUrl);
+                setIsUploadingAvatar(false);
+                return;
+              }
               const res = await fetch('/api/parent/pickups/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -491,6 +520,8 @@ export function ParentPortalView() {
     );
 
     try {
+      const aligned = await waitForRoleSync('PARENT');
+      if (!aligned) return;
       const res = await fetch('/api/parent/pickups', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -512,6 +543,8 @@ export function ParentPortalView() {
 
     setPickupSubmitting(true);
     try {
+      const aligned = await waitForRoleSync('PARENT');
+      if (!aligned) return;
       const res = await fetch('/api/parent/pickups', {
         method: editingPickupId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -559,6 +592,8 @@ export function ParentPortalView() {
       return;
     }
     try {
+      const aligned = await waitForRoleSync('PARENT');
+      if (!aligned) return;
       const res = await fetch(`/api/parent/pickups?id=${encodeURIComponent(pickupId)}`, {
         method: 'DELETE',
       });
@@ -686,70 +721,30 @@ export function ParentPortalView() {
     return events;
   }, [selectedChild, dailyMedications, dailyMealExceptions, t]);
 
-  // Loading / Role-Switching Guard — prevents flashing "Tài khoản chưa liên kết hồ sơ bé"
-  if (isLoadingSession || isSwitching || !isParentReady) {
+  // Authoritative Unlinked Parent Empty State (only when session settled with 0 linked students)
+  if (!isLoadingSession && (!selectedChild || parentChildren.length === 0)) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
-        <header className="p-3 bg-sky-600 text-white flex items-center justify-between gap-2 shadow-md">
-          <div className="flex items-center gap-2 min-w-0">
+        <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 shadow-md overflow-hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt={fullName || 'Phụ huynh'}
-                className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white/40 shrink-0"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
                 SM
               </div>
             )}
-            <span className="font-bold text-sm truncate">{t('parent.app_title')}</span>
+            <span className="font-bold text-xs sm:text-sm leading-tight truncate line-clamp-1">
+              {t('parent.app_title')}
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <RoleSwitcher currentPortal="PARENT" />
-            <LanguageSwitcher />
-          </div>
-        </header>
-
-        <div className="flex-1 flex flex-col justify-center items-center p-4">
-          <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-sky-50 border border-sky-200 rounded-2xl mb-4 text-sky-600">
-              <RefreshCw className="w-7 h-7 animate-spin" />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 mb-2">
-              Đang đồng bộ hồ sơ con em...
-            </h2>
-            <p className="text-slate-600 text-xs leading-relaxed">
-              Vui lòng đợi trong giây lát để xác thực quyền phụ huynh và tải thông tin bé theo thời gian thực.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Authoritative Unlinked Parent Empty State (only when settled as PARENT with 0 linked students)
-  if (!selectedChild || parentChildren.length === 0) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
-        <header className="p-3 bg-sky-600 text-white flex items-center justify-between gap-2 shadow-md">
-          <div className="flex items-center gap-2 min-w-0">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={fullName || 'Phụ huynh'}
-                className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
-                SM
-              </div>
-            )}
-            <span className="font-bold text-sm truncate">{t('parent.app_title')}</span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <RoleSwitcher currentPortal="PARENT" />
-            <LanguageSwitcher />
+            <LanguageSwitcher compact />
           </div>
         </header>
 
@@ -789,41 +784,72 @@ export function ParentPortalView() {
     );
   }
 
+  // Fallback shell only on uncached cold hydration before selectedChild arrives (no blocking message screen)
+  if (!selectedChild) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
+        <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md overflow-hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+              SM
+            </div>
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate line-clamp-1">
+                {t('parent.app_title')}
+              </h1>
+              <p className="text-[11px] text-sky-100 font-medium leading-tight truncate line-clamp-1">
+                {t('common.school_name')}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <RoleSwitcher currentPortal="PARENT" />
+            <LanguageSwitcher compact />
+          </div>
+        </header>
+        <div className="p-4 space-y-3">
+          <div className="h-20 rounded-2xl bg-white border border-slate-200" />
+          <div className="h-32 rounded-2xl bg-white border border-slate-200" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
       {/* Mobile Top Header — Calm UI Hướng A: Sky Blue + Frosted Glass Pill Toggle, Zero /admin links, Zero animate-pulse */}
-      <header className="px-3 py-2.5 bg-sky-600 text-white flex items-center justify-between gap-2 sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md overflow-hidden">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
           {avatarUrl ? (
             <img
               src={avatarUrl}
               alt={fullName || 'Phụ huynh'}
-              className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white/40 shrink-0"
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
               SM
             </div>
           )}
-          <div className="min-w-0">
-            <h1 className="font-bold text-white text-sm leading-tight truncate">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate line-clamp-1">
               {t('parent.app_title')}
             </h1>
-            <p className="text-[11px] text-sky-100 font-medium truncate">
+            <p className="text-[11px] text-sky-100 font-medium leading-tight truncate line-clamp-1">
               {t('common.school_name')}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <RoleSwitcher currentPortal="PARENT" />
-          <LanguageSwitcher />
+          <LanguageSwitcher compact />
           <button
             onClick={logout}
-            className="p-1.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer shrink-0"
+            className="p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer shrink-0"
             title="Đăng xuất"
           >
-            <LogOut className="w-4 h-4 text-white" />
+            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
           </button>
         </div>
       </header>
@@ -1254,7 +1280,7 @@ export function ParentPortalView() {
               </button>
             </div>
 
-            {isLoadingPickups ? (
+            {isLoadingPickups && childPickups.length === 0 ? (
               <div className="py-12 text-center text-slate-400 space-y-2">
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto text-sky-600" />
                 <p className="text-xs">Đang tải danh sách người đón...</p>

@@ -39,12 +39,14 @@ interface ActiveRoleContextValue {
   avatarUrl: string;
   roles: UserRole[];
   activeRole: UserRole;
+  serverSyncedRole: UserRole;
   isDualRole: boolean;
   isSwitching: boolean;
   linkedStudents: LinkedChildSummary[];
   hasChildren: boolean;
   assignedClassIds: string[];
   switchRole: (targetRole: MobilePortalRole, options?: { syncUrl?: boolean }) => Promise<boolean>;
+  waitForRoleSync: (expectedRole: MobilePortalRole) => Promise<boolean>;
   setActiveRoleLocal: (targetRole: MobilePortalRole) => void;
   refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
@@ -119,6 +121,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [activeRole, setActiveRole] = useState<UserRole>('GUEST');
+  const [serverSyncedRole, setServerSyncedRole] = useState<UserRole>('GUEST');
   const [linkedStudents, setLinkedStudents] = useState<LinkedChildSummary[]>([]);
   const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
   const [isSwitching, setIsSwitching] = useState<boolean>(false);
@@ -131,6 +134,11 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     activeRoleRef.current = activeRole;
   }, [activeRole]);
 
+  const serverSyncedRoleRef = useRef<UserRole>(serverSyncedRole);
+  useEffect(() => {
+    serverSyncedRoleRef.current = serverSyncedRole;
+  }, [serverSyncedRole]);
+
   const profileIdRef = useRef<string>(profileId);
   useEffect(() => {
     profileIdRef.current = profileId;
@@ -141,115 +149,227 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     emailRef.current = email;
   }, [email]);
 
-  const purgeRoleCache = useCallback(
-    async (oldRole: UserRole) => {
-      if (!oldRole || oldRole === 'GUEST') return;
+  const roleSyncPromiseRef = useRef<Promise<UserRole | null> | null>(null);
+  const sessionInitPromiseRef = useRef<Promise<void> | null>(null);
+  const switchSeqRef = useRef<number>(0);
+
+  const purgeAllRoleCaches = useCallback(async () => {
+    try {
+      await mutate(() => true, undefined, { revalidate: false });
+    } catch {
+      // Ignore SWR purge errors
+    }
+  }, [mutate]);
+
+  const waitForRoleSync = useCallback(async (expectedRole: MobilePortalRole): Promise<boolean> => {
+    if (sessionInitPromiseRef.current && serverSyncedRoleRef.current !== expectedRole) {
       try {
-        await mutate(
-          (key) => Array.isArray(key) && key[0] === 'role' && key[1] === oldRole,
-          undefined,
-          { revalidate: false }
-        );
+        await sessionInitPromiseRef.current;
       } catch {
-        // Ignore SWR purge errors
+        // Ignore session init failures
       }
-    },
-    [mutate]
-  );
+    }
+    if (roleSyncPromiseRef.current) {
+      try {
+        await roleSyncPromiseRef.current;
+      } catch {
+        // Handled inside switchRole background task
+      }
+    }
+    return activeRoleRef.current === expectedRole && serverSyncedRoleRef.current === expectedRole;
+  }, []);
+
+  // Hydrate immediately from verified local cache + browser cookies before /api/auth/check-my-status returns
+  // so page reloads never show a blocking "Đang đồng bộ không gian làm việc..." screen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const emailCookie = document.cookie.match(/suongmai_user_email=([^;]+)/);
+      const sessionCookie = document.cookie.match(/suongmai_session=([^;]+)/);
+      const activeCookie = document.cookie.match(/suongmai_active_role=([^;]+)/);
+
+      const cookieEmail = emailCookie ? parseSignedCookieClient(emailCookie[1]).toLowerCase().trim() : '';
+      const cookieSession = sessionCookie ? parseSignedCookieClient(sessionCookie[1]) : '';
+      const cookieActiveRole = activeCookie ? normalizeClientRole(parseSignedCookieClient(activeCookie[1])) : 'GUEST';
+
+      if (!cookieEmail || cookieSession !== 'active') return;
+
+      const rawSaved = localStorage.getItem('suongmai_auth_user');
+      if (!rawSaved) return;
+      const saved = JSON.parse(rawSaved);
+      const savedEmail = String(saved?.email || '').toLowerCase().trim();
+      if (!savedEmail || savedEmail !== cookieEmail) return;
+
+      const cachedRoles: UserRole[] = Array.isArray(saved.roles)
+        ? Array.from(new Set(saved.roles.map((r: string) => normalizeClientRole(r))))
+        : saved.role
+        ? [normalizeClientRole(saved.role)]
+        : [];
+      if (cachedRoles.length === 0) return;
+
+      const cachedActive =
+        cookieActiveRole !== 'GUEST' && cachedRoles.includes(cookieActiveRole)
+          ? cookieActiveRole
+          : cachedRoles.includes(normalizeClientRole(saved.activeRole))
+          ? normalizeClientRole(saved.activeRole)
+          : cachedRoles[0];
+
+      setIsAuthenticated(true);
+      setIsApproved(true);
+      setApprovalStatus('ACTIVE');
+      setEmail(savedEmail);
+      emailRef.current = savedEmail;
+      if (saved.profileId) {
+        setProfileId(saved.profileId);
+        profileIdRef.current = saved.profileId;
+      }
+      if (saved.full_name) setFullName(saved.full_name);
+      if (saved.avatar_url) setAvatarUrl(saved.avatar_url);
+      setRoles(cachedRoles);
+      setActiveRole(cachedActive);
+      activeRoleRef.current = cachedActive;
+      if (cookieActiveRole !== 'GUEST' && cachedRoles.includes(cookieActiveRole)) {
+        setServerSyncedRole(cookieActiveRole);
+        serverSyncedRoleRef.current = cookieActiveRole;
+      }
+      if (Array.isArray(saved.assignedClassIds)) {
+        setAssignedClassIds(saved.assignedClassIds);
+      }
+      if (Array.isArray(saved.linkedStudents)) {
+        setLinkedStudents(
+          mapLinkedStudentsPayload(saved.linkedStudents, saved.profileId || '', savedEmail)
+        );
+      }
+      setIsLoading(false);
+    } catch {
+      // Ignore malformed cache
+    }
+  }, []);
 
   const refreshSession = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    try {
-      let emailHint = '';
-      const emailCookie = document.cookie.match(/suongmai_user_email=([^;]+)/);
-      if (emailCookie) {
-        emailHint = parseSignedCookieClient(emailCookie[1]);
-      }
-
-      const headers: Record<string, string> = {};
+    let task: Promise<void> | null = null;
+    task = (async () => {
       try {
-        const client = await getBrowserSupabaseClient();
-        const { data } = await client.auth.getSession();
-        if (data?.session?.access_token) {
-          headers.Authorization = `Bearer ${data.session.access_token}`;
+        let emailHint = '';
+        const emailCookie = document.cookie.match(/suongmai_user_email=([^;]+)/);
+        if (emailCookie) {
+          emailHint = parseSignedCookieClient(emailCookie[1]);
         }
-      } catch {
-        // Signed cookies are the primary auth path
-      }
 
-      const res = await fetch('/api/auth/check-my-status', {
-        cache: 'no-store',
-        headers,
-      });
-
-      if (res.status === 401) {
-        setIsAuthenticated(Boolean(emailHint));
-        setIsApproved(false);
-        setApprovalStatus('UNAUTHENTICATED');
-        setRoles([]);
-        setActiveRole('GUEST');
-        setLinkedStudents([]);
-        setAssignedClassIds([]);
-        return;
-      }
-
-      if (!res.ok) return;
-      const json = await res.json();
-
-      setIsAuthenticated(true);
-      setIsApproved(Boolean(json.isApproved));
-      setApprovalStatus((json.status as any) || (json.isApproved ? 'ACTIVE' : 'PENDING'));
-
-      const serverProfile = json.profile || {};
-      const resolvedEmail = (json.email || serverProfile.email || emailHint || '')
-        .toLowerCase()
-        .trim();
-      const resolvedProfileId = json.profileId || serverProfile.id || '';
-      setEmail(resolvedEmail);
-      setProfileId(resolvedProfileId);
-      setFullName(json.fullName || serverProfile.full_name || '');
-      setAvatarUrl(json.avatarUrl || serverProfile.avatar_url || '');
-
-      const normalizedRoles: UserRole[] = Array.isArray(json.roles)
-        ? Array.from(new Set(json.roles.map((r: string) => normalizeClientRole(r))))
-        : json.role
-        ? [normalizeClientRole(json.role)]
-        : [];
-      setRoles(normalizedRoles);
-
-      const resolvedActive = normalizeClientRole(json.activeRole || json.role || normalizedRoles[0]);
-      setActiveRole(resolvedActive);
-
-      setLinkedStudents(
-        mapLinkedStudentsPayload(json.linkedStudents, resolvedProfileId, resolvedEmail)
-      );
-      setAssignedClassIds(Array.isArray(json.assignedClassIds) ? json.assignedClassIds : []);
-
-      // Persist clean non-sensitive metadata mirror for legacy layout consumers
-      if (json.isApproved && resolvedEmail) {
+        const headers: Record<string, string> = {};
         try {
-          localStorage.setItem(
-            'suongmai_auth_user',
-            JSON.stringify({
-              email: resolvedEmail,
-              role: normalizeClientRole(json.role || resolvedActive),
-              activeRole: resolvedActive,
-              roles: normalizedRoles,
-              full_name: json.fullName || serverProfile.full_name || '',
-            })
-          );
+          const client = await getBrowserSupabaseClient();
+          const { data } = await client.auth.getSession();
+          if (data?.session?.access_token) {
+            headers.Authorization = `Bearer ${data.session.access_token}`;
+          }
         } catch {
-          // Ignore storage quota errors
+          // Signed cookies are the primary auth path
         }
 
-        // Keep Supabase Realtime WebSocket JWT synchronized with active_role context
-        void getBrowserSupabaseClient().then(syncRealtimeAuth);
+        const res = await fetch('/api/auth/check-my-status', {
+          cache: 'no-store',
+          headers,
+        });
+
+        if (res.status === 401) {
+          setIsAuthenticated(Boolean(emailHint));
+          setIsApproved(false);
+          setApprovalStatus('UNAUTHENTICATED');
+          setRoles([]);
+          setActiveRole('GUEST');
+          setServerSyncedRole('GUEST');
+          serverSyncedRoleRef.current = 'GUEST';
+          setLinkedStudents([]);
+          setAssignedClassIds([]);
+          clearVerifiedTeacherClasses();
+          return;
+        }
+
+        if (!res.ok) return;
+        const json = await res.json();
+
+        setIsAuthenticated(true);
+        setIsApproved(Boolean(json.isApproved));
+        setApprovalStatus((json.status as any) || (json.isApproved ? 'ACTIVE' : 'PENDING'));
+
+        const serverProfile = json.profile || {};
+        const resolvedEmail = (json.email || serverProfile.email || emailHint || '')
+          .toLowerCase()
+          .trim();
+        const resolvedProfileId = json.profileId || serverProfile.id || '';
+        const resolvedFullName = json.fullName || serverProfile.full_name || '';
+        const resolvedAvatarUrl = json.avatarUrl || serverProfile.avatar_url || '';
+        setEmail(resolvedEmail);
+        emailRef.current = resolvedEmail;
+        setProfileId(resolvedProfileId);
+        profileIdRef.current = resolvedProfileId;
+        setFullName(resolvedFullName);
+        setAvatarUrl(resolvedAvatarUrl);
+
+        const normalizedRoles: UserRole[] = Array.isArray(json.roles)
+          ? Array.from(new Set<UserRole>(json.roles.map((r: string) => normalizeClientRole(r))))
+          : json.role
+          ? [normalizeClientRole(json.role)]
+          : [];
+        setRoles(normalizedRoles);
+
+        const resolvedActive = normalizeClientRole(json.activeRole || json.role || normalizedRoles[0]);
+        setServerSyncedRole(resolvedActive);
+        serverSyncedRoleRef.current = resolvedActive;
+
+        // Preserve optimistic in-flight role choice if user already switched tabs while check-my-status was running
+        if (!roleSyncPromiseRef.current) {
+          setActiveRole(resolvedActive);
+          activeRoleRef.current = resolvedActive;
+        }
+
+        const mappedStudents = mapLinkedStudentsPayload(
+          json.linkedStudents,
+          resolvedProfileId,
+          resolvedEmail
+        );
+        const resolvedClassIds = Array.isArray(json.assignedClassIds) ? json.assignedClassIds : [];
+        setLinkedStudents(mappedStudents);
+        setAssignedClassIds(resolvedClassIds);
+
+        // Persist clean non-sensitive metadata mirror for instant hydration on reload
+        if (json.isApproved && resolvedEmail) {
+          try {
+            localStorage.setItem(
+              'suongmai_auth_user',
+              JSON.stringify({
+                email: resolvedEmail,
+                profileId: resolvedProfileId,
+                role: normalizeClientRole(json.role || resolvedActive),
+                activeRole: roleSyncPromiseRef.current ? activeRoleRef.current : resolvedActive,
+                roles: normalizedRoles,
+                full_name: resolvedFullName,
+                avatar_url: resolvedAvatarUrl,
+                assignedClassIds: resolvedClassIds,
+                linkedStudents: mappedStudents,
+              })
+            );
+          } catch {
+            // Ignore storage quota errors
+          }
+
+          // Keep Supabase Realtime WebSocket JWT synchronized with active_role context
+          void getBrowserSupabaseClient().then(syncRealtimeAuth);
+        }
+      } catch (err) {
+        console.warn('[ActiveRoleProvider] refreshSession notice:', err);
+      } finally {
+        setIsLoading(false);
+        if (sessionInitPromiseRef.current === task) {
+          sessionInitPromiseRef.current = null;
+        }
       }
-    } catch (err) {
-      console.warn('[ActiveRoleProvider] refreshSession notice:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    })();
+
+    sessionInitPromiseRef.current = task;
+    await task;
   }, []);
 
   useEffect(() => {
@@ -278,6 +398,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
 
   const setActiveRoleLocal = useCallback((targetRole: MobilePortalRole) => {
     setActiveRole(targetRole);
+    activeRoleRef.current = targetRole;
   }, []);
 
   const switchRole = useCallback(
@@ -287,76 +408,121 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     ): Promise<boolean> => {
       if (!roles.includes(targetRole)) return false;
       const previousRole = activeRoleRef.current;
-      if (previousRole === targetRole) {
-        if (options?.syncUrl !== false && typeof window !== 'undefined') {
-          const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
-          if (window.location.pathname !== targetPath) {
-            window.history.replaceState(null, '', targetPath);
-          }
+
+      if (options?.syncUrl !== false && typeof window !== 'undefined') {
+        const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
+        if (window.location.pathname !== targetPath) {
+          window.history.replaceState(null, '', targetPath);
         }
+      }
+
+      if (previousRole === targetRole && serverSyncedRoleRef.current === targetRole) {
         return true;
       }
 
-      setIsSwitching(true);
-
-      // Evict previous role's SWR cache entries before switching views so no cross-role data leaks
-      await purgeRoleCache(previousRole);
+      // 1. Optimistic UI swap (< 100ms): immediately switch role & preserve all role-prefixed SWR caches!
+      setActiveRole(targetRole);
+      activeRoleRef.current = targetRole;
 
       try {
-        // Commit the HMAC-signed active_role cookie on the server BEFORE mounting the target portal
-        // so initial SWR fetches never race against the old active_role cookie (prevents false 403 -> empty state flash).
-        const res = await fetch('/api/auth/switch-role', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_role: targetRole }),
-        });
-
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || !json.success) {
-          return false;
+        const saved = localStorage.getItem('suongmai_auth_user');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          parsed.activeRole = targetRole;
+          localStorage.setItem('suongmai_auth_user', JSON.stringify(parsed));
         }
-
-        if (Array.isArray(json.roles)) {
-          setRoles(Array.from(new Set(json.roles.map((r: string) => normalizeClientRole(r)))));
-        }
-        if (Array.isArray(json.assignedClassIds)) {
-          setAssignedClassIds(json.assignedClassIds);
-        }
-        if (Array.isArray(json.linkedStudents)) {
-          setLinkedStudents(
-            mapLinkedStudentsPayload(json.linkedStudents, profileIdRef.current, emailRef.current)
-          );
-        }
-
-        if (options?.syncUrl !== false && typeof window !== 'undefined') {
-          const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
-          if (window.location.pathname !== targetPath) {
-            window.history.replaceState(null, '', targetPath);
-          }
-        }
-
-        try {
-          const saved = localStorage.getItem('suongmai_auth_user');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            parsed.activeRole = targetRole;
-            localStorage.setItem('suongmai_auth_user', JSON.stringify(parsed));
-          }
-        } catch {
-          // Ignore storage errors
-        }
-
-        setActiveRole(targetRole);
-        void getBrowserSupabaseClient().then(syncRealtimeAuth);
-        return true;
-      } catch (err) {
-        console.warn('[ActiveRoleProvider] switchRole error:', err);
-        return false;
-      } finally {
-        setIsSwitching(false);
+      } catch {
+        // Ignore storage errors
       }
+
+      // 2. Background cookie + Realtime JWT synchronization (non-blocking for UI)
+      const seq = ++switchSeqRef.current;
+      setIsSwitching(true);
+
+      let syncTask: Promise<UserRole | null> | null = null;
+      syncTask = (async (): Promise<UserRole | null> => {
+        try {
+          const res = await fetch('/api/auth/switch-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_role: targetRole }),
+          });
+
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json.success) {
+            // Only revert optimistic switch if server explicitly rejected access and no newer switch happened
+            if (seq === switchSeqRef.current && (res.status === 401 || res.status === 403)) {
+              const fallbackRole = serverSyncedRoleRef.current !== 'GUEST' ? serverSyncedRoleRef.current : previousRole;
+              if (fallbackRole !== targetRole) {
+                setActiveRole(fallbackRole);
+                activeRoleRef.current = fallbackRole;
+              }
+            }
+            return null;
+          }
+
+          if (seq !== switchSeqRef.current) {
+            return serverSyncedRoleRef.current;
+          }
+
+          setServerSyncedRole(targetRole);
+          serverSyncedRoleRef.current = targetRole;
+
+          const updatedRoles: UserRole[] | null = Array.isArray(json.roles)
+            ? Array.from(new Set<UserRole>(json.roles.map((r: string) => normalizeClientRole(r))))
+            : null;
+          if (updatedRoles) {
+            setRoles(updatedRoles);
+          }
+
+          const updatedClassIds = Array.isArray(json.assignedClassIds)
+            ? json.assignedClassIds
+            : null;
+          if (updatedClassIds) {
+            setAssignedClassIds(updatedClassIds);
+          }
+
+          const updatedLinkedStudents = Array.isArray(json.linkedStudents)
+            ? mapLinkedStudentsPayload(json.linkedStudents, profileIdRef.current, emailRef.current)
+            : null;
+          if (updatedLinkedStudents) {
+            setLinkedStudents(updatedLinkedStudents);
+          }
+
+          try {
+            const saved = localStorage.getItem('suongmai_auth_user');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              parsed.activeRole = targetRole;
+              if (updatedRoles) parsed.roles = updatedRoles;
+              if (updatedClassIds) parsed.assignedClassIds = updatedClassIds;
+              if (updatedLinkedStudents) parsed.linkedStudents = updatedLinkedStudents;
+              localStorage.setItem('suongmai_auth_user', JSON.stringify(parsed));
+            }
+          } catch {
+            // Ignore storage errors
+          }
+
+          void getBrowserSupabaseClient().then(syncRealtimeAuth);
+          return targetRole;
+        } catch (err) {
+          console.warn('[ActiveRoleProvider] switchRole background sync error:', err);
+          return null;
+        } finally {
+          if (seq === switchSeqRef.current) {
+            setIsSwitching(false);
+            if (roleSyncPromiseRef.current === syncTask) {
+              roleSyncPromiseRef.current = null;
+            }
+          }
+        }
+      })();
+
+      roleSyncPromiseRef.current = syncTask;
+      const synced = await syncTask;
+      return synced === targetRole;
     },
-    [roles, purgeRoleCache]
+    [roles]
   );
 
   // Listen for Service Worker notification click messages to auto-switch role context seamlessly
@@ -465,10 +631,11 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
         }
       });
       clearVerifiedTeacherClasses();
+      await purgeAllRoleCaches();
       sessionStorage.clear();
       window.location.href = '/auth';
     }
-  }, []);
+  }, [purgeAllRoleCaches]);
 
   const value = useMemo<ActiveRoleContextValue>(
     () => ({
@@ -482,12 +649,14 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       avatarUrl,
       roles,
       activeRole,
+      serverSyncedRole,
       isDualRole,
       isSwitching,
       linkedStudents,
       hasChildren: linkedStudents.length > 0,
       assignedClassIds,
       switchRole,
+      waitForRoleSync,
       setActiveRoleLocal,
       refreshSession,
       logout,
@@ -505,11 +674,13 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       avatarUrl,
       roles,
       activeRole,
+      serverSyncedRole,
       isDualRole,
       isSwitching,
       linkedStudents,
       assignedClassIds,
       switchRole,
+      waitForRoleSync,
       setActiveRoleLocal,
       refreshSession,
       logout,
@@ -528,6 +699,7 @@ export function ActiveRoleProvider({ children }: { children: React.ReactNode }) 
         revalidateOnFocus: false,
         dedupingInterval: 1500,
         errorRetryCount: 1,
+        shouldRetryOnError: (err) => err?.message !== 'ROLE_SWITCH_CANCELLED',
       }}
     >
       <ActiveRoleInner>{children}</ActiveRoleInner>

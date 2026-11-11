@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Bell, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
@@ -28,19 +28,25 @@ const announcementsFetcher = async (url: string) => {
  * so Teacher and Parent reads/feeds stay completely isolated.
  */
 export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRole }) {
-  const { activeRole, isSwitching, pushStatus, enableNotifications } = useActiveRole();
+  const { activeRole, serverSyncedRole, waitForRoleSync, pushStatus, enableNotifications } =
+    useActiveRole();
   const [expanded, setExpanded] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const { data, mutate } = useSWR(
-    activeRole === portalRole && !isSwitching ? ['role', portalRole, 'announcements'] : null,
-    () => announcementsFetcher('/api/announcements'),
-    { revalidateOnMount: true, refreshInterval: 45000 }
+    activeRole === portalRole ? ['role', portalRole, 'announcements'] : null,
+    async () => {
+      const aligned = await waitForRoleSync(portalRole);
+      if (!aligned) return { announcements: [], unread_count: 0 };
+      return announcementsFetcher('/api/announcements');
+    },
+    { revalidateOnMount: true, keepPreviousData: true, refreshInterval: 45000 }
   );
 
-  const announcements: AnnouncementItem[] = Array.isArray(data?.announcements)
-    ? data.announcements
-    : [];
+  const announcements: AnnouncementItem[] = useMemo(
+    () => (Array.isArray(data?.announcements) ? data.announcements : []),
+    [data]
+  );
   const unreadCount: number =
     typeof data?.unread_count === 'number'
       ? data.unread_count
@@ -53,7 +59,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
 
   useRoleRealtimeSync({
     channelName: `announcements-${portalRole}`,
-    enabled: activeRole === portalRole && !isSwitching,
+    enabled: activeRole === portalRole && serverSyncedRole === portalRole,
     debounceMs: 0,
     handlers: [
       {
