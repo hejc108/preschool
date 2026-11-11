@@ -29,6 +29,75 @@ const supabaseAnonKey = rawAnonKey.trim().replace(/^["']|["']$/g, '');
 
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
+let runtimeClientSingleton: ReturnType<typeof createBrowserClient> | null = null;
+let runtimeClientPromise: Promise<ReturnType<typeof createBrowserClient>> | null = null;
+
+export function hasConfiguredBrowserSupabaseKey(): boolean {
+  return Boolean(
+    supabaseAnonKey &&
+      !supabaseAnonKey.includes('mock-key') &&
+      !supabaseAnonKey.includes('your-production')
+  );
+}
+
+/**
+ * Resolves a usable browser Supabase client even when anon keys are only exposed at runtime via /api/auth/public-key.
+ */
+export async function getBrowserSupabaseClient(): Promise<ReturnType<typeof createBrowserClient>> {
+  if (hasConfiguredBrowserSupabaseKey()) {
+    return supabase;
+  }
+  if (runtimeClientSingleton) {
+    return runtimeClientSingleton;
+  }
+  if (typeof window === 'undefined') {
+    return supabase;
+  }
+  if (!runtimeClientPromise) {
+    runtimeClientPromise = fetch('/api/auth/public-key', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (
+          json?.url &&
+          json?.anonKey &&
+          !String(json.anonKey).includes('mock-key') &&
+          !String(json.anonKey).includes('your-production')
+        ) {
+          runtimeClientSingleton = createBrowserClient(json.url, json.anonKey);
+          return runtimeClientSingleton;
+        }
+        return supabase;
+      })
+      .catch(() => supabase);
+  }
+  return runtimeClientPromise;
+}
+
+/**
+ * Synchronizes Supabase Realtime WebSocket JWT with the caller's active_role token (or OAuth access_token).
+ */
+export async function syncRealtimeAuth(
+  client: ReturnType<typeof createBrowserClient>
+): Promise<void> {
+  try {
+    const res = await fetch('/api/auth/realtime-token', { cache: 'no-store' }).catch(() => null);
+    if (res && res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (json?.token && client?.realtime?.setAuth) {
+        client.realtime.setAuth(json.token);
+        return;
+      }
+    }
+    const { data } = await client.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (accessToken && client?.realtime?.setAuth) {
+      client.realtime.setAuth(accessToken);
+    }
+  } catch {
+    // Non-fatal: SWR polling fallback remains active if Realtime JWT is unavailable
+  }
+}
+
 // OFFICIAL INITIAL DATA FOR MẦM NON SƯƠNG MAI
 export const INITIAL_CLASSES: ClassRoom[] = [
   { id: 'c-nhatre', name: 'Nhà trẻ', grade_level: 'NHÀ TRẺ', room_number: 'NT-101', teacher_name: 'Giáo viên Nhà trẻ', total_students: 24 },

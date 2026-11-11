@@ -11,8 +11,13 @@ import React, {
 } from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
 import { ParentStudentRelation, UserRole } from '@/lib/types/schema';
-import { supabase } from '@/lib/supabase/client';
+import {
+  getBrowserSupabaseClient,
+  supabase,
+  syncRealtimeAuth,
+} from '@/lib/supabase/client';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
+import { clearVerifiedTeacherClasses } from '@/lib/utils/teacherClassCache';
 
 export interface LinkedChildSummary extends ParentStudentRelation {
   id: string;
@@ -65,6 +70,28 @@ function normalizeClientRole(raw?: string | null): UserRole {
   return 'GUEST';
 }
 
+function mapLinkedStudentsPayload(
+  rawList: any,
+  parentId: string,
+  parentEmail: string
+): LinkedChildSummary[] {
+  if (!Array.isArray(rawList)) return [];
+  return rawList.map((st: any) => ({
+    id: st.id || st.student_id,
+    parent_id: parentId,
+    parent_email: parentEmail,
+    student_id: st.student_id || st.id,
+    student_name: st.full_name || st.student_name || 'Bé',
+    full_name: st.full_name || st.student_name || 'Bé',
+    student_code: st.student_code || '',
+    class_id: st.class_id || undefined,
+    class_name: st.class_name || 'Mầm',
+    allergies: st.allergies || 'Không',
+    avatar_url: st.avatar_url || '',
+    is_verified: true,
+  }));
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -104,6 +131,16 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     activeRoleRef.current = activeRole;
   }, [activeRole]);
 
+  const profileIdRef = useRef<string>(profileId);
+  useEffect(() => {
+    profileIdRef.current = profileId;
+  }, [profileId]);
+
+  const emailRef = useRef<string>(email);
+  useEffect(() => {
+    emailRef.current = email;
+  }, [email]);
+
   const purgeRoleCache = useCallback(
     async (oldRole: UserRole) => {
       if (!oldRole || oldRole === 'GUEST') return;
@@ -131,7 +168,8 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
 
       const headers: Record<string, string> = {};
       try {
-        const { data } = await supabase.auth.getSession();
+        const client = await getBrowserSupabaseClient();
+        const { data } = await client.auth.getSession();
         if (data?.session?.access_token) {
           headers.Authorization = `Bearer ${data.session.access_token}`;
         }
@@ -166,8 +204,9 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       const resolvedEmail = (json.email || serverProfile.email || emailHint || '')
         .toLowerCase()
         .trim();
+      const resolvedProfileId = json.profileId || serverProfile.id || '';
       setEmail(resolvedEmail);
-      setProfileId(json.profileId || serverProfile.id || '');
+      setProfileId(resolvedProfileId);
       setFullName(json.fullName || serverProfile.full_name || '');
       setAvatarUrl(json.avatarUrl || serverProfile.avatar_url || '');
 
@@ -181,24 +220,9 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       const resolvedActive = normalizeClientRole(json.activeRole || json.role || normalizedRoles[0]);
       setActiveRole(resolvedActive);
 
-      const childrenList: LinkedChildSummary[] = Array.isArray(json.linkedStudents)
-        ? json.linkedStudents.map((st: any) => ({
-            id: st.id || st.student_id,
-            parent_id: json.profileId || serverProfile.id || '',
-            parent_email: resolvedEmail,
-            student_id: st.student_id || st.id,
-            student_name: st.full_name || st.student_name || 'Bé',
-            full_name: st.full_name || st.student_name || 'Bé',
-            student_code: st.student_code || '',
-            class_id: st.class_id || undefined,
-            class_name: st.class_name || 'Mầm',
-            allergies: st.allergies || 'Không',
-            avatar_url: st.avatar_url || '',
-            is_verified: true,
-          }))
-        : [];
-      setLinkedStudents(childrenList);
-
+      setLinkedStudents(
+        mapLinkedStudentsPayload(json.linkedStudents, resolvedProfileId, resolvedEmail)
+      );
       setAssignedClassIds(Array.isArray(json.assignedClassIds) ? json.assignedClassIds : []);
 
       // Persist clean non-sensitive metadata mirror for legacy layout consumers
@@ -217,6 +241,9 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
         } catch {
           // Ignore storage quota errors
         }
+
+        // Keep Supabase Realtime WebSocket JWT synchronized with active_role context
+        void getBrowserSupabaseClient().then(syncRealtimeAuth);
       }
     } catch (err) {
       console.warn('[ActiveRoleProvider] refreshSession notice:', err);
@@ -272,36 +299,42 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
 
       setIsSwitching(true);
 
-      // Optimistic < 50ms UI transition & instant URL synchronization without reload
-      setActiveRole(targetRole);
-      if (options?.syncUrl !== false && typeof window !== 'undefined') {
-        const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
-        if (window.location.pathname !== targetPath) {
-          window.history.replaceState(null, '', targetPath);
-        }
-      }
-
-      // Immediately evict previous role's SWR cache entries so no cross-role records leak
+      // Evict previous role's SWR cache entries before switching views so no cross-role data leaks
       await purgeRoleCache(previousRole);
 
       try {
+        // Commit the HMAC-signed active_role cookie on the server BEFORE mounting the target portal
+        // so initial SWR fetches never race against the old active_role cookie (prevents false 403 -> empty state flash).
         const res = await fetch('/api/auth/switch-role', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ target_role: targetRole }),
         });
 
-        if (!res.ok) {
-          // Revert optimistic switch if server denied role change
-          setActiveRole(previousRole);
-          if (options?.syncUrl !== false && typeof window !== 'undefined') {
-            const revertPath = previousRole === 'TEACHER' ? '/teacher' : '/parent';
-            window.history.replaceState(null, '', revertPath);
-          }
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
           return false;
         }
 
-        // Update local mirror cookie consumer safely
+        if (Array.isArray(json.roles)) {
+          setRoles(Array.from(new Set(json.roles.map((r: string) => normalizeClientRole(r)))));
+        }
+        if (Array.isArray(json.assignedClassIds)) {
+          setAssignedClassIds(json.assignedClassIds);
+        }
+        if (Array.isArray(json.linkedStudents)) {
+          setLinkedStudents(
+            mapLinkedStudentsPayload(json.linkedStudents, profileIdRef.current, emailRef.current)
+          );
+        }
+
+        if (options?.syncUrl !== false && typeof window !== 'undefined') {
+          const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
+          if (window.location.pathname !== targetPath) {
+            window.history.replaceState(null, '', targetPath);
+          }
+        }
+
         try {
           const saved = localStorage.getItem('suongmai_auth_user');
           if (saved) {
@@ -313,10 +346,12 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
           // Ignore storage errors
         }
 
+        setActiveRole(targetRole);
+        void getBrowserSupabaseClient().then(syncRealtimeAuth);
         return true;
       } catch (err) {
         console.warn('[ActiveRoleProvider] switchRole error:', err);
-        return true;
+        return false;
       } finally {
         setIsSwitching(false);
       }
@@ -404,7 +439,8 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      if (supabase && supabase.auth) await supabase.auth.signOut();
+      const client = await getBrowserSupabaseClient();
+      if (client && client.auth) await client.auth.signOut();
     } catch {}
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -428,6 +464,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
           localStorage.removeItem(key);
         }
       });
+      clearVerifiedTeacherClasses();
       sessionStorage.clear();
       window.location.href = '/auth';
     }

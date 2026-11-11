@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
-  executeWithAdminFallback,
   getTodayVietnamDate,
+  isAuthOrRlsError,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import {
@@ -12,6 +12,7 @@ import {
 import {
   assertTeacherClassAccess,
   assertTeacherStudentAccess,
+  executeWithContextFallback,
   isAdminRole,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
       targetClassId = DEFAULT_CLASS_NAME_TO_UUID[targetClassName];
     }
     if (!targetClassId && targetClassName) {
-      const { data: allClasses } = await executeWithAdminFallback(async (sb) =>
+      const { data: allClasses } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('classes').select('id, name')
       );
       const matchedClassObj = (allClasses || []).find(
@@ -67,15 +68,37 @@ export async function GET(request: Request) {
     if (classDenied) return classDenied;
 
     // 1. Fetch students strictly scoped to targetClassId (or all if Admin explicitly omits class_id)
-    const { data: studentsData } = await executeWithAdminFallback(async (sb) => {
-      let q = sb.from('students').select('*').order('full_name', { ascending: true });
-      if (targetClassId) {
-        q = q.eq('class_id', targetClassId);
-      } else if (!isAdminRole(ctx.activeRole)) {
-        q = q.in('class_id', ctx.assignedClassIds.length > 0 ? ctx.assignedClassIds : ['00000000-0000-0000-0000-000000000000']);
+    const { data: studentsData, error: studentsErr } = await executeWithContextFallback(
+      ctx,
+      async (sb) => {
+        let q = sb.from('students').select('*').order('full_name', { ascending: true });
+        if (targetClassId) {
+          q = q.eq('class_id', targetClassId);
+        } else if (!isAdminRole(ctx.activeRole)) {
+          q = q.in(
+            'class_id',
+            ctx.assignedClassIds.length > 0
+              ? ctx.assignedClassIds
+              : ['00000000-0000-0000-0000-000000000000']
+          );
+        }
+        return await q;
       }
-      return await q;
-    });
+    );
+
+    if (studentsErr) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: isAuthOrRlsError(studentsErr) ? 'FORBIDDEN_RLS_OR_KEY' : 'DB_QUERY_FAILED',
+          message: studentsErr.message,
+          students: [],
+          medications: [],
+          meal_exceptions: [],
+        },
+        { status: isAuthOrRlsError(studentsErr) ? 403 : 500, headers: NO_CACHE_HEADERS }
+      );
+    }
 
     const students = Array.isArray(studentsData) ? studentsData : [];
 
@@ -88,10 +111,10 @@ export async function GET(request: Request) {
     if (studentIds.length > 0) {
       try {
         const [attRes, medRes, mealRes] = await Promise.all([
-          executeWithAdminFallback(async (sb) =>
+          executeWithContextFallback(ctx, async (sb) =>
             await sb.from('attendance_records').select('*').eq('date', date).in('student_id', studentIds)
           ),
-          executeWithAdminFallback(async (sb) =>
+          executeWithContextFallback(ctx, async (sb) =>
             await sb
               .from('medication_requests')
               .select('*, students(full_name, student_code)')
@@ -99,7 +122,7 @@ export async function GET(request: Request) {
               .in('student_id', studentIds)
               .order('created_at', { ascending: false })
           ),
-          executeWithAdminFallback(async (sb) =>
+          executeWithContextFallback(ctx, async (sb) =>
             await sb
               .from('meal_exceptions')
               .select('*, students(full_name, student_code)')
@@ -229,7 +252,7 @@ export async function POST(request: Request) {
         notes: r.notes || null,
       }));
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .upsert(rows, { onConflict: 'student_id,date' })
@@ -239,7 +262,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -264,7 +287,7 @@ export async function POST(request: Request) {
 
       const nowIso = new Date().toISOString();
 
-      const { data: existingRows } = await executeWithAdminFallback(async (sb) =>
+      const { data: existingRows } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .select('*')
@@ -287,7 +310,7 @@ export async function POST(request: Request) {
         };
       });
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .upsert(upsertRows, { onConflict: 'student_id,date' })
@@ -297,7 +320,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -319,7 +342,7 @@ export async function POST(request: Request) {
       const denied = await assertTeacherStudentAccess(ctx, [student_id]);
       if (denied) return denied;
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('medication_requests')
           .insert({
@@ -338,7 +361,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -363,7 +386,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const { data: medRow } = await executeWithAdminFallback(async (sb) =>
+      const { data: medRow } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('medication_requests').select('id, student_id').eq('id', id).maybeSingle()
       );
       if (!medRow?.student_id) {
@@ -376,7 +399,7 @@ export async function POST(request: Request) {
       const denied = await assertTeacherStudentAccess(ctx, [medRow.student_id]);
       if (denied) return denied;
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('medication_requests')
           .update({
@@ -391,7 +414,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -419,7 +442,7 @@ export async function POST(request: Request) {
       const denied = await assertTeacherStudentAccess(ctx, [student_id]);
       if (denied) return denied;
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('meal_exceptions')
           .insert({
@@ -437,7 +460,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 

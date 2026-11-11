@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { executeWithAdminFallback, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import { expandClassIdAliases } from '@/lib/constants/classes';
 import {
   assertTeacherClassAccess,
+  executeWithContextFallback,
   isAdminRole,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const requestedTarget = searchParams.get('target_role')?.toUpperCase().trim() || '';
 
-    const { data: rows, error } = await executeWithAdminFallback(async (sb) =>
+    const { data: rows, error } = await executeWithContextFallback(ctx, async (sb) =>
       await sb.from('announcements').select('*').order('created_at', { ascending: false }).limit(100)
     );
 
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
       }
       return NextResponse.json(
         { success: false, error: error.message, announcements: [] },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
     // Fetch read state strictly scoped to (user_id, role_context = ctx.activeRole)
     const readMap = new Map<string, string>();
     if (filtered.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
-      const { data: readRows } = await executeWithAdminFallback(async (sb) =>
+      const { data: readRows } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('announcement_reads')
           .select('announcement_id, read_at')
@@ -156,7 +157,7 @@ export async function POST(request: Request) {
     const notificationChannel = targetRole === 'TEACHER' ? 'TEACHER' : 'PARENT';
     const createdBy = ctx.profileId.startsWith('bootstrap-') ? null : ctx.profileId;
 
-    const { data, error } = await executeWithAdminFallback(async (sb) =>
+    const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('announcements')
         .insert({
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
     if (error || !data) {
       return NextResponse.json(
         { success: false, error: error?.message || 'Không thể tạo thông báo.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: error && isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -243,7 +244,7 @@ export async function PATCH(request: Request) {
       read_at: new Date().toISOString(),
     }));
 
-    const { error } = await executeWithAdminFallback(async (sb) =>
+    const { error } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('announcement_reads')
         .upsert(rows, { onConflict: 'announcement_id,user_id,role_context' })
@@ -252,7 +253,7 @@ export async function PATCH(request: Request) {
     if (error) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 

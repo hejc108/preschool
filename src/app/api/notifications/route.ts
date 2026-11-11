@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { executeWithAdminFallback, NO_CACHE_HEADERS } from '@/lib/supabase/server';
-import { requireActiveRole } from '@/lib/auth/sessionContext';
+import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessionContext';
 import {
   getVapidPublicKey,
   hasVapidConfig,
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
         ? ['ALL', 'PARENT']
         : ['ALL', 'TEACHER', 'PARENT'];
 
-    const { data: notices } = await executeWithAdminFallback(async (sb) =>
+    const { data: notices, error: noticesErr } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('announcements')
         .select('*')
@@ -38,10 +38,17 @@ export async function GET(request: Request) {
         .limit(30)
     );
 
+    if (noticesErr && isAuthOrRlsError(noticesErr)) {
+      return NextResponse.json(
+        { success: false, error: noticesErr.message, notifications: [] },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
+
     const list = Array.isArray(notices) ? notices : [];
     const readSet = new Set<string>();
     if (list.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
-      const { data: reads } = await executeWithAdminFallback(async (sb) =>
+      const { data: reads } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('announcement_reads')
           .select('announcement_id')
@@ -119,12 +126,13 @@ export async function POST(request: Request) {
       auth: authKey,
       activeRolePreference: ctx.activeRole,
       userAgent: request.headers.get('user-agent'),
+      ctx,
     });
 
     if (error) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -166,13 +174,20 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await executeWithAdminFallback(async (sb) =>
+    const { error } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('push_subscriptions')
         .delete()
         .eq('user_id', ctx.profileId)
         .eq('endpoint', endpoint)
     );
+
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
+      );
+    }
 
     return NextResponse.json({ success: true }, { headers: NO_CACHE_HEADERS });
   } catch (err: any) {

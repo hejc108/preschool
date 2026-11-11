@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import {
   assertParentStudentAccess,
   assertTeacherStudentAccess,
+  executeWithContextFallback,
   requireActiveRole,
+  SessionContext,
 } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+function isMissingRelationError(err: any): boolean {
+  return err?.code === '42P01' || Boolean(err?.message?.includes('does not exist'));
+}
 
 function normalizePickup(row: any) {
   return {
@@ -25,27 +31,43 @@ function normalizePickup(row: any) {
 }
 
 async function resolvePickupOwnerStudentId(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  ctx: SessionContext,
   pickupId: string
-): Promise<{ studentId: string | null; table: 'pickup_authorizations' | 'authorized_pickups' | null }> {
-  const { data: authRow, error: authErr } = await supabase
-    .from('pickup_authorizations')
-    .select('id, student_id')
-    .eq('id', pickupId)
-    .maybeSingle();
+): Promise<{
+  studentId: string | null;
+  table: 'pickup_authorizations' | 'authorized_pickups' | null;
+  error?: any;
+}> {
+  const { data: authRow, error: authErr } = await executeWithContextFallback(ctx, async (sb) =>
+    await sb
+      .from('pickup_authorizations')
+      .select('id, student_id')
+      .eq('id', pickupId)
+      .maybeSingle()
+  );
 
   if (!authErr && authRow?.student_id) {
     return { studentId: authRow.student_id, table: 'pickup_authorizations' };
   }
 
-  const { data: legacyRow, error: legacyErr } = await supabase
-    .from('authorized_pickups')
-    .select('id, student_id')
-    .eq('id', pickupId)
-    .maybeSingle();
+  if (authErr && !isMissingRelationError(authErr)) {
+    return { studentId: null, table: null, error: authErr };
+  }
+
+  const { data: legacyRow, error: legacyErr } = await executeWithContextFallback(ctx, async (sb) =>
+    await sb
+      .from('authorized_pickups')
+      .select('id, student_id')
+      .eq('id', pickupId)
+      .maybeSingle()
+  );
 
   if (!legacyErr && legacyRow?.student_id) {
     return { studentId: legacyRow.student_id, table: 'authorized_pickups' };
+  }
+
+  if (legacyErr && !isMissingRelationError(legacyErr)) {
+    return { studentId: null, table: null, error: legacyErr };
   }
 
   return { studentId: null, table: null };
@@ -76,14 +98,14 @@ export async function GET(request: Request) {
       if (denied) return denied;
     }
 
-    const supabase = getSupabaseAdminClient(false);
-
     // 1. Thử truy vấn bảng pickup_authorizations
-    const { data: authData, error: authError } = await supabase
-      .from('pickup_authorizations')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('created_at', { ascending: false });
+    const { data: authData, error: authError } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('pickup_authorizations')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false })
+    );
 
     if (!authError && Array.isArray(authData)) {
       return NextResponse.json(
@@ -92,18 +114,28 @@ export async function GET(request: Request) {
       );
     }
 
+    if (authError && !isMissingRelationError(authError)) {
+      const status = isAuthOrRlsError(authError) ? 403 : 500;
+      return NextResponse.json(
+        { success: false, error: authError.message, pickups: [] },
+        { status, headers: NO_CACHE_HEADERS }
+      );
+    }
+
     // 2. Fallback nếu bảng pickup_authorizations chưa tạo
-    const { data: legacyData, error: legacyError } = await supabase
-      .from('authorized_pickups')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('created_at', { ascending: false });
+    const { data: legacyData, error: legacyError } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('authorized_pickups')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false })
+    );
 
     if (legacyError) {
       console.error('[API GET /api/parent/pickups] Supabase error:', legacyError.message);
       return NextResponse.json(
         { success: false, error: legacyError.message, pickups: [] },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(legacyError) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -140,7 +172,6 @@ export async function POST(request: Request) {
     const denied = assertParentStudentAccess(ctx, [student_id]);
     if (denied) return denied;
 
-    const supabase = getSupabaseAdminClient(false);
     const activeFlag = is_active !== undefined ? Boolean(is_active) : true;
 
     // 1. Thử insert vào bảng pickup_authorizations
@@ -155,11 +186,13 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    const { data: authData, error: authError } = await supabase
-      .from('pickup_authorizations')
-      .insert([newAuthRecord])
-      .select()
-      .single();
+    const { data: authData, error: authError } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('pickup_authorizations')
+        .insert([newAuthRecord])
+        .select()
+        .single()
+    );
 
     if (!authError && authData) {
       return NextResponse.json(
@@ -169,6 +202,13 @@ export async function POST(request: Request) {
           pickup: normalizePickup(authData),
         },
         { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    if (authError && !isMissingRelationError(authError)) {
+      return NextResponse.json(
+        { success: false, error: authError.message },
+        { status: isAuthOrRlsError(authError) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -184,17 +224,19 @@ export async function POST(request: Request) {
       approval_status: activeFlag ? 'APPROVED' : 'PENDING',
     };
 
-    const { data: legacyData, error: legacyError } = await supabase
-      .from('authorized_pickups')
-      .insert([legacyRecord])
-      .select()
-      .single();
+    const { data: legacyData, error: legacyError } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('authorized_pickups')
+        .insert([legacyRecord])
+        .select()
+        .single()
+    );
 
     if (legacyError) {
       console.error('[API POST /api/parent/pickups] Insert error:', legacyError.message);
       return NextResponse.json(
         { success: false, error: legacyError.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(legacyError) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -232,8 +274,13 @@ export async function PUT(request: Request) {
       );
     }
 
-    const supabase = getSupabaseAdminClient(false);
-    const owner = await resolvePickupOwnerStudentId(supabase, id);
+    const owner = await resolvePickupOwnerStudentId(ctx, id);
+    if (owner.error) {
+      return NextResponse.json(
+        { success: false, error: owner.error.message },
+        { status: isAuthOrRlsError(owner.error) ? 403 : 500, headers: NO_CACHE_HEADERS }
+      );
+    }
     if (!owner.studentId) {
       return NextResponse.json(
         { success: false, error: 'Không tìm thấy bản ghi người đón.' },
@@ -252,17 +299,19 @@ export async function PUT(request: Request) {
     if (is_active !== undefined) updateFields.is_active = Boolean(is_active);
 
     if (owner.table === 'pickup_authorizations') {
-      const { data: authData, error: authError } = await supabase
-        .from('pickup_authorizations')
-        .update(updateFields)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data: authData, error: authError } = await executeWithContextFallback(ctx, async (sb) =>
+        await sb
+          .from('pickup_authorizations')
+          .update(updateFields)
+          .eq('id', id)
+          .select()
+          .single()
+      );
 
       if (authError) {
         return NextResponse.json(
           { success: false, error: authError.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(authError) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -285,18 +334,20 @@ export async function PUT(request: Request) {
       legacyUpdateFields.approval_status = is_active ? 'APPROVED' : 'REJECTED';
     }
 
-    const { data: legacyData, error: legacyError } = await supabase
-      .from('authorized_pickups')
-      .update(legacyUpdateFields)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data: legacyData, error: legacyError } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('authorized_pickups')
+        .update(legacyUpdateFields)
+        .eq('id', id)
+        .select()
+        .single()
+    );
 
     if (legacyError) {
       console.error('[API PUT /api/parent/pickups] Update error:', legacyError.message);
       return NextResponse.json(
         { success: false, error: legacyError.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(legacyError) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -334,8 +385,13 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const supabase = getSupabaseAdminClient(false);
-    const owner = await resolvePickupOwnerStudentId(supabase, pickupId);
+    const owner = await resolvePickupOwnerStudentId(ctx, pickupId);
+    if (owner.error) {
+      return NextResponse.json(
+        { success: false, error: owner.error.message },
+        { status: isAuthOrRlsError(owner.error) ? 403 : 500, headers: NO_CACHE_HEADERS }
+      );
+    }
     if (!owner.studentId) {
       return NextResponse.json(
         { success: false, error: 'Không tìm thấy bản ghi người đón.' },
@@ -347,16 +403,18 @@ export async function DELETE(request: Request) {
     if (denied) return denied;
 
     const targetTable = owner.table || 'pickup_authorizations';
-    const { error: deleteErr } = await supabase
-      .from(targetTable)
-      .delete()
-      .eq('id', pickupId);
+    const { error: deleteErr } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from(targetTable)
+        .delete()
+        .eq('id', pickupId)
+    );
 
     if (deleteErr) {
       console.error(`[API DELETE /api/parent/pickups] Delete error (${targetTable}):`, deleteErr.message);
       return NextResponse.json(
         { success: false, error: deleteErr.message },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(deleteErr) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 

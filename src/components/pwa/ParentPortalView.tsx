@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import {
@@ -33,6 +33,7 @@ import { getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
+import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 
 export interface ParentChild {
   id: string;
@@ -67,7 +68,7 @@ const jsonFetcher = async (url: string) => {
   const res = await fetch(url, { cache: 'no-store' });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(json.error || `Request failed (${res.status})`);
+    throw new Error(json.message || json.error || `Request failed (${res.status})`);
   }
   return json;
 };
@@ -75,10 +76,13 @@ const jsonFetcher = async (url: string) => {
 export function ParentPortalView() {
   const { t } = useLanguage();
   const {
+    activeRole,
+    profileId,
     fullName,
     avatarUrl,
     linkedStudents,
     isLoading: isLoadingSession,
+    isSwitching,
     refreshSession,
     logout,
   } = useActiveRole();
@@ -109,6 +113,8 @@ export function ParentPortalView() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isParentReady = activeRole === 'PARENT' && !isSwitching;
+
   const childIdsKey = useMemo(
     () =>
       linkedStudents
@@ -119,15 +125,24 @@ export function ParentPortalView() {
   );
 
   // 1. Daily activities (attendance, medications, meal exceptions) via strictly scoped /api/daily-activities
-  const { data: activitiesPayload } = useSWR(
-    childIdsKey ? ['role', 'PARENT', 'daily-activities', childIdsKey] : null,
-    () =>
-      jsonFetcher(`/api/daily-activities?student_ids=${encodeURIComponent(childIdsKey)}`)
+  const { data: activitiesPayload, mutate: mutateActivities } = useSWR(
+    isParentReady && childIdsKey ? ['role', 'PARENT', 'daily-activities', childIdsKey] : null,
+    () => jsonFetcher(`/api/daily-activities?student_ids=${encodeURIComponent(childIdsKey)}`),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+    }
   );
 
   // 2. Weekly Menu via /api/admin/menu (server allows PARENT role)
-  const { data: menuPayload } = useSWR(['role', 'PARENT', 'menu'], () =>
-    jsonFetcher('/api/admin/menu')
+  const { data: menuPayload, mutate: mutateMenu } = useSWR(
+    isParentReady ? ['role', 'PARENT', 'menu'] : null,
+    () => jsonFetcher('/api/admin/menu'),
+    {
+      revalidateOnMount: true,
+      refreshInterval: 120000,
+    }
   );
 
   const dailyAttendanceMap = useMemo(() => {
@@ -190,23 +205,26 @@ export function ParentPortalView() {
     isLoading: isLoadingPickups,
     mutate: mutatePickups,
   } = useSWR(
-    selectedChild ? ['role', 'PARENT', 'pickups', selectedChild.id] : null,
-    () =>
-      jsonFetcher(
-        `/api/parent/pickups?student_id=${encodeURIComponent(selectedChild!.id)}`
-      )
+    isParentReady && selectedChild ? ['role', 'PARENT', 'pickups', selectedChild.id] : null,
+    () => jsonFetcher(`/api/parent/pickups?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 60000,
+    }
   );
   const childPickups: AuthorizedPickup[] = Array.isArray(pickupsPayload?.pickups)
     ? pickupsPayload.pickups
     : [];
 
   // 4. Health latest record for selected child (role-prefixed SWR key)
-  const { data: healthPayload } = useSWR(
-    selectedChild ? ['role', 'PARENT', 'health', selectedChild.id] : null,
-    () =>
-      jsonFetcher(
-        `/api/parent/health?student_id=${encodeURIComponent(selectedChild!.id)}`
-      )
+  const { data: healthPayload, mutate: mutateHealth } = useSWR(
+    isParentReady && selectedChild ? ['role', 'PARENT', 'health', selectedChild.id] : null,
+    () => jsonFetcher(`/api/parent/health?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    {
+      revalidateOnMount: true,
+      refreshInterval: 120000,
+    }
   );
   const latestHealth = healthPayload?.latest || null;
   const healthDisplay =
@@ -216,17 +234,119 @@ export function ParentPortalView() {
 
   // 5. Absences for selected child from Postgres (/api/absences)
   const { data: absencesPayload, mutate: mutateAbsences } = useSWR(
-    selectedChild ? ['role', 'PARENT', 'absences', selectedChild.id] : null,
-    () => jsonFetcher(`/api/absences?student_id=${encodeURIComponent(selectedChild!.id)}`)
+    isParentReady && selectedChild ? ['role', 'PARENT', 'absences', selectedChild.id] : null,
+    () => jsonFetcher(`/api/absences?student_id=${encodeURIComponent(selectedChild!.id)}`),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+    }
   );
   const childAbsences: AbsenceRequest[] = Array.isArray(absencesPayload?.absences)
     ? absencesPayload.absences
     : [];
 
+  const linkedChildIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    linkedChildIdsRef.current = new Set(linkedStudents.map((c) => c.student_id || c.id));
+  }, [linkedStudents]);
+
+  const matchesLinkedChild = useCallback((payload: any) => {
+    if (linkedChildIdsRef.current.size === 0) return false;
+    const sid = payload?.new?.student_id ?? payload?.old?.student_id;
+    return !sid || linkedChildIdsRef.current.has(sid);
+  }, []);
+
+  // Supabase Realtime strictly isolated to parent's own children
+  useRoleRealtimeSync({
+    channelName: profileId ? `parent-portal-${profileId}` : null,
+    enabled: isParentReady && Boolean(profileId),
+    debounceMs: 250,
+    handlers: [
+      {
+        table: 'student_parents',
+        onEvent: () => {
+          void refreshSession();
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'student_guardians',
+        onEvent: () => {
+          void refreshSession();
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'attendance_records',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'medication_requests',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'meal_exceptions',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'absence_requests',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutateAbsences();
+          void mutateActivities();
+        },
+      },
+      {
+        table: 'pickup_authorizations',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutatePickups();
+        },
+      },
+      {
+        table: 'authorized_pickups',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutatePickups();
+        },
+      },
+      {
+        table: 'health_records',
+        match: matchesLinkedChild,
+        onEvent: () => {
+          void mutateHealth();
+        },
+      },
+      {
+        table: 'weekly_menus',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
+    ],
+  });
+
   const handleRefreshParentRelations = async () => {
     setRefreshing(true);
     try {
-      await refreshSession();
+      await Promise.all([
+        refreshSession(),
+        mutateActivities(),
+        mutateAbsences(),
+        mutatePickups(),
+        mutateHealth(),
+        mutateMenu(),
+      ]);
     } finally {
       setTimeout(() => setRefreshing(false), 400);
     }
@@ -566,8 +686,50 @@ export function ParentPortalView() {
     return events;
   }, [selectedChild, dailyMedications, dailyMealExceptions, t]);
 
-  // Unlinked Parent Empty State (Keep RoleSwitcher accessible if dual-role Teacher+Parent!)
-  if (!isLoadingSession && (!selectedChild || parentChildren.length === 0)) {
+  // Loading / Role-Switching Guard — prevents flashing "Tài khoản chưa liên kết hồ sơ bé"
+  if (isLoadingSession || isSwitching || !isParentReady) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+        <header className="p-3 bg-sky-600 text-white flex items-center justify-between gap-2 shadow-md">
+          <div className="flex items-center gap-2 min-w-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={fullName || 'Phụ huynh'}
+                className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+                SM
+              </div>
+            )}
+            <span className="font-bold text-sm truncate">{t('parent.app_title')}</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <RoleSwitcher currentPortal="PARENT" />
+            <LanguageSwitcher />
+          </div>
+        </header>
+
+        <div className="flex-1 flex flex-col justify-center items-center p-4">
+          <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-sky-50 border border-sky-200 rounded-2xl mb-4 text-sky-600">
+              <RefreshCw className="w-7 h-7 animate-spin" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">
+              Đang đồng bộ hồ sơ con em...
+            </h2>
+            <p className="text-slate-600 text-xs leading-relaxed">
+              Vui lòng đợi trong giây lát để xác thực quyền phụ huynh và tải thông tin bé theo thời gian thực.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Authoritative Unlinked Parent Empty State (only when settled as PARENT with 0 linked students)
+  if (!selectedChild || parentChildren.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
         <header className="p-3 bg-sky-600 text-white flex items-center justify-between gap-2 shadow-md">

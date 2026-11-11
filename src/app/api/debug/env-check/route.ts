@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseConfig } from '@/lib/supabase/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 function getValidKey(keys: (string | undefined)[]) {
   for (const raw of keys) {
@@ -12,8 +16,7 @@ function getValidKey(keys: (string | undefined)[]) {
 }
 
 export async function GET() {
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://yrieuamibqjyaslprdeo.supabase.co';
-  const cleanUrl = rawUrl.trim().replace(/^["']|["']$/g, '');
+  const config = getSupabaseConfig();
 
   const validAnon = getValidKey([
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -22,11 +25,8 @@ export async function GET() {
     process.env.SUPABASE_PUBLISHABLE_KEY,
   ]);
 
-  const rawService = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  const cleanService = rawService.trim().replace(/^["']|["']$/g, '');
-
   return NextResponse.json({
-    url: cleanUrl,
+    url: config.url,
     anonKey: {
       present: !!validAnon,
       length: validAnon.length,
@@ -35,9 +35,12 @@ export async function GET() {
       raw_SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ? process.env.SUPABASE_ANON_KEY.substring(0, 15) + '...' : 'NONE',
     },
     serviceRoleKey: {
-      present: !!cleanService,
-      length: cleanService.length,
-      prefix: cleanService ? cleanService.substring(0, 15) + '...' : 'EMPTY',
-    }
+      present: !!config.rawServiceRoleKey,
+      valid: config.isValidServiceRoleKey,
+      kind: config.serviceRoleKeyKind,
+      length: config.rawServiceRoleKey.length,
+      prefix: config.rawServiceRoleKey ? config.rawServiceRoleKey.substring(0, 15) + '...' : 'EMPTY',
+    },
+    jwtSecretPresent: !!config.jwtSecret,
   });
 }

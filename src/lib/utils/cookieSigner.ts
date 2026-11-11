@@ -113,6 +113,8 @@ export const COOKIE_NAMES = {
   ACTIVE_ROLE: 'suongmai_active_role',
   USERNAME: 'suongmai_username',
   HAS_CHILDREN: 'suongmai_has_children',
+  SB_ACCESS_TOKEN: 'suongmai_sb_token',
+  SB_REFRESH_TOKEN: 'suongmai_sb_refresh',
 } as const;
 
 export const ALL_AUTH_COOKIES: string[] = [
@@ -122,6 +124,8 @@ export const ALL_AUTH_COOKIES: string[] = [
   COOKIE_NAMES.ACTIVE_ROLE,
   COOKIE_NAMES.USERNAME,
   COOKIE_NAMES.HAS_CHILDREN,
+  COOKIE_NAMES.SB_ACCESS_TOKEN,
+  COOKIE_NAMES.SB_REFRESH_TOKEN,
 ];
 
 /**

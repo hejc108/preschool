@@ -37,7 +37,11 @@ export default function ParentMenuPage() {
         }
         if (statusRes && statusRes.ok) {
           const sJson = await statusRes.json().catch(() => ({}));
-          const linked = Array.isArray(sJson.linked_students) ? sJson.linked_students : [];
+          const linked = Array.isArray(sJson.linkedStudents)
+            ? sJson.linkedStudents
+            : Array.isArray(sJson.linked_students)
+            ? sJson.linked_students
+            : [];
           const combinedAllergies = linked
             .map((c: any) => c.allergies)
             .filter((a: any) => typeof a === 'string' && a.trim() && a.trim().toLowerCase() !== 'không')

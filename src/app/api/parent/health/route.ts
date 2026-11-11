@@ -4,10 +4,11 @@ import * as path from 'path';
 import { HealthRecord } from '@/lib/types/schema';
 import { calculateBMI, classifyWHOGrowthStatus } from '@/lib/utils/healthHelper';
 import defaultHealthCatalog from '@/lib/data/health_catalog.json';
-import { getSupabaseAdminClient, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import {
   assertParentStudentAccess,
   assertTeacherStudentAccess,
+  executeWithContextFallback,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
 
@@ -84,45 +85,56 @@ export async function GET(request: Request) {
       if (denied) return denied;
     }
 
-    const supabase = getSupabaseAdminClient(false);
     let records: any[] = [];
 
-    // 1. Try querying Supabase health_records
-    if (supabase) {
-      try {
-        const { data: dbData, error: dbErr } = await supabase
+    // 1. Try querying Supabase health_records with authenticated context fallback
+    try {
+      const { data: dbData, error: dbErr } = await executeWithContextFallback(ctx, async (sb) =>
+        await sb
           .from('health_records')
           .select('*')
           .eq('student_id', studentId)
-          .order('measured_date', { ascending: true });
+          .order('measured_date', { ascending: true })
+      );
 
-        if (!dbErr && Array.isArray(dbData) && dbData.length > 0) {
-          records = dbData.map((r) => {
-            const w = safeParseFloat(r.weight_kg ?? r.weight);
-            const h = safeParseFloat(r.height_cm ?? r.height);
-            const bmi = safeParseFloat(r.bmi) || (w && h && h > 0 ? calculateBMI(w, h) : 0);
-            const growthStatus = r.growth_status || (bmi > 0 ? classifyWHOGrowthStatus(bmi) : 'NORMAL');
-
-            return {
-              id: r.id,
-              student_id: r.student_id,
-              term: r.term || 'Q1',
-              academic_year: r.academic_year || '2026-2027',
-              measured_date: r.measured_date || r.record_date || '',
-              weight_kg: w,
-              height_cm: h,
-              weight: w,
-              height: h,
-              bmi,
-              growth_status: growthStatus,
-              notes: r.notes || '',
-              created_at: r.created_at,
-            };
-          });
-        }
-      } catch (e) {
-        console.warn('GET /api/parent/health Supabase query fallback:', e);
+      if (dbErr && isAuthOrRlsError(dbErr)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: dbErr.message,
+            records: [],
+            latest: null,
+          },
+          { status: 403, headers: NO_CACHE_HEADERS }
+        );
       }
+
+      if (!dbErr && Array.isArray(dbData) && dbData.length > 0) {
+        records = dbData.map((r) => {
+          const w = safeParseFloat(r.weight_kg ?? r.weight);
+          const h = safeParseFloat(r.height_cm ?? r.height);
+          const bmi = safeParseFloat(r.bmi) || (w && h && h > 0 ? calculateBMI(w, h) : 0);
+          const growthStatus = r.growth_status || (bmi > 0 ? classifyWHOGrowthStatus(bmi) : 'NORMAL');
+
+          return {
+            id: r.id,
+            student_id: r.student_id,
+            term: r.term || 'Q1',
+            academic_year: r.academic_year || '2026-2027',
+            measured_date: r.measured_date || r.record_date || '',
+            weight_kg: w,
+            height_cm: h,
+            weight: w,
+            height: h,
+            bmi,
+            growth_status: growthStatus,
+            notes: r.notes || '',
+            created_at: r.created_at,
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('GET /api/parent/health Supabase query fallback:', e);
     }
 
     // 2. Fallback: if no records in Supabase, load from health_catalog

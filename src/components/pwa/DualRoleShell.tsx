@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LogOut, RefreshCw, ShieldAlert } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { TeacherPortalView } from '@/components/pwa/TeacherPortalView';
 import { ParentPortalView } from '@/components/pwa/ParentPortalView';
-import { supabase } from '@/lib/supabase/client';
+import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 /**
  * DualRoleShell hosts both Teacher and Parent mobile PWA portals in a single
- * layout wrapper so dual-role users switch between /teacher and /parent in
- * < 200ms using React state + history.replaceState without full page reloads.
+ * layout wrapper so dual-role users switch between /teacher and /parent
+ * cleanly via React state + history.replaceState without full page reloads.
  * Mobile PWA stays completely decoupled from Admin Web (no Admin toggle, no /admin links).
  */
 export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRole }) {
@@ -27,27 +27,50 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
   } = useActiveRole();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const syncedInitialRef = useRef(false);
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
 
-  // Sync cookie/session active_role to initialPortal on direct entry if user holds that role
+  const needsInitialSync =
+    !isLoading &&
+    isAuthenticated &&
+    isApproved &&
+    ((roles.includes(initialPortal) && activeRole !== initialPortal) ||
+      (activeRole !== 'TEACHER' &&
+        activeRole !== 'PARENT' &&
+        (roles.includes('TEACHER') || roles.includes('PARENT'))));
+
+  // Sync cookie/session active_role to initialPortal on direct entry before mounting portal views
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !isApproved || syncedInitialRef.current) return;
-    syncedInitialRef.current = true;
+    if (isLoading || !isAuthenticated || !isApproved || initialSyncDone) return;
 
-    if (roles.includes(initialPortal) && activeRole !== initialPortal) {
-      switchRole(initialPortal, { syncUrl: false });
+    const targetRole: MobilePortalRole | null =
+      roles.includes(initialPortal) && activeRole !== initialPortal
+        ? initialPortal
+        : activeRole !== 'TEACHER' && activeRole !== 'PARENT'
+        ? roles.includes('TEACHER')
+          ? 'TEACHER'
+          : roles.includes('PARENT')
+          ? 'PARENT'
+          : null
+        : null;
+
+    if (!targetRole) {
+      setInitialSyncDone(true);
       return;
     }
 
-    // If user holds an Admin/Staff primary role alongside a mobile role, ensure mobile activeRole stays mobile
-    if (activeRole !== 'TEACHER' && activeRole !== 'PARENT') {
-      if (roles.includes('TEACHER')) {
-        switchRole('TEACHER', { syncUrl: initialPortal !== 'TEACHER' });
-      } else if (roles.includes('PARENT')) {
-        switchRole('PARENT', { syncUrl: initialPortal !== 'PARENT' });
-      }
-    }
-  }, [isLoading, isAuthenticated, isApproved, roles, activeRole, initialPortal, switchRole]);
+    void switchRole(targetRole, { syncUrl: targetRole !== initialPortal }).finally(() => {
+      setInitialSyncDone(true);
+    });
+  }, [
+    isLoading,
+    isAuthenticated,
+    isApproved,
+    initialSyncDone,
+    roles,
+    activeRole,
+    initialPortal,
+    switchRole,
+  ]);
 
   // Redirect unapproved logged-in users cleanly to pending approval
   useEffect(() => {
@@ -63,18 +86,7 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
     setIsLoggingIn(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      let activeSupabase = supabase;
-      try {
-        const keyRes = await fetch('/api/auth/public-key');
-        const keyData = await keyRes.json();
-        if (keyData.url && keyData.anonKey && !keyData.anonKey.includes('mock-key')) {
-          const { createBrowserClient } = await import('@supabase/ssr');
-          activeSupabase = createBrowserClient(keyData.url, keyData.anonKey);
-        }
-      } catch {
-        // Fallback to default browser client
-      }
-
+      const activeSupabase = await getBrowserSupabaseClient();
       const nextPath = initialPortal === 'TEACHER' ? '/teacher' : '/parent';
       await activeSupabase.auth.signInWithOAuth({
         provider: 'google',
@@ -89,7 +101,7 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (!initialSyncDone && needsInitialSync)) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
         <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-2xl p-8 text-center shadow-lg space-y-4">

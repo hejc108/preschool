@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
-  executeWithAdminFallback,
   getTodayVietnamDate,
+  isAuthOrRlsError,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import {
@@ -12,6 +12,7 @@ import {
 import {
   assertParentStudentAccess,
   assertTeacherClassAccess,
+  executeWithContextFallback,
   isAdminRole,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
@@ -123,9 +124,16 @@ export async function GET(request: Request) {
         );
       }
 
-      const { data: classStudents } = await executeWithAdminFallback(async (sb) =>
-        await sb.from('students').select('id').in('class_id', targetClassIds)
+      const { data: classStudents, error: csErr } = await executeWithContextFallback(
+        ctx,
+        async (sb) => await sb.from('students').select('id').in('class_id', targetClassIds)
       );
+      if (csErr) {
+        return NextResponse.json(
+          { success: false, error: csErr.message, absences: [] },
+          { status: isAuthOrRlsError(csErr) ? 403 : 500, headers: NO_CACHE_HEADERS }
+        );
+      }
       scopedStudentIds = (classStudents || []).map((s: any) => s.id);
       if (requestedStudentId) {
         if (!scopedStudentIds.includes(requestedStudentId)) {
@@ -151,7 +159,7 @@ export async function GET(request: Request) {
       if (requestedStudentId) {
         scopedStudentIds = [requestedStudentId];
       } else if (requestedClassId) {
-        const { data: classStudents } = await executeWithAdminFallback(async (sb) =>
+        const { data: classStudents } = await executeWithContextFallback(ctx, async (sb) =>
           await sb.from('students').select('id').in('class_id', expandClassIdAliases(requestedClassId))
         );
         scopedStudentIds = (classStudents || []).map((s: any) => s.id);
@@ -164,7 +172,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const { data: rawRows, error } = await executeWithAdminFallback(async (sb) => {
+    const { data: rawRows, error } = await executeWithContextFallback(ctx, async (sb) => {
       let q = sb
         .from('absence_requests')
         .select('*, students(id, full_name, student_code, class_id, classes(id, name))')
@@ -183,7 +191,7 @@ export async function GET(request: Request) {
     if (error) {
       return NextResponse.json(
         { success: false, error: error.message, absences: [] },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -194,7 +202,7 @@ export async function GET(request: Request) {
 
     const submitterMap = new Map<string, string>();
     if (submitterIds.length > 0) {
-      const { data: submitterProfiles } = await executeWithAdminFallback(async (sb) =>
+      const { data: submitterProfiles } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('profiles').select('id, full_name').in('id', submitterIds)
       );
       (submitterProfiles || []).forEach((p: any) => {
@@ -247,7 +255,7 @@ export async function POST(request: Request) {
 
     let submittedBy = ctx.profileId;
     if (!UUID_REGEX.test(submittedBy)) {
-      const { data: fallbackProf } = await executeWithAdminFallback(async (sb) =>
+      const { data: fallbackProf } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('profiles').select('id').ilike('email', ctx.email).maybeSingle()
       );
       if (fallbackProf?.id) submittedBy = fallbackProf.id;
@@ -265,7 +273,7 @@ export async function POST(request: Request) {
     const initialStatus = isLateForToday ? 'SUBMITTED_LATE' : 'SUBMITTED_VALID';
     const isFeeCredited = initialStatus === 'SUBMITTED_VALID';
 
-    const { data: inserted, error } = await executeWithAdminFallback(async (sb) =>
+    const { data: inserted, error } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('absence_requests')
         .insert({
@@ -286,7 +294,7 @@ export async function POST(request: Request) {
     if (error || !inserted) {
       return NextResponse.json(
         { success: false, error: error?.message || 'Không thể lưu đơn xin nghỉ.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -296,7 +304,7 @@ export async function POST(request: Request) {
     // Prepare TEACHER-channel notification payload (never mixed into PARENT channel)
     let teacherProfileIds: string[] = [];
     if (mapped.class_id) {
-      const { data: classTeachers } = await executeWithAdminFallback(async (sb) =>
+      const { data: classTeachers } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('teacher_class_assignments')
           .select('teacher_id')
@@ -365,7 +373,7 @@ export async function PATCH(request: Request) {
     }
 
     // 1. Fetch existing absence & target student's class_id
-    const { data: existing, error: fetchErr } = await executeWithAdminFallback(async (sb) =>
+    const { data: existing, error: fetchErr } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('absence_requests')
         .select('*, students(id, full_name, student_code, class_id, classes(id, name))')
@@ -397,7 +405,7 @@ export async function PATCH(request: Request) {
       updatePayload.status = nextStatus;
     }
 
-    const { data: updated, error: updateErr } = await executeWithAdminFallback(async (sb) =>
+    const { data: updated, error: updateErr } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('absence_requests')
         .update(updatePayload)
@@ -409,13 +417,13 @@ export async function PATCH(request: Request) {
     if (updateErr || !updated) {
       return NextResponse.json(
         { success: false, error: updateErr?.message || 'Cập nhật đơn thất bại.' },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: isAuthOrRlsError(updateErr) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
     const submitterMap = new Map<string, string>();
     if (updated.submitted_by && UUID_REGEX.test(String(updated.submitted_by))) {
-      const { data: subProf } = await executeWithAdminFallback(async (sb) =>
+      const { data: subProf } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('profiles').select('id, full_name').eq('id', updated.submitted_by).maybeSingle()
       );
       if (subProf?.full_name) submitterMap.set(subProf.id, subProf.full_name);

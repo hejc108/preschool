@@ -275,13 +275,19 @@ export async function fetchAdminUsersWithRoles(
     return true;
   });
 
-  const { serviceRoleKey, jwtSecret } = getSupabaseConfig();
+  const { isValidServiceRoleKey, serviceRoleKeyKind, jwtSecret } = getSupabaseConfig();
+  const hasAuthRlsPath =
+    isValidServiceRoleKey ||
+    Boolean(jwtSecret && !ctx.profileId.startsWith('bootstrap-')) ||
+    Boolean(ctx.supabaseAccessToken);
   const dbWarning =
     urRes.error?.message ||
     profRes.error?.message ||
     spRes.error?.message ||
-    (!serviceRoleKey && (!jwtSecret || ctx.profileId.startsWith('bootstrap-'))
-      ? 'Thiếu SUPABASE_SERVICE_ROLE_KEY trên server: truy vấn user_roles/students có thể bị chặn bởi RLS.'
+    (!hasAuthRlsPath
+      ? serviceRoleKeyKind === 'invalid_publishable' || serviceRoleKeyKind === 'invalid_anon_jwt'
+        ? 'Biến SUPABASE_SERVICE_ROLE_KEY trên server đang chứa publishable/anon key nên truy vấn user_roles/students có thể bị chặn bởi RLS.'
+        : 'Thiếu SUPABASE_SERVICE_ROLE_KEY hợp lệ trên server: truy vấn user_roles/students có thể bị chặn bởi RLS.'
       : null);
 
   return {
@@ -289,7 +295,7 @@ export async function fetchAdminUsersWithRoles(
     targetUser: targetEmail ? filteredUsers[0] || null : null,
     isSuperAdmin,
     allowTemporaryStaff,
-    hasServiceRoleKey: Boolean(serviceRoleKey),
+    hasServiceRoleKey: isValidServiceRoleKey,
     dbWarning,
   };
 }
@@ -604,11 +610,17 @@ export async function syncUserMultiRolesAndLinks(
     );
   }
 
-  // 3. Sync student_parents & student_guardians ONLY when student_ids passed or explicit clear requested
-  if (Array.isArray(body.student_ids) && UUID_REGEX.test(String(persistedId))) {
+  // 3. Sync student_parents & student_guardians ONLY when student_ids/children_ids passed or explicit clear requested
+  const incomingStudentIds = Array.isArray(body.student_ids)
+    ? body.student_ids
+    : Array.isArray(body.children_ids)
+    ? body.children_ids
+    : null;
+
+  if (incomingStudentIds && UUID_REGEX.test(String(persistedId))) {
     const uniqueStudentIds: string[] = Array.from(
       new Set<string>(
-        body.student_ids
+        incomingStudentIds
           .map((id: any) => String(id || '').trim())
           .filter((id: string) => UUID_REGEX.test(id))
       )

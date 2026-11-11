@@ -17,15 +17,23 @@ import {
 import { Profile, Student, UserRole } from '@/lib/types/schema';
 import { DEFAULT_CLASSES_LIST, resolveCanonicalClassId } from '@/lib/constants/classes';
 import { saveMultiRoleUser } from '@/lib/utils/approvalHelper';
+import { normalizeVietnameseSearch } from '@/lib/utils/textSearch';
 
-export function normalizeVietnameseSearch(str: string): string {
-  return (str || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase()
-    .trim();
+export { normalizeVietnameseSearch };
+
+function extractStudentsPayload(json: any): Student[] {
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.students)) return json.students;
+  if (Array.isArray(json?.data)) return json.data;
+  return [];
+}
+
+function mergeStudentsById(existing: Student[], incoming: Student[]): Student[] {
+  if (incoming.length === 0) return existing;
+  const map = new Map<string, Student>();
+  existing.forEach((s) => map.set(s.id, s));
+  incoming.forEach((s) => map.set(s.id, { ...(map.get(s.id) || {}), ...s }));
+  return Array.from(map.values());
 }
 
 export interface MultiRoleEditorModalProps {
@@ -151,8 +159,10 @@ export function MultiRoleEditorModal({
   const [hydratedLinkedStudents, setHydratedLinkedStudents] = useState(user.linked_students || []);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
 
-  const [localStudents, setLocalStudents] = useState<Student[]>(students);
+  const [allStudents, setAllStudents] = useState<Student[]>(students);
+  const [serverSearchResults, setServerSearchResults] = useState<Student[] | null>(null);
   const [fetchingStudents, setFetchingStudents] = useState<boolean>(false);
+  const [searchingStudents, setSearchingStudents] = useState<boolean>(false);
   const [studentsError, setStudentsError] = useState<string | null>(parentStudentsError);
 
   const [studentSearch, setStudentSearch] = useState('');
@@ -178,14 +188,16 @@ export function MultiRoleEditorModal({
       setSelectedClassIds(derivedInitialClassIds);
       setSelectedStudentIds(derivedInitialStudentIds);
       setHydratedLinkedStudents(user.linked_students || []);
+      setStudentSearch('');
+      setServerSearchResults(null);
       setLocalError(null);
     }
   }, [user.email, user.linked_students, derivedInitialRoles, derivedInitialClassIds, derivedInitialStudentIds]);
 
-  // Sync parent students prop if populated
+  // Sync parent students prop into allStudents whenever populated
   useEffect(() => {
     if (Array.isArray(students) && students.length > 0) {
-      setLocalStudents(students);
+      setAllStudents((prev) => mergeStudentsById(prev, students));
       setStudentsError(null);
     }
   }, [students]);
@@ -263,14 +275,8 @@ export function MultiRoleEditorModal({
         setStudentsError(errText);
         return;
       }
-      const list: Student[] = Array.isArray(json)
-        ? json
-        : Array.isArray(json.students)
-        ? json.students
-        : Array.isArray(json.data)
-        ? json.data
-        : [];
-      setLocalStudents(list);
+      const list = extractStudentsPayload(json);
+      setAllStudents(list);
       onStudentsLoaded?.(list);
     } catch (err: any) {
       setStudentsError(err?.message || 'Lỗi kết nối khi tải danh sách học sinh.');
@@ -280,24 +286,55 @@ export function MultiRoleEditorModal({
     }
   }, [onStudentsLoaded]);
 
-  // Fetch students on modal open (when list is empty) OR whenever PARENT role is active/toggled and list is empty
+  // Auto-fetch default student roster on modal open (even when search box is empty)
   useEffect(() => {
-    if (!fetchedStudentsOnceRef.current && localStudents.length === 0 && !loadingStudents && !fetchingStudents) {
-      fetchStudentsList();
+    if (!fetchedStudentsOnceRef.current && !fetchingStudents) {
+      void fetchStudentsList();
     }
-  }, [localStudents.length, loadingStudents, fetchingStudents, fetchStudentsList]);
+  }, [fetchingStudents, fetchStudentsList]);
 
+  // Debounced (300ms) server search via /api/admin/students?q=... when typing
   useEffect(() => {
-    if (
-      selectedRoles.includes('PARENT') &&
-      localStudents.length === 0 &&
-      !loadingStudents &&
-      !fetchingStudents &&
-      !fetchedStudentsOnceRef.current
-    ) {
-      fetchStudentsList();
+    const trimmed = studentSearch.trim();
+    if (!trimmed) {
+      setServerSearchResults(null);
+      setSearchingStudents(false);
+      return;
     }
-  }, [selectedRoles, localStudents.length, loadingStudents, fetchingStudents, fetchStudentsList]);
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearchingStudents(true);
+      try {
+        const res = await fetch(`/api/admin/students?q=${encodeURIComponent(trimmed)}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.success === false) {
+          return;
+        }
+        const matches = extractStudentsPayload(json);
+        setServerSearchResults(matches);
+        if (matches.length > 0) {
+          setAllStudents((prev) => mergeStudentsById(prev, matches));
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          // Keep client-side filtered allStudents visible if transient network error
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setSearchingStudents(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [studentSearch]);
 
   const isTargetSuperAdmin =
     user.role === 'SUPER_ADMIN' || user.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn';
@@ -309,7 +346,7 @@ export function MultiRoleEditorModal({
     setSelectedRoles((prev) =>
       prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
     );
-    if (enablingParent && localStudents.length === 0 && !fetchingStudents) {
+    if (enablingParent && (allStudents.length === 0 || Boolean(studentsError)) && !fetchingStudents) {
       void fetchStudentsList();
     }
   };
@@ -330,8 +367,9 @@ export function MultiRoleEditorModal({
 
   const filteredStudents = useMemo(() => {
     const q = normalizeVietnameseSearch(studentSearch);
-    if (!q) return localStudents;
-    return localStudents.filter((s) => {
+    if (!q) return allStudents;
+
+    const localMatches = allStudents.filter((s) => {
       return (
         normalizeVietnameseSearch(s.full_name).includes(q) ||
         normalizeVietnameseSearch(s.student_code).includes(q) ||
@@ -339,7 +377,22 @@ export function MultiRoleEditorModal({
         normalizeVietnameseSearch(s.citizen_id || '').includes(q)
       );
     });
-  }, [localStudents, studentSearch]);
+
+    if (!serverSearchResults || serverSearchResults.length === 0) {
+      return localMatches;
+    }
+
+    const matchingServer = serverSearchResults.filter((s) => {
+      return (
+        normalizeVietnameseSearch(s.full_name).includes(q) ||
+        normalizeVietnameseSearch(s.student_code).includes(q) ||
+        normalizeVietnameseSearch(s.class_name || '').includes(q) ||
+        normalizeVietnameseSearch(s.citizen_id || '').includes(q)
+      );
+    });
+
+    return mergeStudentsById(localMatches, matchingServer);
+  }, [allStudents, serverSearchResults, studentSearch]);
 
   const handleSave = async () => {
     setLocalError(null);
@@ -387,7 +440,8 @@ export function MultiRoleEditorModal({
     }
   };
 
-  const isStudentListLoading = loadingStudents || fetchingStudents;
+  const isRefreshingStudents = loadingStudents || fetchingStudents;
+  const isStudentListLoading = isRefreshingStudents && allStudents.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -527,13 +581,13 @@ export function MultiRoleEditorModal({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    disabled={isStudentListLoading}
+                    disabled={isRefreshingStudents}
                     onClick={fetchStudentsList}
                     className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-pill text-[11px] font-semibold bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 disabled:opacity-50 cursor-pointer"
                     title="Tải lại danh sách học sinh"
                   >
-                    <RefreshCw className={`w-3 h-3 ${isStudentListLoading ? 'animate-spin' : ''}`} />
-                    <span>Tải lại ({localStudents.length})</span>
+                    <RefreshCw className={`w-3 h-3 ${isRefreshingStudents ? 'animate-spin' : ''}`} />
+                    <span>Tải lại ({allStudents.length})</span>
                   </button>
                   <span className="text-[11px] font-bold text-sky-700 bg-white px-2.5 py-0.5 rounded-pill border border-sky-200">
                     Đã chọn: {selectedStudentIds.length} bé
@@ -544,7 +598,7 @@ export function MultiRoleEditorModal({
               {selectedStudentIds.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedStudentIds.map((sid) => {
-                    const st = localStudents.find((s) => s.id === sid);
+                    const st = allStudents.find((s) => s.id === sid);
                     const fallback = hydratedLinkedStudents.find((ls) => ls.student_id === sid);
                     const name = st?.full_name || fallback?.full_name || 'Học sinh';
                     const cls = st?.class_name || fallback?.class_name || '';
@@ -559,7 +613,7 @@ export function MultiRoleEditorModal({
                         <Baby className="w-3 h-3" />
                         <span>
                           {name}
-                          {cls ? ` - Lớp ${cls}` : ''}
+                          {cls && cls !== 'Chưa phân lớp' ? ` - Lớp ${cls}` : ''}
                         </span>
                         <X className="w-3 h-3" />
                       </button>
@@ -591,8 +645,13 @@ export function MultiRoleEditorModal({
                   value={studentSearch}
                   onChange={(e) => setStudentSearch(e.target.value)}
                   placeholder="Tìm tên bé, mã học sinh hoặc lớp..."
-                  className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl py-2 pl-9 pr-8 text-xs text-slate-800 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl py-2 pl-9 pr-24 text-xs text-slate-800 focus:outline-none"
                 />
+                {searchingStudents && (
+                  <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-medium text-sky-600 pointer-events-none">
+                    Đang tìm...
+                  </span>
+                )}
                 {studentSearch && (
                   <button
                     type="button"
@@ -605,18 +664,18 @@ export function MultiRoleEditorModal({
               </div>
 
               <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-white">
-                {isStudentListLoading ? (
+                {isStudentListLoading || (searchingStudents && filteredStudents.length === 0) ? (
                   <p className="py-6 text-center text-xs text-slate-500">Đang tải danh sách học sinh...</p>
                 ) : filteredStudents.length === 0 ? (
                   <div className="py-6 text-center space-y-2">
                     <p className="text-xs text-slate-500">
                       {studentsError
-                        ? 'Không thể tải danh sách học sinh do lỗi máy chủ/CSDL.'
-                        : localStudents.length === 0
-                        ? 'Chưa tải được danh sách học sinh nào.'
-                        : 'Không tìm thấy học sinh phù hợp từ khóa tìm kiếm.'}
+                        ? 'Không tìm thấy học sinh nào (không thể tải dữ liệu từ máy chủ).'
+                        : allStudents.length === 0
+                        ? 'Không tìm thấy học sinh nào.'
+                        : 'Không tìm thấy học sinh nào phù hợp từ khóa tìm kiếm.'}
                     </p>
-                    {localStudents.length === 0 && (
+                    {allStudents.length === 0 && (
                       <button
                         type="button"
                         onClick={fetchStudentsList}
@@ -630,6 +689,10 @@ export function MultiRoleEditorModal({
                 ) : (
                   filteredStudents.map((s) => {
                     const checked = selectedStudentIds.includes(s.id);
+                    const classDisplay =
+                      s.class_name && s.class_name !== 'Chưa phân lớp'
+                        ? `Lớp ${s.class_name}`
+                        : 'Chưa phân lớp';
                     return (
                       <div
                         key={s.id}
@@ -649,7 +712,7 @@ export function MultiRoleEditorModal({
                           />
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-slate-900 truncate">
-                              {s.full_name} — Lớp {s.class_name || 'Mầm'}
+                              {s.full_name} — {classDisplay}
                             </p>
                             <p className="text-[10px] text-slate-500 font-mono">
                               Mã: {s.student_code}

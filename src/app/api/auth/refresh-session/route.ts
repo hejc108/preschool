@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
+  extractSupabaseTokensFromCookies,
   normalizeRole,
   parseCookieHeader,
   resolveProfileAndRolesByEmail,
@@ -61,11 +62,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const cookieTokens = !accessToken ? await extractSupabaseTokensFromCookies(rawCookies) : null;
+    const effectiveAccessToken = accessToken || cookieTokens?.accessToken || null;
+
     const rawActive = rawCookies[COOKIE_NAMES.ACTIVE_ROLE];
     const verifiedActive = rawActive ? await verifyAndExtractCookieValue(rawActive) : null;
     const requestedActive = verifiedActive ? normalizeRole(verifiedActive) : null;
 
-    const ctx = await resolveProfileAndRolesByEmail(verifiedEmail, requestedActive);
+    const ctx = await resolveProfileAndRolesByEmail(
+      verifiedEmail,
+      requestedActive,
+      effectiveAccessToken
+    );
     if (!ctx) {
       return NextResponse.json(
         {
@@ -85,6 +93,7 @@ export async function POST(request: Request) {
           : ctx.activeRole;
       const hasChildren = ctx.linkedStudentIds.length > 0 || ctx.roles.includes('PARENT');
       const redirectUrl = computeDefaultRedirect(activeRole);
+      const isHttps = request.url.startsWith('https://');
 
       const response = NextResponse.json(
         {
@@ -128,6 +137,24 @@ export async function POST(request: Request) {
         maxAge: 86400,
         sameSite: 'lax',
       });
+      if (accessToken) {
+        await setSignedCookie(response, COOKIE_NAMES.SB_ACCESS_TOKEN, accessToken, {
+          path: '/',
+          maxAge: 86400,
+          sameSite: 'lax',
+          httpOnly: true,
+          secure: isHttps,
+        });
+      }
+      if (typeof body?.refresh_token === 'string' && body.refresh_token.trim()) {
+        await setSignedCookie(response, COOKIE_NAMES.SB_REFRESH_TOKEN, body.refresh_token.trim(), {
+          path: '/',
+          maxAge: 86400,
+          sameSite: 'lax',
+          httpOnly: true,
+          secure: isHttps,
+        });
+      }
       if (hasChildren) {
         await setSignedCookie(response, COOKIE_NAMES.HAS_CHILDREN, 'true', {
           path: '/',

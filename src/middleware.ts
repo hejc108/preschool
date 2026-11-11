@@ -6,13 +6,14 @@ import {
   verifyAndExtractCookieValue,
 } from '@/lib/utils/cookieSigner';
 import {
-  cleanEnv,
   createSignedActiveRoleJwt,
   FALLBACK_ANON_KEY,
-  FALLBACK_SUPABASE_URL,
+  getSupabaseConfig,
 } from '@/lib/supabase/server';
 import {
+  extractSupabaseTokensFromCookies,
   normalizeRole,
+  parseCookieHeader,
   sortRolesByPriority,
 } from '@/lib/auth/sessionContext';
 import { UserRole } from '@/lib/types/schema';
@@ -25,22 +26,17 @@ interface LiveAuthState {
   hasChildren: boolean;
 }
 
-async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> {
+async function fetchLiveAuthState(
+  email: string,
+  callerAccessToken?: string | null
+): Promise<LiveAuthState | null> {
   try {
-    const baseUrl =
-      cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL) ||
-      cleanEnv(process.env.SUPABASE_URL) ||
-      FALLBACK_SUPABASE_URL;
-
-    const serviceKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const anonKey =
-      cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
-      cleanEnv(process.env.SUPABASE_ANON_KEY) ||
-      FALLBACK_ANON_KEY;
+    const { url: baseUrl, serviceRoleKey: serviceKey, anonKey } = getSupabaseConfig();
 
     const restFetch = async (path: string, bearerOverride?: string | null) => {
       const apiKey = serviceKey ? serviceKey : anonKey;
-      const bearer = bearerOverride || (serviceKey ? serviceKey : anonKey);
+      const bearer =
+        bearerOverride || (serviceKey ? serviceKey : callerAccessToken || anonKey);
       const makeHeaders = (k: string, b: string) => ({
         apikey: k,
         Authorization: `Bearer ${b}`,
@@ -52,7 +48,10 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
       });
       if (!res.ok && (apiKey !== FALLBACK_ANON_KEY || bearer !== FALLBACK_ANON_KEY)) {
         return fetch(`${baseUrl}/rest/v1/${path}`, {
-          headers: makeHeaders(FALLBACK_ANON_KEY, bearerOverride || FALLBACK_ANON_KEY),
+          headers: makeHeaders(
+            FALLBACK_ANON_KEY,
+            bearerOverride || callerAccessToken || FALLBACK_ANON_KEY
+          ),
           cache: 'no-store',
         });
       }
@@ -90,15 +89,21 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
         })
       : null;
 
+    const effectiveDefaultBearer = scopedBearer || callerAccessToken || null;
+    const effectiveParentBearer = parentBearer || scopedBearer || callerAccessToken || null;
+
     const [urRes, spRes, sgRes] = await Promise.all([
-      restFetch(`user_roles?user_id=eq.${encodeURIComponent(profileId)}&select=role_name`, scopedBearer),
+      restFetch(
+        `user_roles?user_id=eq.${encodeURIComponent(profileId)}&select=role_name`,
+        effectiveDefaultBearer
+      ),
       restFetch(
         `student_parents?parent_user_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`,
-        parentBearer || scopedBearer
+        effectiveParentBearer
       ),
       restFetch(
         `student_guardians?guardian_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`,
-        parentBearer || scopedBearer
+        effectiveParentBearer
       ),
     ]);
 
@@ -174,7 +179,9 @@ export async function middleware(request: NextRequest) {
 
   let cookiesDirty = false;
   if (emailCookie && emailCookie !== 'sadmin@suongmai.edu.vn') {
-    const live = await fetchLiveAuthState(emailCookie);
+    const parsedCookieMap = parseCookieHeader(request.headers.get('cookie'));
+    const { accessToken: sbAccessToken } = await extractSupabaseTokensFromCookies(parsedCookieMap);
+    const live = await fetchLiveAuthState(emailCookie, sbAccessToken);
     if (live) {
       const effectiveRoles =
         emailCookie === 'luciaxuan178@gmail.com'

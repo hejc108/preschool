@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server';
-import {
-  getSupabaseAdminClient,
-  NO_CACHE_HEADERS,
-} from '@/lib/supabase/server';
+import { NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import { DEFAULT_SLUG_TO_UUID } from '@/lib/constants/classes';
 import {
   assertTeacherClassAccess,
+  executeWithContextFallback,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-function getSupabaseClient() {
-  return getSupabaseAdminClient(false);
-}
 
 interface VietnamTimeInfo {
   year: number;
@@ -152,23 +146,22 @@ export async function GET(request: Request) {
       if (denied) return denied;
     }
 
-    const sb = getSupabaseClient();
     let report: any = null;
 
-    if (sb) {
-      try {
-        const { data, error } = await sb
+    try {
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+        await sb
           .from('kitchen_daily_reports')
           .select('*')
           .eq('class_id', classId)
           .eq('report_date', reportDate)
-          .maybeSingle();
+          .maybeSingle()
+      );
 
-        if (!error && data) {
-          report = data;
-        }
-      } catch (e) {}
-    }
+      if (!error && data) {
+        report = data;
+      }
+    } catch {}
 
     // Fallback 1: Bộ nhớ cache server
     const cacheKey = `${classId}:${reportDate}`;
@@ -177,14 +170,16 @@ export async function GET(request: Request) {
     }
 
     // Fallback 2: Đọc từ kitchen_meal_orders trên Supabase nếu chưa có ở cả 2 nguồn trên
-    if (!report && sb) {
+    if (!report) {
       try {
-        const { data: orderData } = await sb
-          .from('kitchen_meal_orders')
-          .select('*')
-          .eq('class_id', classId)
-          .eq('date', reportDate)
-          .maybeSingle();
+        const { data: orderData } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb
+            .from('kitchen_meal_orders')
+            .select('*')
+            .eq('class_id', classId)
+            .eq('date', reportDate)
+            .maybeSingle()
+        );
 
         if (orderData && orderData.is_finalized) {
           report = {
@@ -199,7 +194,7 @@ export async function GET(request: Request) {
             submitted_by: 'Giáo viên',
           };
         }
-      } catch (e) {}
+      } catch {}
     }
 
     const uiState = computeUiState(timeInfo, report);
@@ -283,34 +278,35 @@ export async function POST(request: Request) {
       );
     }
 
-    const sb = getSupabaseClient();
     const cacheKey = `${class_id}:${reportDate}`;
     let existingReport: any = null;
 
-    if (sb) {
-      try {
-        const { data } = await sb
+    try {
+      const { data } = await executeWithContextFallback(ctx, async (sb) =>
+        await sb
           .from('kitchen_daily_reports')
           .select('*')
           .eq('class_id', class_id)
           .eq('report_date', reportDate)
-          .maybeSingle();
-        existingReport = data;
-      } catch (e) {}
-    }
+          .maybeSingle()
+      );
+      existingReport = data;
+    } catch {}
 
     if (!existingReport && globalThis.__SUONGMAI_KITCHEN_REPORTS__?.[cacheKey]) {
       existingReport = globalThis.__SUONGMAI_KITCHEN_REPORTS__[cacheKey];
     }
 
-    if (!existingReport && sb) {
+    if (!existingReport) {
       try {
-        const { data: orderData } = await sb
-          .from('kitchen_meal_orders')
-          .select('*')
-          .eq('class_id', class_id)
-          .eq('date', reportDate)
-          .maybeSingle();
+        const { data: orderData } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb
+            .from('kitchen_meal_orders')
+            .select('*')
+            .eq('class_id', class_id)
+            .eq('date', reportDate)
+            .maybeSingle()
+        );
         if (orderData && orderData.is_finalized) {
           existingReport = {
             id: orderData.id,
@@ -323,7 +319,7 @@ export async function POST(request: Request) {
             last_submitted_at: orderData.updated_at,
           };
         }
-      } catch (e) {}
+      } catch {}
     }
 
     const nowIso = new Date().toISOString();
@@ -343,19 +339,19 @@ export async function POST(request: Request) {
         submitted_by: submitted_by || 'Giáo viên',
       };
 
-      if (sb) {
-        try {
-          const { data, error } = await sb
+      try {
+        const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb
             .from('kitchen_daily_reports')
             .insert(newPayload)
             .select()
-            .maybeSingle();
+            .maybeSingle()
+        );
 
-          if (!error && data) {
-            savedReport = data;
-          }
-        } catch (e) {}
-      }
+        if (!error && data) {
+          savedReport = data;
+        }
+      } catch {}
 
       savedReport = savedReport || { ...newPayload, id: `krep-${Date.now()}` };
     } else {
@@ -378,21 +374,21 @@ export async function POST(request: Request) {
         submitted_by: submitted_by || existingReport.submitted_by || 'Giáo viên',
       };
 
-      if (sb) {
-        try {
-          const { data, error } = await sb
+      try {
+        const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb
             .from('kitchen_daily_reports')
             .update(updatedPayload)
             .eq('class_id', class_id)
             .eq('report_date', reportDate)
             .select()
-            .maybeSingle();
+            .maybeSingle()
+        );
 
-          if (!error && data) {
-            savedReport = data;
-          }
-        } catch (e) {}
-      }
+        if (!error && data) {
+          savedReport = data;
+        }
+      } catch {}
 
       savedReport = savedReport || { ...existingReport, ...updatedPayload };
     }
@@ -403,8 +399,8 @@ export async function POST(request: Request) {
     }
 
     // 4. Đồng bộ với bảng kitchen_meal_orders trên Supabase
-    if (sb) {
-      try {
+    try {
+      await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('kitchen_meal_orders').upsert(
           {
             class_id,
@@ -415,9 +411,9 @@ export async function POST(request: Request) {
             updated_at: nowIso,
           },
           { onConflict: 'class_id,date' }
-        );
-      } catch (e) {}
-    }
+        )
+      );
+    } catch {}
 
     const newUiState = computeUiState(timeInfo, savedReport);
 

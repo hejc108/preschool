@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Bell, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
-import { supabase } from '@/lib/supabase/client';
+import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 
 interface AnnouncementItem {
   id: string;
@@ -28,14 +28,14 @@ const announcementsFetcher = async (url: string) => {
  * so Teacher and Parent reads/feeds stay completely isolated.
  */
 export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRole }) {
-  const { pushStatus, enableNotifications } = useActiveRole();
+  const { activeRole, isSwitching, pushStatus, enableNotifications } = useActiveRole();
   const [expanded, setExpanded] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
   const { data, mutate } = useSWR(
-    ['role', portalRole, 'announcements'],
+    activeRole === portalRole && !isSwitching ? ['role', portalRole, 'announcements'] : null,
     () => announcementsFetcher('/api/announcements'),
-    { refreshInterval: 45000 }
+    { revalidateOnMount: true, refreshInterval: 45000 }
   );
 
   const announcements: AnnouncementItem[] = Array.isArray(data?.announcements)
@@ -51,19 +51,21 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
     announcements.forEach((a) => seenIdsRef.current.add(a.id));
   }, [announcements]);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel(`announcements-${portalRole}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'announcements' },
-        (payload: any) => {
+  useRoleRealtimeSync({
+    channelName: `announcements-${portalRole}`,
+    enabled: activeRole === portalRole && !isSwitching,
+    debounceMs: 0,
+    handlers: [
+      {
+        table: 'announcements',
+        event: 'INSERT',
+        match: (payload) => {
+          const record = payload?.new as AnnouncementItem | undefined;
+          return Boolean(record && (record.target_role === 'ALL' || record.target_role === portalRole));
+        },
+        onEvent: (payload) => {
           const record = payload?.new as AnnouncementItem | undefined;
           if (!record) return;
-          const matchesRole =
-            record.target_role === 'ALL' || record.target_role === portalRole;
-          if (!matchesRole) return;
-
           mutate();
 
           if (
@@ -83,18 +85,10 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
               // Ignore restricted notification contexts (e.g., iOS Safari non-PWA tab)
             }
           }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
-  }, [portalRole, mutate]);
+        },
+      },
+    ],
+  });
 
   const handleMarkRead = async (announcementId: string) => {
     try {

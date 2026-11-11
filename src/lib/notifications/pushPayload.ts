@@ -1,5 +1,6 @@
 import { NotificationChannel, PushNotificationPayload } from '@/lib/types/schema';
 import { executeWithAdminFallback } from '@/lib/supabase/server';
+import { executeWithContextFallback, SessionContext } from '@/lib/auth/sessionContext';
 
 export function buildPushPayload(input: {
   id?: string;
@@ -45,8 +46,9 @@ export async function savePushSubscription(params: {
   auth: string;
   activeRolePreference?: string | null;
   userAgent?: string | null;
+  ctx?: SessionContext;
 }) {
-  return executeWithAdminFallback(async (sb) =>
+  const query = async (sb: any) =>
     await sb
       .from('push_subscriptions')
       .upsert(
@@ -62,8 +64,9 @@ export async function savePushSubscription(params: {
         { onConflict: 'endpoint' }
       )
       .select()
-      .maybeSingle()
-  );
+      .maybeSingle();
+
+  return params.ctx ? executeWithContextFallback(params.ctx, query) : executeWithAdminFallback(query);
 }
 
 /**

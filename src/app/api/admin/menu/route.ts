@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
 import { WeeklyMenu } from '@/lib/types/schema';
 import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
-import { requireActiveRole } from '@/lib/auth/sessionContext';
+import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessionContext';
+import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
 
 declare global {
   var __SUONGMAI_WEEKLY_MENU__: WeeklyMenu[] | undefined;
@@ -20,31 +14,6 @@ declare global {
 
 if (!globalThis.__SUONGMAI_WEEKLY_MENU__) {
   globalThis.__SUONGMAI_WEEKLY_MENU__ = (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU;
-}
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient(forceAnon = false) {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const key = forceAnon
-    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      FALLBACK_ANON_KEY
-    : process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 }
 
 async function withTimeout<T = any>(promiseLike: PromiseLike<T> | Promise<T>, ms = 4000): Promise<T> {
@@ -63,61 +32,58 @@ export async function GET(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['PARENT', 'TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
     if ('response' in auth) return auth.response;
+    const { ctx } = auth;
 
-    let supabase = getSupabaseClient(false);
     let menu: WeeklyMenu[] = [];
 
-    // 1. Fetch from Supabase DB table with timeout & Anon Key fallback
-    if (supabase) {
-      try {
-        let { data, error } = await withTimeout<any>(
-          supabase
+    // 1. Fetch from Supabase DB table with Tier 1 -> Tier 2 -> Tier 3 context fallback
+    try {
+      const { data, error } = await withTimeout<any>(
+        executeWithContextFallback(ctx, async (sb) =>
+          await sb
             .from('weekly_menus')
             .select('*')
-            .order('week_number', { ascending: true }),
-          4000
+            .order('week_number', { ascending: true })
+        ),
+        4000
+      );
+
+      if (error && isAuthOrRlsError(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+            has_db: false,
+            menu: [],
+          },
+          { status: 403, headers: NO_CACHE_HEADERS }
         );
-
-        if (error && (error.message?.includes('Invalid API key') || error.message?.includes('JWT'))) {
-          supabase = getSupabaseClient(true);
-          if (supabase) {
-            const retry = await withTimeout<any>(
-              supabase
-                .from('weekly_menus')
-                .select('*')
-                .order('week_number', { ascending: true }),
-              4000
-            );
-            data = retry.data;
-            error = retry.error;
-          }
-        }
-
-        if (!error && data && data.length > 0) {
-          menu = data.map((row: any) => ({
-            id: row.id,
-            week_number: row.week_number,
-            day_of_week: row.day_of_week,
-            meal_type: row.meal_type,
-            dish_name: row.dish_name,
-            allergens: row.allergens || [],
-            created_at: row.created_at,
-          }));
-          globalThis.__SUONGMAI_WEEKLY_MENU__ = menu;
-          return NextResponse.json(
-            {
-              success: true,
-              count: menu.length,
-              source: 'supabase',
-              has_db: true,
-              menu,
-            },
-            { headers: NO_CACHE_HEADERS }
-          );
-        }
-      } catch (dbErr) {
-        // Table not yet migrated or query timed out
       }
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        menu = data.map((row: any) => ({
+          id: row.id,
+          week_number: row.week_number,
+          day_of_week: row.day_of_week,
+          meal_type: row.meal_type,
+          dish_name: row.dish_name,
+          allergens: row.allergens || [],
+          created_at: row.created_at,
+        }));
+        globalThis.__SUONGMAI_WEEKLY_MENU__ = menu;
+        return NextResponse.json(
+          {
+            success: true,
+            count: menu.length,
+            source: 'supabase',
+            has_db: true,
+            menu,
+          },
+          { headers: NO_CACHE_HEADERS }
+        );
+      }
+    } catch {
+      // Table not yet migrated or query timed out
     }
 
     // 2. Return in-memory cache or default JSON fallback
@@ -154,6 +120,7 @@ export async function POST(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF']);
     if ('response' in auth) return auth.response;
+    const { ctx } = auth;
 
     const body = await request.json();
     const incomingMenu = body.menu;
@@ -179,49 +146,38 @@ export async function POST(request: Request) {
 
     let dbSynced = false;
     let dbErrorMessage: string | null = null;
-    let supabase = getSupabaseClient(false);
-    if (supabase) {
-      try {
-        const rows = sanitizedMenu.map((m) => ({
-          id: m.id,
-          week_number: m.week_number,
-          day_of_week: m.day_of_week,
-          meal_type: m.meal_type,
-          dish_name: m.dish_name,
-          allergens: m.allergens || [],
-          updated_at: new Date().toISOString(),
-        }));
+    let dbStatus = 500;
 
-        let { error: upsertErr } = await withTimeout<any>(
-          supabase
+    try {
+      const rows = sanitizedMenu.map((m) => ({
+        id: m.id,
+        week_number: m.week_number,
+        day_of_week: m.day_of_week,
+        meal_type: m.meal_type,
+        dish_name: m.dish_name,
+        allergens: m.allergens || [],
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: upsertErr } = await withTimeout<any>(
+        executeWithContextFallback(ctx, async (sb) =>
+          await sb
             .from('weekly_menus')
-            .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' }),
-          4000
-        );
+            .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' })
+        ),
+        4000
+      );
 
-        if (upsertErr && (upsertErr.message?.includes('Invalid API key') || upsertErr.message?.includes('JWT'))) {
-          supabase = getSupabaseClient(true);
-          if (supabase) {
-            const retry = await withTimeout<any>(
-              supabase
-                .from('weekly_menus')
-                .upsert(rows, { onConflict: 'week_number,day_of_week,meal_type' }),
-              4000
-            );
-            upsertErr = retry.error;
-          }
-        }
-
-        if (!upsertErr) {
-          dbSynced = true;
-        } else {
-          dbErrorMessage = upsertErr.message;
-          console.warn('weekly_menus table upsert notice:', upsertErr.message);
-        }
-      } catch (dbErr: any) {
-        dbErrorMessage = dbErr?.message || 'Database connection error';
-        console.warn('weekly_menus sync notice (fallback active):', dbErr);
+      if (!upsertErr) {
+        dbSynced = true;
+      } else {
+        dbErrorMessage = upsertErr.message;
+        if (isAuthOrRlsError(upsertErr)) dbStatus = 403;
+        console.warn('weekly_menus table upsert notice:', upsertErr.message);
       }
+    } catch (dbErr: any) {
+      dbErrorMessage = dbErr?.message || 'Database connection error';
+      console.warn('weekly_menus sync notice (fallback active):', dbErr);
     }
 
     if (!dbSynced) {
@@ -235,7 +191,7 @@ export async function POST(request: Request) {
           db_error: dbErrorMessage,
           menu: sanitizedMenu,
         },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { status: dbStatus, headers: NO_CACHE_HEADERS }
       );
     }
 

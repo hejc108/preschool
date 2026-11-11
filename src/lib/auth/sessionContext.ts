@@ -10,6 +10,7 @@ import {
   getSupabaseAdminClient,
   getSupabaseConfig,
   getSupabaseRlsScopedClient,
+  isJwtExpired,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import { DEFAULT_UUID_TO_NAME, expandClassIdAliases } from '@/lib/constants/classes';
@@ -49,6 +50,7 @@ export interface SessionContext {
   assignedClassIds: string[];
   linkedStudentIds: string[];
   linkedStudents: LinkedStudentSummary[];
+  supabaseAccessToken?: string | null;
 }
 
 export function normalizeRole(raw: unknown): UserRole {
@@ -99,20 +101,119 @@ export function parseCookieHeader(cookieHeader: string | null): Record<string, s
   return map;
 }
 
+function decodeCookieJsonValue(rawValue: string): Record<string, any> | null {
+  try {
+    let text = rawValue;
+    try {
+      text = decodeURIComponent(rawValue);
+    } catch {
+      text = rawValue;
+    }
+    if (text.startsWith('base64-')) {
+      const b64 = text.slice(7).replace(/-/g, '+').replace(/_/g, '/');
+      const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+      const bin = atob(b64 + pad);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      text = new TextDecoder().decode(bytes);
+    }
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts Supabase OAuth access/refresh tokens from either signed Suong Mai cookies
+ * or @supabase/ssr chunked auth-token cookies.
+ */
+export async function extractSupabaseTokensFromCookies(
+  cookies: Record<string, string>
+): Promise<{ accessToken: string | null; refreshToken: string | null }> {
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+
+  const rawAccessCookie = cookies[COOKIE_NAMES.SB_ACCESS_TOKEN];
+  if (rawAccessCookie) {
+    const verified = await verifyAndExtractCookieValue(rawAccessCookie);
+    if (verified && !isJwtExpired(verified)) {
+      accessToken = verified;
+    }
+  }
+
+  const rawRefreshCookie = cookies[COOKIE_NAMES.SB_REFRESH_TOKEN];
+  if (rawRefreshCookie) {
+    refreshToken = await verifyAndExtractCookieValue(rawRefreshCookie);
+  }
+
+  if (accessToken) {
+    return { accessToken, refreshToken };
+  }
+
+  // Fallback: inspect @supabase/ssr cookies (sb-<project-ref>-auth-token[.0,.1,...])
+  const baseNames = new Set<string>();
+  for (const key of Object.keys(cookies)) {
+    if (key.startsWith('sb-') && key.includes('-auth-token')) {
+      baseNames.add(key.replace(/\.\d+$/, ''));
+    }
+  }
+
+  for (const base of Array.from(baseNames)) {
+    let combined = cookies[base] || '';
+    if (!combined) {
+      const parts: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const chunk = cookies[`${base}.${i}`];
+        if (!chunk) break;
+        parts.push(chunk);
+      }
+      combined = parts.join('');
+    }
+    if (!combined) continue;
+
+    const sessionObj = decodeCookieJsonValue(combined);
+    const ssrAccess = typeof sessionObj?.access_token === 'string' ? sessionObj.access_token.trim() : '';
+    const ssrRefresh =
+      typeof sessionObj?.refresh_token === 'string' ? sessionObj.refresh_token.trim() : '';
+
+    if (ssrRefresh && !refreshToken) {
+      refreshToken = ssrRefresh;
+    }
+    if (ssrAccess && !isJwtExpired(ssrAccess)) {
+      accessToken = ssrAccess;
+      break;
+    }
+  }
+
+  return { accessToken, refreshToken };
+}
+
 export async function resolveProfileAndRolesByEmail(
   emailInput: string,
-  claimedActiveRole?: UserRole | null
+  claimedActiveRole?: UserRole | null,
+  supabaseAccessToken?: string | null
 ): Promise<SessionContext | null> {
   const email = emailInput.trim().toLowerCase();
   if (!email) return null;
 
-  const supabase = getSupabaseAdminClient();
+  const cleanCallerToken =
+    supabaseAccessToken && !isJwtExpired(supabaseAccessToken) ? supabaseAccessToken : null;
 
-  let { data: profile, error: profErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .ilike('email', email)
-    .maybeSingle();
+  const bootstrapLookupCtx: AuthDbContext = {
+    profileId: '',
+    email,
+    activeRole: claimedActiveRole && claimedActiveRole !== 'GUEST' ? claimedActiveRole : 'GUEST',
+    roles: [],
+    supabaseAccessToken: cleanCallerToken,
+  };
+
+  let { data: profile, error: profErr } = await executeWithPrivilegedFallback(
+    async (sb) => await sb.from('profiles').select('*').ilike('email', email).maybeSingle(),
+    bootstrapLookupCtx
+  );
 
   if (profErr) {
     const retry = await getSupabaseAdminClient(true)
@@ -143,6 +244,7 @@ export async function resolveProfileAndRolesByEmail(
         assignedClassIds: [],
         linkedStudentIds: [],
         linkedStudents: [],
+        supabaseAccessToken: cleanCallerToken,
       };
     }
     return null;
@@ -157,6 +259,7 @@ export async function resolveProfileAndRolesByEmail(
     email,
     activeRole: claimedActiveRole && claimedActiveRole !== 'GUEST' ? claimedActiveRole : profilePrimaryRole,
     roles: profilePrimaryRole !== 'GUEST' ? [profilePrimaryRole] : [],
+    supabaseAccessToken: cleanCallerToken,
   };
 
   // 1. Read multi-role assignments from public.user_roles (with pre-00013 safety & scoped JWT fallback)
@@ -248,23 +351,11 @@ export async function resolveProfileAndRolesByEmail(
   const linkedStudents = Array.from(studentMap.values());
   const linkedStudentIds = linkedStudents.map((s) => s.id);
 
-  // 3. Read teacher class assignments (including slug <-> UUID aliases)
+  // 3. Read teacher class assignments with teacher_class_assignments as canonical source of truth
   const classIdSet = new Set<string>();
   const addClassRef = (cid?: string | null, cname?: string | null) => {
     expandClassIdAliases(cid, cname).forEach((id) => classIdSet.add(id));
   };
-
-  if (profile.assigned_class_id || profile.assigned_class_name) {
-    const names = String(profile.assigned_class_name || '')
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter(Boolean);
-    if (names.length > 0) {
-      names.forEach((n: string) => addClassRef(profile.assigned_class_id, n));
-    } else {
-      addClassRef(profile.assigned_class_id, null);
-    }
-  }
 
   const teacherScopeCtx: AuthDbContext = {
     ...baseAuthCtx,
@@ -272,25 +363,48 @@ export async function resolveProfileAndRolesByEmail(
     roles: resolvedContextRoles,
   };
 
+  let assignmentsTableReady = false;
   try {
-    const [{ data: assignRows }, { data: mainClassRows }] = await Promise.all([
-      executeWithPrivilegedFallback(
-        async (sb) =>
-          await sb
-            .from('teacher_class_assignments')
-            .select('class_id, class_name')
-            .or(`teacher_id.eq.${profileId},teacher_email.ilike.${email}`),
-        teacherScopeCtx
-      ),
-      executeWithPrivilegedFallback(
+    const { data: assignRows, error: assignErr } = await executeWithPrivilegedFallback(
+      async (sb) =>
+        await sb
+          .from('teacher_class_assignments')
+          .select('class_id, class_name')
+          .or(`teacher_id.eq.${profileId},teacher_email.ilike.${email}`),
+      teacherScopeCtx
+    );
+
+    if (!assignErr && Array.isArray(assignRows)) {
+      assignmentsTableReady = true;
+      assignRows.forEach((r: any) => addClassRef(r.class_id, r.class_name));
+    }
+  } catch {
+    assignmentsTableReady = false;
+  }
+
+  // Fallback ONLY when teacher_class_assignments table does not exist or could not be queried
+  if (!assignmentsTableReady) {
+    if (profile.assigned_class_id || profile.assigned_class_name) {
+      const names = String(profile.assigned_class_name || '')
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      if (names.length > 0) {
+        names.forEach((n: string) => addClassRef(profile.assigned_class_id, n));
+      } else {
+        addClassRef(profile.assigned_class_id, null);
+      }
+    }
+
+    try {
+      const { data: mainClassRows } = await executeWithPrivilegedFallback(
         async (sb) => await sb.from('classes').select('id, name').eq('main_teacher_id', profileId),
         teacherScopeCtx
-      ),
-    ]);
-    (assignRows || []).forEach((r: any) => addClassRef(r.class_id, r.class_name));
-    (mainClassRows || []).forEach((c: any) => addClassRef(c.id, c.name));
-  } catch {
-    // noop
+      );
+      (mainClassRows || []).forEach((c: any) => addClassRef(c.id, c.name));
+    } catch {
+      // noop
+    }
   }
   const assignedClassIds = Array.from(classIdSet);
 
@@ -338,6 +452,7 @@ export async function resolveProfileAndRolesByEmail(
     assignedClassIds,
     linkedStudentIds,
     linkedStudents,
+    supabaseAccessToken: cleanCallerToken,
   };
 }
 
@@ -351,6 +466,10 @@ export async function getSessionContext(request: Request): Promise<{
   tamperedCookie?: boolean;
 }> {
   const cookies = parseCookieHeader(request.headers.get('cookie'));
+  const authHeader = request.headers.get('authorization') || '';
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : '';
 
   // Path A: Signed cookies (primary browser/PWA auth mechanism)
   const rawSessionCookie = cookies[COOKIE_NAMES.SESSION];
@@ -359,6 +478,7 @@ export async function getSessionContext(request: Request): Promise<{
 
   let email: string | null = null;
   let claimedActiveRole: UserRole | null = null;
+  let supabaseAccessToken: string | null = null;
 
   if (rawSessionCookie && rawEmailCookie) {
     const [verifiedSession, verifiedEmail] = await Promise.all([
@@ -379,23 +499,23 @@ export async function getSessionContext(request: Request): Promise<{
       }
       claimedActiveRole = normalizeRole(verifiedActive);
     }
-  } else {
+
+    const cookieTokens = await extractSupabaseTokensFromCookies(cookies);
+    supabaseAccessToken =
+      cookieTokens.accessToken ||
+      (bearerToken && !isJwtExpired(bearerToken) ? bearerToken : null);
+  } else if (bearerToken) {
     // Path B: Bearer JWT fallback (automated tests / Supabase SDK calls)
-    const authHeader = request.headers.get('authorization') || '';
-    if (authHeader.toLowerCase().startsWith('bearer ')) {
-      const token = authHeader.slice(7).trim();
-      if (token) {
-        const sb = getSupabaseAdminClient();
-        const { data, error } = await sb.auth.getUser(token);
-        if (!error && data?.user?.email) {
-          email = data.user.email.toLowerCase().trim();
-          const jwtActive =
-            (data.user.app_metadata as any)?.active_role ||
-            (data.user.user_metadata as any)?.active_role;
-          if (jwtActive) {
-            claimedActiveRole = normalizeRole(jwtActive);
-          }
-        }
+    const sb = getSupabaseAdminClient();
+    const { data, error } = await sb.auth.getUser(bearerToken);
+    if (!error && data?.user?.email) {
+      email = data.user.email.toLowerCase().trim();
+      supabaseAccessToken = bearerToken;
+      const jwtActive =
+        (data.user.app_metadata as any)?.active_role ||
+        (data.user.user_metadata as any)?.active_role;
+      if (jwtActive) {
+        claimedActiveRole = normalizeRole(jwtActive);
       }
     }
   }
@@ -404,7 +524,7 @@ export async function getSessionContext(request: Request): Promise<{
     return { ctx: null };
   }
 
-  const ctx = await resolveProfileAndRolesByEmail(email, claimedActiveRole);
+  const ctx = await resolveProfileAndRolesByEmail(email, claimedActiveRole, supabaseAccessToken);
   return { ctx };
 }
 
@@ -528,11 +648,10 @@ export async function assertTeacherStudentAccess(
   }
   if (studentIds.length === 0) return null;
 
-  const sb = getSupabaseAdminClient();
-  const { data: students } = await sb
-    .from('students')
-    .select('id, class_id')
-    .in('id', studentIds);
+  const { data: students } = await executeWithContextFallback(
+    ctx,
+    async (sb) => await sb.from('students').select('id, class_id').in('id', studentIds)
+  );
 
   if (!students || students.length !== studentIds.length) {
     return NextResponse.json(
@@ -609,5 +728,6 @@ export async function executeWithContextFallback<T>(
     email: ctx.email,
     activeRole: ctx.activeRole,
     roles: ctx.roles,
+    supabaseAccessToken: ctx.supabaseAccessToken || null,
   });
 }

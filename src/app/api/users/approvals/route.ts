@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   executeWithAdminFallback,
   getSupabaseAdminClient,
+  getSupabaseConfig,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import {
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
   const { ctx } = auth;
 
   const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
-  const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const { isValidServiceRoleKey: hasServiceRoleKey } = getSupabaseConfig();
 
   let dbProfilesCount = 0;
   let dbErrorDetail: string | null = null;

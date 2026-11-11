@@ -6,6 +6,8 @@ import {
   SessionContext,
 } from '@/lib/auth/sessionContext';
 import { getSupabaseConfig, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { normalizeVietnameseSearch } from '@/lib/utils/textSearch';
+import { DEFAULT_UUID_TO_NAME } from '@/lib/constants/classes';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -76,12 +78,16 @@ export async function GET(request: Request) {
     if ('response' in auth) return auth.response;
     const { ctx } = auth;
 
-    // 1. Fetch available classes for mapping (using service_role or active_role scoped JWT)
+    const { searchParams } = new URL(request.url);
+    const qParam = (searchParams.get('q') || searchParams.get('search') || '').trim();
+    const limitParam = Number.parseInt(searchParams.get('limit') || '0', 10);
+
+    // 1. Fetch available classes for mapping (using service_role or active_role / caller JWT)
     const { data: classesData } = await executeWithContextFallback(
       ctx,
       async (sb) => await sb.from('classes').select('id, name')
     );
-    const idToNameMap: Record<string, string> = {};
+    const idToNameMap: Record<string, string> = { ...DEFAULT_UUID_TO_NAME };
     if (Array.isArray(classesData) && classesData.length > 0) {
       classesData.forEach((c: { id: string; name: string }) => {
         idToNameMap[c.id] = c.name;
@@ -94,7 +100,7 @@ export async function GET(request: Request) {
       allowNonRegular = globalThis.__SUONGMAI_SYSTEM_SETTINGS__.allow_school_admin_view_non_regular;
     }
 
-    const [citizenIdsMap, settingRes, studentsRes] = await Promise.all([
+    const [citizenIdsMap, settingRes, initialStudentsRes] = await Promise.all([
       loadCitizenIdsMap(ctx),
       executeWithContextFallback(
         ctx,
@@ -115,6 +121,18 @@ export async function GET(request: Request) {
       ),
     ]);
 
+    let studentsRes = initialStudentsRes;
+    if (
+      studentsRes.error &&
+      (String(studentsRes.error.message || '').toLowerCase().includes('classes') ||
+        String(studentsRes.error.message || '').toLowerCase().includes('relationship'))
+    ) {
+      studentsRes = await executeWithContextFallback(
+        ctx,
+        async (sb) => await sb.from('students').select('*').order('full_name', { ascending: true })
+      );
+    }
+
     if (settingRes.data && settingRes.data.value !== undefined) {
       allowNonRegular = Boolean(settingRes.data.value);
     }
@@ -128,17 +146,27 @@ export async function GET(request: Request) {
     }
 
     const studentsData = studentsRes.data || [];
-    const { serviceRoleKey, jwtSecret } = getSupabaseConfig();
-    if (
-      studentsData.length === 0 &&
-      !serviceRoleKey &&
-      (!jwtSecret || ctx.profileId.startsWith('bootstrap-'))
-    ) {
+    const { isValidServiceRoleKey, serviceRoleKeyKind, jwtSecret } = getSupabaseConfig();
+    const hasRlsBypassOrScopedJwt =
+      isValidServiceRoleKey ||
+      Boolean(jwtSecret && !ctx.profileId.startsWith('bootstrap-')) ||
+      Boolean(ctx.supabaseAccessToken);
+
+    if (studentsData.length === 0 && !hasRlsBypassOrScopedJwt) {
+      const reason =
+        serviceRoleKeyKind === 'invalid_publishable' || serviceRoleKeyKind === 'invalid_anon_jwt'
+          ? 'Biến môi trường SUPABASE_SERVICE_ROLE_KEY trên server đang cấu hình nhầm publishable/anon key (sb_publishable_...) thay vì service_role/sb_secret_..., nên RLS chặn đọc bảng students. Hãy cập nhật SUPABASE_SERVICE_ROLE_KEY hoặc đăng nhập bằng tài khoản Google Quản trị trường.'
+          : 'Không thể đọc bảng học sinh do thiếu SUPABASE_SERVICE_ROLE_KEY hợp lệ trên server (hoặc tài khoản sadmin chưa có hồ sơ/JWT hợp lệ để vượt RLS).';
       return NextResponse.json(
         {
           success: false,
-          error:
-            'Không thể đọc bảng học sinh do thiếu SUPABASE_SERVICE_ROLE_KEY trên server (hoặc tài khoản sadmin chưa có hồ sơ trong bảng profiles/user_roles để vượt RLS).',
+          error: reason,
+          code: 'RLS_MISSING_SERVICE_KEY',
+          debug: {
+            serviceRoleKeyKind,
+            hasJwtSecret: Boolean(jwtSecret),
+            hasCallerToken: Boolean(ctx.supabaseAccessToken),
+          },
         },
         { status: 403, headers: NO_CACHE_HEADERS }
       );
@@ -193,8 +221,9 @@ export async function GET(request: Request) {
     }
 
     // 4. Map students with proper class names, citizen_id, and non-regular flags
-    const students = studentsData.map((s: any) => {
-      let friendlyClassName = s.classes?.name;
+    const allMappedStudents = studentsData.map((s: any) => {
+      const embeddedClass = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+      let friendlyClassName = embeddedClass?.name || s.class_name;
       if (!friendlyClassName && s.class_id && idToNameMap[s.class_id]) {
         friendlyClassName = idToNameMap[s.class_id];
       }
@@ -231,11 +260,28 @@ export async function GET(request: Request) {
       };
     });
 
+    const normalizedQuery = normalizeVietnameseSearch(qParam);
+    let resultStudents = normalizedQuery
+      ? allMappedStudents.filter((s: any) => {
+          return (
+            normalizeVietnameseSearch(s.full_name).includes(normalizedQuery) ||
+            normalizeVietnameseSearch(s.student_code).includes(normalizedQuery) ||
+            normalizeVietnameseSearch(s.class_name).includes(normalizedQuery) ||
+            normalizeVietnameseSearch(s.citizen_id).includes(normalizedQuery)
+          );
+        })
+      : allMappedStudents;
+
+    if (Number.isFinite(limitParam) && limitParam > 0) {
+      resultStudents = resultStudents.slice(0, limitParam);
+    }
+
     return NextResponse.json(
       {
         success: true,
-        total: students.length,
-        students,
+        total: resultStudents.length,
+        students: resultStudents,
+        data: resultStudents,
         classes: classesData || [],
         settings: {
           allow_school_admin_view_non_regular: allowNonRegular,

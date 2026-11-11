@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { requireActiveRole } from '@/lib/auth/sessionContext';
+import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,52 +17,31 @@ if (!globalThis.__SUONGMAI_SYSTEM_SETTINGS__) {
   };
 }
 
-function getSupabaseClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    '';
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
 export async function GET(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
     if ('response' in auth) return auth.response;
 
-    const supabase = getSupabaseClient();
     const settings = { ...globalThis.__SUONGMAI_SYSTEM_SETTINGS__! };
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('system_settings')
-          .select('key, value');
+    try {
+      const { data, error } = await executeWithContextFallback(
+        auth.ctx,
+        async (sb) => await sb.from('system_settings').select('key, value')
+      );
 
-        if (!error && data) {
-          data.forEach((row: { key: string; value: any }) => {
-            if (row.key === 'allow_school_admin_view_non_regular') {
-              settings.allow_school_admin_view_non_regular = Boolean(row.value);
-            } else if (row.key === 'allow_school_admin_view_temporary_staff') {
-              settings.allow_school_admin_view_temporary_staff = Boolean(row.value);
-            }
-          });
-          globalThis.__SUONGMAI_SYSTEM_SETTINGS__ = { ...settings };
-        }
-      } catch (dbErr) {
-        // Table not created yet; fallback gracefully to cache
+      if (!error && data) {
+        data.forEach((row: { key: string; value: any }) => {
+          if (row.key === 'allow_school_admin_view_non_regular') {
+            settings.allow_school_admin_view_non_regular = Boolean(row.value);
+          } else if (row.key === 'allow_school_admin_view_temporary_staff') {
+            settings.allow_school_admin_view_temporary_staff = Boolean(row.value);
+          }
+        });
+        globalThis.__SUONGMAI_SYSTEM_SETTINGS__ = { ...settings };
       }
+    } catch {
+      // Table not created yet; fallback gracefully to cache
     }
 
     return NextResponse.json({
@@ -91,7 +69,6 @@ export async function POST(request: Request) {
     if ('response' in auth) return auth.response;
 
     const body = await request.json();
-    const supabase = getSupabaseClient();
 
     const current = { ...globalThis.__SUONGMAI_SYSTEM_SETTINGS__! };
 
@@ -114,26 +91,27 @@ export async function POST(request: Request) {
 
     globalThis.__SUONGMAI_SYSTEM_SETTINGS__ = { ...current };
 
-    // Persist to Supabase if available
-    if (supabase) {
-      try {
-        const rows = [
-          {
-            key: 'allow_school_admin_view_non_regular',
-            value: current.allow_school_admin_view_non_regular,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            key: 'allow_school_admin_view_temporary_staff',
-            value: current.allow_school_admin_view_temporary_staff,
-            updated_at: new Date().toISOString(),
-          },
-        ];
+    // Persist to Supabase via verified context fallback
+    try {
+      const rows = [
+        {
+          key: 'allow_school_admin_view_non_regular',
+          value: current.allow_school_admin_view_non_regular,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          key: 'allow_school_admin_view_temporary_staff',
+          value: current.allow_school_admin_view_temporary_staff,
+          updated_at: new Date().toISOString(),
+        },
+      ];
 
-        await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
-      } catch (persistErr) {
-        console.warn('Persist system_settings warning:', persistErr);
-      }
+      await executeWithContextFallback(
+        auth.ctx,
+        async (sb) => await sb.from('system_settings').upsert(rows, { onConflict: 'key' })
+      );
+    } catch (persistErr) {
+      console.warn('Persist system_settings warning:', persistErr);
     }
 
     return NextResponse.json({

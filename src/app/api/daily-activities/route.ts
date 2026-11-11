@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import {
-  executeWithAdminFallback,
   getTodayVietnamDate,
+  isAuthOrRlsError,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import {
   assertParentStudentAccess,
   assertTeacherStudentAccess,
+  executeWithContextFallback,
   isAdminRole,
   requireActiveRole,
 } from '@/lib/auth/sessionContext';
@@ -71,17 +72,31 @@ export async function GET(request: Request) {
         const denied = await assertTeacherStudentAccess(ctx, requestedIds);
         if (denied) return denied;
       } else {
-        const { data: classStudents } = await executeWithAdminFallback(async (sb) =>
-          await sb
-            .from('students')
-            .select('id')
-            .in(
-              'class_id',
-              ctx.assignedClassIds.length > 0
-                ? ctx.assignedClassIds
-                : ['00000000-0000-0000-0000-000000000000']
-            )
+        const { data: classStudents, error: csErr } = await executeWithContextFallback(
+          ctx,
+          async (sb) =>
+            await sb
+              .from('students')
+              .select('id')
+              .in(
+                'class_id',
+                ctx.assignedClassIds.length > 0
+                  ? ctx.assignedClassIds
+                  : ['00000000-0000-0000-0000-000000000000']
+              )
         );
+        if (csErr) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: csErr.message,
+              attendance: [],
+              medications: [],
+              meal_exceptions: [],
+            },
+            { status: isAuthOrRlsError(csErr) ? 403 : 500, headers: NO_CACHE_HEADERS }
+          );
+        }
         scopedIds = (classStudents || []).map((s: any) => s.id);
         if (scopedIds.length === 0) {
           return NextResponse.json(
@@ -104,7 +119,7 @@ export async function GET(request: Request) {
     }
 
     const [attRes, medRes, mealRes] = await Promise.all([
-      executeWithAdminFallback(async (sb) => {
+      executeWithContextFallback(ctx, async (sb) => {
         let q = sb
           .from('attendance_records')
           .select('*')
@@ -113,7 +128,7 @@ export async function GET(request: Request) {
         if (scopedIds.length > 0) q = q.in('student_id', scopedIds);
         return await q;
       }),
-      executeWithAdminFallback(async (sb) => {
+      executeWithContextFallback(ctx, async (sb) => {
         let q = sb
           .from('medication_requests')
           .select('*, students(full_name, student_code)')
@@ -122,7 +137,7 @@ export async function GET(request: Request) {
         if (scopedIds.length > 0) q = q.in('student_id', scopedIds);
         return await q;
       }),
-      executeWithAdminFallback(async (sb) => {
+      executeWithContextFallback(ctx, async (sb) => {
         let q = sb
           .from('meal_exceptions')
           .select('*, students(full_name, student_code)')
@@ -132,6 +147,21 @@ export async function GET(request: Request) {
         return await q;
       }),
     ]);
+
+    const firstErr = attRes.error || medRes.error || mealRes.error;
+    if (firstErr && isAuthOrRlsError(firstErr)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'FORBIDDEN_RLS_OR_KEY',
+          message: firstErr.message,
+          attendance: [],
+          medications: [],
+          meal_exceptions: [],
+        },
+        { status: 403, headers: NO_CACHE_HEADERS }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -191,7 +221,7 @@ export async function POST(request: Request) {
         if (denied) return denied;
       }
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('medication_requests')
           .insert({
@@ -210,7 +240,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -255,7 +285,7 @@ export async function POST(request: Request) {
         notes: r.notes || null,
       }));
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .upsert(rows, { onConflict: 'student_id,date' })
@@ -265,7 +295,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -290,7 +320,7 @@ export async function POST(request: Request) {
 
       const nowIso = new Date().toISOString();
 
-      const { data: existingRows } = await executeWithAdminFallback(async (sb) =>
+      const { data: existingRows } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .select('*')
@@ -313,7 +343,7 @@ export async function POST(request: Request) {
         };
       });
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('attendance_records')
           .upsert(upsertRows, { onConflict: 'student_id,date' })
@@ -323,7 +353,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -342,7 +372,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const { data: medRow } = await executeWithAdminFallback(async (sb) =>
+      const { data: medRow } = await executeWithContextFallback(ctx, async (sb) =>
         await sb.from('medication_requests').select('id, student_id').eq('id', id).maybeSingle()
       );
       if (!medRow?.student_id) {
@@ -355,7 +385,7 @@ export async function POST(request: Request) {
       const denied = await assertTeacherStudentAccess(ctx, [medRow.student_id]);
       if (denied) return denied;
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('medication_requests')
           .update({
@@ -370,7 +400,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 
@@ -398,7 +428,7 @@ export async function POST(request: Request) {
       const denied = await assertTeacherStudentAccess(ctx, [student_id]);
       if (denied) return denied;
 
-      const { data, error } = await executeWithAdminFallback(async (sb) =>
+      const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
         await sb
           .from('meal_exceptions')
           .insert({
@@ -416,7 +446,7 @@ export async function POST(request: Request) {
       if (error) {
         return NextResponse.json(
           { success: false, error: error.message },
-          { status: 500, headers: NO_CACHE_HEADERS }
+          { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
         );
       }
 

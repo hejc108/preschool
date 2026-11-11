@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   AlertCircle,
@@ -33,6 +33,11 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
+import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
+import {
+  readVerifiedTeacherClasses,
+  writeVerifiedTeacherClasses,
+} from '@/lib/utils/teacherClassCache';
 
 export interface AssignedClass {
   id: string;
@@ -63,14 +68,32 @@ const jsonFetcher = async (url: string) => {
   const res = await fetch(url, { cache: 'no-store' });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(json.error || `Request failed (${res.status})`);
+    throw new Error(json.message || json.error || `Request failed (${res.status})`);
   }
   return json;
 };
 
+function getActiveClassStorageKey(email?: string | null): string {
+  const normalized = (email || '').trim().toLowerCase();
+  return normalized
+    ? `suongmai_teacher_active_class_id:${normalized}`
+    : 'suongmai_teacher_active_class_id';
+}
+
 export function TeacherPortalView() {
   const { t, language } = useLanguage();
-  const { email, fullName, avatarUrl, linkedStudents, logout } = useActiveRole();
+  const {
+    activeRole,
+    profileId,
+    isLoading: isLoadingSession,
+    isSwitching,
+    email,
+    fullName,
+    avatarUrl,
+    linkedStudents,
+    refreshSession,
+    logout,
+  } = useActiveRole();
 
   const [activeTab, setActiveTab] = useState<'ATTENDANCE' | 'MEDICATION' | 'MEALS' | 'CHECKOUT'>('ATTENDANCE');
   const [activeClass, setActiveClass] = useState<AssignedClass | null>(null);
@@ -101,26 +124,58 @@ export function TeacherPortalView() {
   const [lateReason, setLateReason] = useState('Phụ huynh bận công việc đột xuất');
   const [viewPickupStudentId, setViewPickupStudentId] = useState<string | null>(null);
 
+  const isTeacherReady = Boolean(email && activeRole === 'TEACHER' && !isSwitching);
+
+  // Per-email verified class cache prevents blank/unassigned flash during role switch,
+  // while SWR ALWAYS revalidates in background on mount to pick up live BGH changes.
+  const cachedClasses = useMemo(() => readVerifiedTeacherClasses(email), [email]);
+
   // 1. Assigned classes (role-prefixed SWR key)
   const {
     data: classesPayload,
+    error: classesError,
     isLoading: loadingClasses,
+    isValidating: validatingClasses,
     mutate: mutateClasses,
   } = useSWR(
-    email ? ['role', 'TEACHER', 'classes', email] : null,
-    () => jsonFetcher(`/api/teacher/classes?email=${encodeURIComponent(email)}`)
+    isTeacherReady ? ['role', 'TEACHER', 'classes', email] : null,
+    () => jsonFetcher(`/api/teacher/classes?email=${encodeURIComponent(email)}`),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 60000,
+    }
   );
 
-  const assignedClasses: AssignedClass[] = useMemo(() => {
-    const raw = classesPayload?.classes;
-    if (!Array.isArray(raw)) return [];
-    return raw.map((c: any) => ({
+  const hasVerifiedClassPayload = Boolean(
+    classesPayload?.success === true && Array.isArray(classesPayload.classes)
+  );
+
+  const serverClasses: AssignedClass[] = useMemo(() => {
+    if (!hasVerifiedClassPayload) return [];
+    return classesPayload.classes.map((c: any) => ({
       id: c.class_id || c.id,
       name: c.class_name || c.name,
     }));
-  }, [classesPayload]);
+  }, [classesPayload, hasVerifiedClassPayload]);
 
-  // Preselect class from sessionStorage or first assigned class
+  // Synchronize verified cache strictly when authoritative server response succeeds
+  useEffect(() => {
+    if (!email || !hasVerifiedClassPayload) return;
+    writeVerifiedTeacherClasses(email, classesPayload?.email, serverClasses);
+    if (serverClasses.length === 0 && typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(getActiveClassStorageKey(email));
+    }
+  }, [email, classesPayload, hasVerifiedClassPayload, serverClasses]);
+
+  const assignedClasses: AssignedClass[] = useMemo(() => {
+    if (hasVerifiedClassPayload) {
+      return serverClasses;
+    }
+    return cachedClasses;
+  }, [hasVerifiedClassPayload, serverClasses, cachedClasses]);
+
+  // Preselect class from per-email sessionStorage or first assigned class
   useEffect(() => {
     if (assignedClasses.length === 0) {
       setActiveClass(null);
@@ -130,17 +185,21 @@ export function TeacherPortalView() {
       if (prev && assignedClasses.some((c) => c.id === prev.id)) return prev;
       const savedClassId =
         typeof window !== 'undefined'
-          ? sessionStorage.getItem('suongmai_teacher_active_class_id')
+          ? window.sessionStorage.getItem(getActiveClassStorageKey(email))
           : null;
       return assignedClasses.find((c) => c.id === savedClassId) || assignedClasses[0];
     });
-  }, [assignedClasses]);
+  }, [assignedClasses, email]);
 
   const handleSelectClass = (c: AssignedClass) => {
     if (activeClass?.id === c.id) return;
+    // Clear previous class student arrays immediately so no other class data flickers while loading
+    setStudents([]);
+    setMedications([]);
+    setMealExceptions([]);
     setActiveClass(c);
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('suongmai_teacher_active_class_id', c.id);
+      window.sessionStorage.setItem(getActiveClassStorageKey(email), c.id);
     }
   };
 
@@ -150,16 +209,27 @@ export function TeacherPortalView() {
     isLoading: loadingStudents,
     mutate: mutateAttendance,
   } = useSWR(
-    activeClass ? ['role', 'TEACHER', 'attendance', activeClass.id] : null,
+    isTeacherReady && activeClass ? ['role', 'TEACHER', 'attendance', activeClass.id] : null,
     () =>
       jsonFetcher(
         `/api/teacher/attendance?class_id=${encodeURIComponent(
           activeClass!.id
         )}&class_name=${encodeURIComponent(activeClass!.name)}`
-      )
+      ),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+    }
   );
 
   useEffect(() => {
+    if (!activeClass) {
+      setStudents([]);
+      setMedications([]);
+      setMealExceptions([]);
+      return;
+    }
     if (!attendancePayload) return;
     const nextStudents: TeacherStudent[] = Array.isArray(attendancePayload.students)
       ? attendancePayload.students
@@ -183,15 +253,20 @@ export function TeacherPortalView() {
         nextStudents.some((s) => s.id === prev) ? prev : nextStudents[0].id
       );
     }
-  }, [attendancePayload]);
+  }, [activeClass, attendancePayload]);
 
   // 3. Kitchen report status
   const { data: kitchenReportData, mutate: mutateKitchenReport } = useSWR(
-    activeClass ? ['role', 'TEACHER', 'kitchen-report', activeClass.id] : null,
+    isTeacherReady && activeClass ? ['role', 'TEACHER', 'kitchen-report', activeClass.id] : null,
     () =>
       jsonFetcher(
         `/api/teacher/attendance/kitchen-report?class_id=${encodeURIComponent(activeClass!.id)}`
-      )
+      ),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+    }
   );
 
   const isKitchenLocked =
@@ -201,14 +276,107 @@ export function TeacherPortalView() {
 
   // 4. Class absence requests via Postgres-backed /api/absences
   const { data: absencesPayload, mutate: mutateAbsences } = useSWR(
-    activeClass ? ['role', 'TEACHER', 'absences', activeClass.id] : null,
-    () =>
-      jsonFetcher(`/api/absences?class_id=${encodeURIComponent(activeClass!.id)}`)
+    isTeacherReady && activeClass ? ['role', 'TEACHER', 'absences', activeClass.id] : null,
+    () => jsonFetcher(`/api/absences?class_id=${encodeURIComponent(activeClass!.id)}`),
+    {
+      revalidateOnMount: true,
+      revalidateOnFocus: true,
+      refreshInterval: 30000,
+    }
   );
 
   const absences: AbsenceRequest[] = Array.isArray(absencesPayload?.absences)
     ? absencesPayload.absences
     : [];
+
+  const activeClassIdRef = useRef<string | null>(activeClass?.id || null);
+  useEffect(() => {
+    activeClassIdRef.current = activeClass?.id || null;
+  }, [activeClass]);
+
+  const classStudentIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    classStudentIdsRef.current = new Set(students.map((s) => s.id));
+  }, [students]);
+
+  const matchesActiveClassStudent = useCallback((payload: any) => {
+    if (!activeClassIdRef.current) return false;
+    const sid = payload?.new?.student_id ?? payload?.old?.student_id ?? payload?.new?.id;
+    if (!sid || classStudentIdsRef.current.size === 0) return true;
+    return classStudentIdsRef.current.has(sid);
+  }, []);
+
+  // Supabase Realtime sync scoped cleanly to TEACHER role + assigned class
+  useRoleRealtimeSync({
+    channelName: email ? `teacher-portal-${profileId || email}` : null,
+    enabled: isTeacherReady,
+    debounceMs: 250,
+    handlers: [
+      {
+        table: 'teacher_class_assignments',
+        onEvent: () => {
+          void mutateClasses();
+          void refreshSession();
+        },
+      },
+      {
+        table: 'user_roles',
+        onEvent: () => {
+          void refreshSession();
+          void mutateClasses();
+        },
+      },
+      {
+        table: 'attendance_records',
+        match: matchesActiveClassStudent,
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateAttendance();
+        },
+      },
+      {
+        table: 'medication_requests',
+        match: matchesActiveClassStudent,
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateAttendance();
+        },
+      },
+      {
+        table: 'meal_exceptions',
+        match: matchesActiveClassStudent,
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateAttendance();
+        },
+      },
+      {
+        table: 'students',
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateAttendance();
+        },
+      },
+      {
+        table: 'absence_requests',
+        match: matchesActiveClassStudent,
+        onEvent: () => {
+          if (activeClassIdRef.current) {
+            void mutateAbsences();
+            void mutateAttendance();
+          }
+        },
+      },
+      {
+        table: 'kitchen_daily_reports',
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateKitchenReport();
+        },
+      },
+      {
+        table: 'kitchen_meal_orders',
+        onEvent: () => {
+          if (activeClassIdRef.current) void mutateKitchenReport();
+        },
+      },
+    ],
+  });
 
   const ownChildIds = useMemo(
     () => new Set(linkedStudents.map((c) => c.student_id || c.id)),
@@ -223,26 +391,43 @@ export function TeacherPortalView() {
   const handleRefreshClassAssignment = async () => {
     setRefreshingClass(true);
     try {
-      await mutateClasses();
+      await Promise.all([refreshSession(), mutateClasses()]);
     } finally {
       setTimeout(() => setRefreshingClass(false), 400);
     }
   };
 
   // --- ATTENDANCE & KITCHEN ---
-  const syncAttendanceToDb = async (records: Array<{ student_id: string; status: string }>) => {
+  const postTeacherAction = async (
+    payload: Record<string, any>
+  ): Promise<{ ok: boolean; json: any; error?: string }> => {
     try {
-      await fetch('/api/teacher/attendance', {
+      const res = await fetch('/api/teacher/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPSERT_ATTENDANCE',
-          records,
-        }),
+        body: JSON.stringify(payload),
       });
-    } catch (e) {
-      console.error('Failed to sync attendance to DB:', e);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        await mutateAttendance();
+        return { ok: false, json, error: json.message || json.error || `HTTP ${res.status}` };
+      }
+      return { ok: true, json };
+    } catch (e: any) {
+      await mutateAttendance();
+      return { ok: false, json: {}, error: e?.message || 'Lỗi kết nối máy chủ' };
     }
+  };
+
+  const syncAttendanceToDb = async (records: Array<{ student_id: string; status: string }>) => {
+    const result = await postTeacherAction({
+      action: 'UPSERT_ATTENDANCE',
+      records,
+    });
+    if (!result.ok) {
+      console.error('Failed to sync attendance to DB:', result.error);
+    }
+    return result;
   };
 
   const handleSelectAllPresent = () => {
@@ -263,7 +448,7 @@ export function TeacherPortalView() {
       (prev: any) => (prev ? { ...prev, students: updated } : prev),
       { revalidate: false }
     );
-    syncAttendanceToDb(
+    void syncAttendanceToDb(
       updated.map((s) => ({
         student_id: s.id,
         status: s.attendance === 'ABSENT' ? 'ABSENT_EXCUSED' : s.attendance,
@@ -282,7 +467,7 @@ export function TeacherPortalView() {
       (prev: any) => (prev ? { ...prev, students: updated } : prev),
       { revalidate: false }
     );
-    syncAttendanceToDb([
+    void syncAttendanceToDb([
       {
         student_id: id,
         status: status === 'ABSENT' ? 'ABSENT_UNEXCUSED' : status,
@@ -405,28 +590,21 @@ export function TeacherPortalView() {
     setNewMedDosage('');
     setNewMedNotes('');
 
-    try {
-      const res = await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ADD_MEDICATION',
-          student_id: tempMed.student_id,
-          time_slot: tempMed.time_slot,
-          medication_name: tempMed.medication_name,
-          dosage: tempMed.dosage,
-          instructions: tempMed.instructions,
-        }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.medication) {
-          setMedications((prev) => prev.map((m) => (m.id === tempMed.id ? json.medication : m)));
-        }
-        mutateAttendance();
+    const result = await postTeacherAction({
+      action: 'ADD_MEDICATION',
+      student_id: tempMed.student_id,
+      time_slot: tempMed.time_slot,
+      medication_name: tempMed.medication_name,
+      dosage: tempMed.dosage,
+      instructions: tempMed.instructions,
+    });
+    if (result.ok) {
+      if (result.json?.medication) {
+        setMedications((prev) => prev.map((m) => (m.id === tempMed.id ? result.json.medication : m)));
       }
-    } catch (err) {
-      console.error('Failed to save medication to DB:', err);
+      mutateAttendance();
+    } else if (result.error) {
+      alert(`⚠️ Không thể lưu phiếu dặn thuốc: ${result.error}`);
     }
   };
 
@@ -434,18 +612,14 @@ export function TeacherPortalView() {
     setMedications((prev) =>
       prev.map((m) => (m.id === medId ? { ...m, status: 'ADMINISTERED' } : m))
     );
-    try {
-      await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ADMINISTER_MEDICATION',
-          id: medId,
-        }),
-      });
+    const result = await postTeacherAction({
+      action: 'ADMINISTER_MEDICATION',
+      id: medId,
+    });
+    if (result.ok) {
       mutateAttendance();
-    } catch (err) {
-      console.error('Failed to administer medication in DB:', err);
+    } else if (result.error) {
+      alert(`⚠️ Không thể cập nhật trạng thái uống thuốc: ${result.error}`);
     }
   };
 
@@ -463,23 +637,19 @@ export function TeacherPortalView() {
       created_at: new Date().toISOString(),
     };
     setMealExceptions([newEx, ...mealExceptions]);
-    try {
-      await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ADD_MEAL_EXCEPTION',
-          student_id: selectedStudentForMeal,
-          meal_type: 'LUNCH',
-          intake_level: selectedIntakeLevel,
-          reason_tags: selectedTags,
-        }),
-      });
+    const result = await postTeacherAction({
+      action: 'ADD_MEAL_EXCEPTION',
+      student_id: selectedStudentForMeal,
+      meal_type: 'LUNCH',
+      intake_level: selectedIntakeLevel,
+      reason_tags: selectedTags,
+    });
+    if (result.ok) {
       mutateAttendance();
-    } catch (err) {
-      console.error('Failed to save meal exception to DB:', err);
+      alert(`${t('teacher.btn_save_meal_exception')}: ${student?.full_name}`);
+    } else if (result.error) {
+      alert(`⚠️ Không thể lưu ghi chú bữa ăn: ${result.error}`);
     }
-    alert(`${t('teacher.btn_save_meal_exception')}: ${student?.full_name}`);
   };
 
   const handleToggleTag = (tag: string) => {
@@ -491,20 +661,16 @@ export function TeacherPortalView() {
   const handleMassCheckout = async () => {
     const updated = students.map((s) => ({ ...s, checkedOut: true }));
     setStudents(updated);
-    try {
-      await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CHECKOUT',
-          student_ids: students.map((s) => s.id),
-        }),
-      });
+    const result = await postTeacherAction({
+      action: 'CHECKOUT',
+      student_ids: students.map((s) => s.id),
+    });
+    if (result.ok) {
       mutateAttendance();
-    } catch (err) {
-      console.error('Failed to mass checkout in DB:', err);
+      alert(`✅ ${t('teacher.checkout_done')}`);
+    } else if (result.error) {
+      alert(`⚠️ Không thể cập nhật trả trẻ: ${result.error}`);
     }
-    alert(`✅ ${t('teacher.checkout_done')}`);
   };
 
   const handleQuickCheckoutStudent = async (
@@ -514,19 +680,15 @@ export function TeacherPortalView() {
     setStudents((prev) =>
       prev.map((s) => (s.id === studentId ? { ...s, checkedOut: true, checkoutReason: reason } : s))
     );
-    try {
-      await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CHECKOUT',
-          student_ids: [studentId],
-          checkout_reason: reason,
-        }),
-      });
+    const result = await postTeacherAction({
+      action: 'CHECKOUT',
+      student_ids: [studentId],
+      checkout_reason: reason,
+    });
+    if (result.ok) {
       mutateAttendance();
-    } catch (err) {
-      console.error('Failed to checkout student in DB:', err);
+    } else if (result.error) {
+      alert(`⚠️ Không thể xác nhận trả trẻ: ${result.error}`);
     }
   };
 
@@ -541,46 +703,123 @@ export function TeacherPortalView() {
     );
     setShowLateCheckoutModal(false);
     setLateStudentId(null);
-    try {
-      await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CHECKOUT',
-          student_ids: [targetId],
-          checkout_reason: targetReason,
-        }),
-      });
+    const result = await postTeacherAction({
+      action: 'CHECKOUT',
+      student_ids: [targetId],
+      checkout_reason: targetReason,
+    });
+    if (result.ok) {
       mutateAttendance();
-    } catch (err) {
-      console.error('Failed to save late checkout in DB:', err);
+    } else if (result.error) {
+      alert(`⚠️ Không thể lưu ghi nhận đón muộn: ${result.error}`);
     }
   };
 
-  // Unassigned Teacher Empty State (keep RoleSwitcher accessible in a Calm header bar!)
-  if (!loadingClasses && assignedClasses.length === 0) {
+  // Strict gates so transient loading/switching/API errors NEVER flash the "Chưa phân công lớp" screen
+  const isWaitingInitialClasses =
+    !hasVerifiedClassPayload &&
+    !classesError &&
+    assignedClasses.length === 0 &&
+    (loadingClasses || validatingClasses || isLoadingSession || isSwitching || !isTeacherReady);
+
+  const hasFatalClassLoadError =
+    !hasVerifiedClassPayload && Boolean(classesError) && assignedClasses.length === 0;
+
+  const isAuthoritativeUnassigned =
+    !isLoadingSession &&
+    !isSwitching &&
+    !loadingClasses &&
+    !classesError &&
+    hasVerifiedClassPayload &&
+    serverClasses.length === 0;
+
+  const renderCalmHeaderBar = () => (
+    <header className="px-3 py-2.5 bg-primary-700 text-white flex items-center justify-between gap-2 shadow-md">
+      <div className="flex items-center gap-2 min-w-0">
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={fullName || 'Giáo viên'}
+            className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
+            SM
+          </div>
+        )}
+        <span className="font-bold text-sm truncate">{t('teacher.app_title')}</span>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <RoleSwitcher currentPortal="TEACHER" />
+        <LanguageSwitcher />
+      </div>
+    </header>
+  );
+
+  // Loading state when class list has never been verified yet and cache is empty
+  if (isWaitingInitialClasses) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
-        <header className="px-3 py-2.5 bg-primary-700 text-white flex items-center justify-between gap-2 shadow-md">
-          <div className="flex items-center gap-2 min-w-0">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={fullName || 'Giáo viên'}
-                className="w-8 h-8 rounded-full object-cover border border-white/40 shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
-                SM
-              </div>
-            )}
-            <span className="font-bold text-sm truncate">{t('teacher.app_title')}</span>
+        {renderCalmHeaderBar()}
+        <div className="flex-1 flex flex-col justify-center items-center p-4">
+          <div className="w-full bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-lg space-y-4">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-rose-50 border border-rose-200 rounded-2xl text-primary-700">
+              <RefreshCw className="w-7 h-7 animate-spin" />
+            </div>
+            <h2 className="text-base font-bold text-slate-900">
+              Đang tải danh sách lớp phân công...
+            </h2>
+            <p className="text-xs text-slate-500">
+              Hệ thống đang đồng bộ dữ liệu phân công mới nhất từ nhà trường.
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <RoleSwitcher currentPortal="TEACHER" />
-            <LanguageSwitcher />
+        </div>
+      </div>
+    );
+  }
+
+  // API / Auth / RLS error state (distinct from genuinely having 0 assigned classes!)
+  if (hasFatalClassLoadError) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+        {renderCalmHeaderBar()}
+        <div className="flex-1 flex flex-col justify-center items-center p-4">
+          <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-rose-50 border border-rose-200 rounded-2xl mb-4 text-rose-600">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">
+              Chưa thể tải danh sách lớp giảng dạy
+            </h2>
+            <p className="text-slate-600 text-xs leading-relaxed mb-5">
+              Kết nối máy chủ hoặc phiên phân quyền vừa được làm mới. Vui lòng thử tải lại để đồng bộ lớp của bạn.
+            </p>
+            <button
+              onClick={handleRefreshClassAssignment}
+              disabled={refreshingClass}
+              className="w-full py-3 bg-primary-700 hover:bg-primary-800 text-white font-bold text-sm rounded-full transition-all shadow-sm cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshingClass ? 'animate-spin' : ''}`} />
+              <span>Thử tải lại phân công lớp</span>
+            </button>
+            <button
+              onClick={logout}
+              className="w-full mt-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-full transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
+              <span>Đăng xuất</span>
+            </button>
           </div>
-        </header>
+        </div>
+      </div>
+    );
+  }
+
+  // Unassigned Teacher Empty State (strictly rendered ONLY when HTTP 200 success: true returned 0 classes)
+  if (isAuthoritativeUnassigned) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+        {renderCalmHeaderBar()}
 
         <div className="flex-1 flex flex-col justify-center items-center p-4">
           <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg">
@@ -679,6 +918,23 @@ export function TeacherPortalView() {
           </button>
         </div>
       </header>
+
+      {/* Non-blocking background sync/retry banner when cached classes are shown during transient error */}
+      {classesError && cachedClasses.length > 0 && (
+        <div className="bg-amber-50 border-b border-amber-200 px-3 py-1.5 flex items-center justify-between gap-2 text-[11px] text-amber-800">
+          <span className="truncate font-medium">
+            Đang hiển thị phân công đã lưu • Chưa đồng bộ được máy chủ
+          </span>
+          <button
+            type="button"
+            onClick={handleRefreshClassAssignment}
+            disabled={refreshingClass}
+            className="font-bold text-primary-700 hover:underline shrink-0 cursor-pointer"
+          >
+            Đồng bộ lại
+          </button>
+        </div>
+      )}
 
       {/* Multi-Class Quick Switch Bar (Calm UI) */}
       {assignedClasses.length > 1 && (
