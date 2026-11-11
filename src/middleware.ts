@@ -6,9 +6,10 @@ import {
   verifyAndExtractCookieValue,
 } from '@/lib/utils/cookieSigner';
 import {
+  cleanEnv,
+  createSignedActiveRoleJwt,
   FALLBACK_ANON_KEY,
   FALLBACK_SUPABASE_URL,
-  cleanEnv,
 } from '@/lib/supabase/server';
 import {
   normalizeRole,
@@ -37,20 +38,21 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
       cleanEnv(process.env.SUPABASE_ANON_KEY) ||
       FALLBACK_ANON_KEY;
 
-    const restFetch = async (path: string) => {
-      const primaryKey = serviceKey || anonKey;
-      const headers = (k: string) => ({
+    const restFetch = async (path: string, bearerOverride?: string | null) => {
+      const apiKey = serviceKey ? serviceKey : anonKey;
+      const bearer = bearerOverride || (serviceKey ? serviceKey : anonKey);
+      const makeHeaders = (k: string, b: string) => ({
         apikey: k,
-        Authorization: `Bearer ${k}`,
+        Authorization: `Bearer ${b}`,
       });
 
       const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
-        headers: headers(primaryKey),
+        headers: makeHeaders(apiKey, bearer),
         cache: 'no-store',
       });
-      if (!res.ok && primaryKey !== FALLBACK_ANON_KEY) {
+      if (!res.ok && (apiKey !== FALLBACK_ANON_KEY || bearer !== FALLBACK_ANON_KEY)) {
         return fetch(`${baseUrl}/rest/v1/${path}`, {
-          headers: headers(FALLBACK_ANON_KEY),
+          headers: makeHeaders(FALLBACK_ANON_KEY, bearerOverride || FALLBACK_ANON_KEY),
           cache: 'no-store',
         });
       }
@@ -58,7 +60,7 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
     };
 
     const profileRes = await restFetch(
-      `profiles?email=ilike.${encodeURIComponent(email)}&select=id,role,approval_status&limit=1`
+      `profiles?email=ilike.${encodeURIComponent(email)}&select=id,auth_user_id,role,approval_status&limit=1`
     );
     if (!profileRes.ok) return null;
     const rows = await profileRes.json();
@@ -66,10 +68,38 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
     if (!profile) return null;
 
     const profileId = profile.id as string;
+    const dbPrimary = normalizeRole(profile.role);
+    let scopedBearer: string | null = null;
+    if (!serviceKey) {
+      scopedBearer = await createSignedActiveRoleJwt({
+        profileId,
+        authUserId: profile.auth_user_id || null,
+        email,
+        activeRole: dbPrimary !== 'GUEST' ? dbPrimary : 'PARENT',
+        roles: dbPrimary !== 'GUEST' ? [dbPrimary] : [],
+      });
+    }
+
+    const parentBearer = !serviceKey
+      ? await createSignedActiveRoleJwt({
+          profileId,
+          authUserId: profile.auth_user_id || null,
+          email,
+          activeRole: 'PARENT',
+          roles: ['PARENT'],
+        })
+      : null;
+
     const [urRes, spRes, sgRes] = await Promise.all([
-      restFetch(`user_roles?user_id=eq.${encodeURIComponent(profileId)}&select=role_name`),
-      restFetch(`student_parents?parent_user_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`),
-      restFetch(`student_guardians?guardian_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`),
+      restFetch(`user_roles?user_id=eq.${encodeURIComponent(profileId)}&select=role_name`, scopedBearer),
+      restFetch(
+        `student_parents?parent_user_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`,
+        parentBearer || scopedBearer
+      ),
+      restFetch(
+        `student_guardians?guardian_id=eq.${encodeURIComponent(profileId)}&select=student_id&limit=1`,
+        parentBearer || scopedBearer
+      ),
     ]);
 
     const roleSet = new Set<UserRole>();
@@ -93,11 +123,10 @@ async function fetchLiveAuthState(email: string): Promise<LiveAuthState | null> 
       if (Array.isArray(sgRows) && sgRows.length > 0) hasChildren = true;
     }
 
-    const dbPrimary = normalizeRole(profile.role);
     if (roleSet.size === 0 && dbPrimary !== 'GUEST') {
       roleSet.add(dbPrimary);
     }
-    if (hasChildren && roleSet.size > 0 && !urRes.ok) {
+    if (hasChildren && (roleSet.size === 0 || !urRes.ok)) {
       roleSet.add('PARENT');
     }
 

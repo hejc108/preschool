@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
-import { executeWithAdminFallback, NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import { DEFAULT_UUID_TO_NAME } from '@/lib/constants/classes';
-import { normalizeRole, requireActiveRole, sortRolesByPriority } from '@/lib/auth/sessionContext';
+import {
+  executeWithContextFallback,
+  normalizeRole,
+  requireActiveRole,
+  sortRolesByPriority,
+} from '@/lib/auth/sessionContext';
 import { UserRole } from '@/lib/types/schema';
 
 export const dynamic = 'force-dynamic';
@@ -34,28 +39,28 @@ export async function GET(
 
     const [{ data: student, error: stErr }, { data: spRows }, { data: sgRows }, { data: pickups }, { data: profiles }, { data: allUserRoles }] =
       await Promise.all([
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb.from('students').select('*, classes(id, name)').eq('id', studentId).maybeSingle()
         ),
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb
             .from('student_parents')
             .select('student_id, parent_user_id, relationship, is_primary, created_at')
             .eq('student_id', studentId)
         ),
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb
             .from('student_guardians')
             .select('student_id, guardian_id, relationship, is_primary, created_at')
             .eq('student_id', studentId)
         ),
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb.from('pickup_authorizations').select('*').eq('student_id', studentId)
         ),
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb.from('profiles').select('id, email, full_name, role, phone, avatar_url, approval_status, assigned_class_name').order('full_name', { ascending: true })
         ),
-        executeWithAdminFallback(async (sb) =>
+        executeWithContextFallback(auth.ctx, async (sb) =>
           await sb.from('user_roles').select('user_id, role_name')
         ),
       ]);
@@ -165,10 +170,10 @@ export async function POST(
     }
 
     const [{ data: student }, { data: profile }] = await Promise.all([
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(auth.ctx, async (sb) =>
         await sb.from('students').select('id, full_name').eq('id', studentId).maybeSingle()
       ),
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(auth.ctx, async (sb) =>
         await sb.from('profiles').select('id, email, full_name, role, approval_status').eq('id', parentUserId).maybeSingle()
       ),
     ]);
@@ -187,16 +192,22 @@ export async function POST(
       rolesToEnsure.push(currentPrimary);
     }
 
-    await executeWithAdminFallback(async (sb) =>
+    const { error: urErr } = await executeWithContextFallback(auth.ctx, async (sb) =>
       await sb.from('user_roles').upsert(
         rolesToEnsure.map((role_name) => ({ user_id: parentUserId, role_name })),
-        { onConflict: 'user_id,role_name', ignoreDuplicates: true }
+        { onConflict: 'user_id,role_name' }
       )
     );
+    if (urErr) {
+      return NextResponse.json(
+        { success: false, error: `Không thể ghi quyền Phụ huynh vào user_roles: ${urErr.message}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
 
     // Activate profile if pending/guest, without downgrading TEACHER / SCHOOL_ADMIN primary role
     if (profile.approval_status !== 'ACTIVE' || currentPrimary === 'GUEST') {
-      await executeWithAdminFallback(async (sb) =>
+      await executeWithContextFallback(auth.ctx, async (sb) =>
         await sb
           .from('profiles')
           .update({
@@ -209,7 +220,7 @@ export async function POST(
     }
 
     // 2. Write to student_parents
-    const { error: spErr } = await executeWithAdminFallback(async (sb) =>
+    const { error: spErr } = await executeWithContextFallback(auth.ctx, async (sb) =>
       await sb.from('student_parents').upsert(
         {
           student_id: studentId,
@@ -222,7 +233,7 @@ export async function POST(
     );
 
     // 3. Mirror to student_guardians for backwards compatibility / pre-00013 safety
-    const { error: sgErr } = await executeWithAdminFallback(async (sb) =>
+    const { error: sgErr } = await executeWithContextFallback(auth.ctx, async (sb) =>
       await sb.from('student_guardians').upsert(
         {
           student_id: studentId,
@@ -277,14 +288,14 @@ export async function DELETE(
     }
 
     await Promise.all([
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(auth.ctx, async (sb) =>
         await sb
           .from('student_parents')
           .delete()
           .eq('student_id', studentId)
           .eq('parent_user_id', parentUserId)
       ),
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(auth.ctx, async (sb) =>
         await sb
           .from('student_guardians')
           .delete()

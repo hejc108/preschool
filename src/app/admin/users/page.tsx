@@ -27,6 +27,8 @@ export default function UsersManagementPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
+  const [dbWarning, setDbWarning] = useState<string | null>(null);
   const [classes, setClasses] = useState<Array<{ id: string; name: string }>>(DEFAULT_CLASSES_LIST);
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -46,13 +48,20 @@ export default function UsersManagementPage() {
 
   const loadStudentsAndClasses = useCallback(async () => {
     setLoadingStudents(true);
+    setStudentsError(null);
     try {
       const [sRes, aRes] = await Promise.all([
-        fetch('/api/admin/students', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/admin/students', { cache: 'no-store' }),
         fetch('/api/admin/teacher-assignments', { cache: 'no-store' }).catch(() => null),
       ]);
-      if (sRes && sRes.ok) {
-        const sJson = await sRes.json().catch(() => ({}));
+      const sJson = await sRes.json().catch(() => ({}));
+      if (!sRes.ok || sJson.success === false) {
+        setStudentsError(
+          sJson.error ||
+            sJson.message ||
+            `Không thể tải danh sách học sinh (HTTP ${sRes.status}).`
+        );
+      } else {
         const list = Array.isArray(sJson) ? sJson : sJson.students || sJson.data || [];
         if (Array.isArray(list)) setStudents(list);
       }
@@ -62,6 +71,8 @@ export default function UsersManagementPage() {
           setClasses(aJson.classes);
         }
       }
+    } catch (err: any) {
+      setStudentsError(err?.message || 'Lỗi kết nối khi tải danh sách học sinh.');
     } finally {
       setLoadingStudents(false);
     }
@@ -71,14 +82,17 @@ export default function UsersManagementPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/users', { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
       if (res.ok) {
-        const json = await res.json();
         if (json.users) {
           setProfiles(json.users as Profile[]);
         }
         if (json.settings) {
           setGlobalAllowTempStaff(Boolean(json.settings.allow_school_admin_view_temporary_staff));
         }
+        setDbWarning(json.debug?.dbWarning || null);
+      } else {
+        setDbWarning(json.error || json.message || `Không thể tải danh sách tài khoản (HTTP ${res.status}).`);
       }
 
       const resSettings = await fetch('/api/admin/system-settings', { cache: 'no-store' });
@@ -290,6 +304,17 @@ export default function UsersManagementPage() {
         </div>
       </div>
 
+      {(dbWarning || studentsError) && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-2xl text-xs font-semibold flex flex-col gap-1.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-bold">Cảnh báo đồng bộ dữ liệu CSDL:</span>
+          </div>
+          {dbWarning && <p className="text-amber-800 pl-6">{dbWarning}</p>}
+          {studentsError && <p className="text-rose-800 pl-6">{studentsError}</p>}
+        </div>
+      )}
+
       {/* Search & Centralized System Controls */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -487,7 +512,12 @@ export default function UsersManagementPage() {
           isSuperAdmin={isSuperAdmin}
           students={students}
           loadingStudents={loadingStudents}
+          studentsError={studentsError}
           availableClasses={classes}
+          onStudentsLoaded={(list) => {
+            setStudents(list);
+            setStudentsError(null);
+          }}
           onClose={() => setEditingRolesUser(null)}
           onSaved={async (msg) => {
             await loadData();

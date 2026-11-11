@@ -34,6 +34,31 @@ export function getSupabaseConfig() {
   return { url, anonKey, serviceRoleKey, jwtSecret };
 }
 
+export interface AuthDbContext {
+  profileId: string;
+  authUserId?: string | null;
+  email: string;
+  activeRole: UserRole;
+  roles: UserRole[];
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isAuthOrRlsError(error: any): boolean {
+  if (!error) return false;
+  const code = String(error.code || '');
+  const msg = String(error.message || '');
+  const lower = msg.toLowerCase();
+  return (
+    code === '42501' ||
+    code === 'PGRST301' ||
+    msg.includes('Invalid API key') ||
+    msg.includes('JWT') ||
+    lower.includes('row-level security') ||
+    lower.includes('permission denied')
+  );
+}
+
 /**
  * Creates a server Supabase client using Service Role (default) or Anon key.
  */
@@ -62,6 +87,41 @@ export async function executeWithAdminFallback<T>(
   return res;
 }
 
+/**
+ * Executes a DB query preferring:
+ * 1) Service Role client when SUPABASE_SERVICE_ROLE_KEY is valid,
+ * 2) Signed HS256 RLS-scoped `authenticated` client carrying `active_role` when SUPABASE_JWT_SECRET is available,
+ * 3) Anon client as last resort.
+ */
+export async function executeWithPrivilegedFallback<T>(
+  fn: (sb: SupabaseClient) => Promise<{ data: T; error: any }>,
+  authCtx?: AuthDbContext | null
+): Promise<{ data: T; error: any }> {
+  const { serviceRoleKey, jwtSecret } = getSupabaseConfig();
+
+  if (serviceRoleKey) {
+    const svcRes = await fn(getSupabaseAdminClient(false));
+    if (!svcRes.error || !isAuthOrRlsError(svcRes.error)) {
+      return svcRes;
+    }
+  }
+
+  if (authCtx && jwtSecret) {
+    const scopedClient = await getSupabaseRlsScopedClient(authCtx);
+    if (scopedClient) {
+      const scopedRes = await fn(scopedClient);
+      if (!scopedRes.error || !isAuthOrRlsError(scopedRes.error)) {
+        return scopedRes;
+      }
+      if (!serviceRoleKey) {
+        return scopedRes;
+      }
+    }
+  }
+
+  return fn(getSupabaseAdminClient(true));
+}
+
 function base64UrlEncode(input: Uint8Array | string): string {
   const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input;
   let binary = '';
@@ -87,6 +147,11 @@ export async function createSignedActiveRoleJwt(params: {
   const { jwtSecret } = getSupabaseConfig();
   if (!jwtSecret) return null;
 
+  const candidateSub = params.authUserId || params.profileId;
+  const safeSub = UUID_REGEX.test(String(candidateSub || ''))
+    ? String(candidateSub)
+    : '00000000-0000-0000-0000-000000000000';
+
   const now = Math.floor(Date.now() / 1000);
   const exp = now + (params.ttlSeconds || 300);
   const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -94,7 +159,7 @@ export async function createSignedActiveRoleJwt(params: {
     JSON.stringify({
       aud: 'authenticated',
       role: 'authenticated',
-      sub: params.authUserId || params.profileId,
+      sub: safeSub,
       email: params.email,
       profile_id: params.profileId,
       active_role: params.activeRole,

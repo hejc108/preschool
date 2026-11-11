@@ -5,7 +5,7 @@ import {
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
 import {
-  getHighestPriorityRole,
+  executeWithContextFallback,
   getSessionContext,
   isAdminRole,
   normalizeRole,
@@ -13,11 +13,11 @@ import {
   sortRolesByPriority,
 } from '@/lib/auth/sessionContext';
 import {
-  DEFAULT_UUID_TO_NAME,
-  resolveCanonicalClassId,
-  resolveClassDisplayName,
-} from '@/lib/constants/classes';
-import { AssignableRole, ParentStudentRelation, Profile, UserRole } from '@/lib/types/schema';
+  ensureValidUuid,
+  fetchRelationsFromSupabase,
+  syncUserMultiRolesAndLinks,
+} from '@/lib/admin/multiRoleUserService';
+import { ParentStudentRelation, Profile, UserRole } from '@/lib/types/schema';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -34,9 +34,6 @@ const INITIAL_SERVER_PROFILES: Profile[] = [
   },
 ];
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ASSIGNABLE_ROLES: AssignableRole[] = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'TEACHER', 'PARENT', 'STAFF'];
-
 declare global {
   var __SUONGMAI_PROFILES_CACHE__: Profile[] | undefined;
   var __SUONGMAI_RELATIONS_CACHE__: ParentStudentRelation[] | undefined;
@@ -49,92 +46,10 @@ if (!globalThis.__SUONGMAI_RELATIONS_CACHE__) {
   globalThis.__SUONGMAI_RELATIONS_CACHE__ = [];
 }
 
-function ensureValidUuid(candidate?: string): string {
-  if (candidate && UUID_REGEX.test(String(candidate))) return String(candidate);
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0').slice(-12);
-}
-
-function toGuardianRelationship(input: string): 'BỐ' | 'MẸ' | 'ÔNG' | 'BÀ' | 'NGƯỜI GIÁM HỘ' {
-  const s = (input || '').toLowerCase().trim();
-  if (s === 'bố' || s === 'bo' || s === 'father') return 'BỐ';
-  if (s === 'mẹ' || s === 'me' || s === 'mother') return 'MẸ';
-  if (s === 'ông' || s === 'ong') return 'ÔNG';
-  if (s === 'bà' || s === 'ba') return 'BÀ';
-  return 'NGƯỜI GIÁM HỘ';
-}
-
-async function fetchRelationsFromSupabase(): Promise<ParentStudentRelation[]> {
-  try {
-    const [spRes, sgRes] = await Promise.all([
-      executeWithAdminFallback(async (sb) =>
-        await sb
-          .from('student_parents')
-          .select(
-            'student_id, parent_user_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, classes(id, name)), profiles(id, email, full_name)'
-          )
-          .order('created_at', { ascending: true })
-      ),
-      executeWithAdminFallback(async (sb) =>
-        await sb
-          .from('student_guardians')
-          .select(
-            'id, student_id, guardian_id, relationship, is_primary, created_at, students(id, full_name, student_code, class_id, classes(id, name)), profiles(id, email, full_name)'
-          )
-          .order('created_at', { ascending: true })
-      ),
-    ]);
-
-    const dedupe = new Map<string, ParentStudentRelation>();
-
-    const collect = (row: any, parentKey: 'parent_user_id' | 'guardian_id') => {
-      const parentId = row[parentKey];
-      const studentId = row.student_id;
-      if (!parentId || !studentId) return;
-      const key = `${studentId}:${parentId}`;
-      if (dedupe.has(key)) return;
-
-      const studentObj = Array.isArray(row.students) ? row.students[0] : row.students;
-      const profileObj = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      const classObj = studentObj?.classes
-        ? Array.isArray(studentObj.classes)
-          ? studentObj.classes[0]
-          : studentObj.classes
-        : null;
-
-      dedupe.set(key, {
-        id: row.id || key,
-        parent_id: parentId,
-        parent_email: (profileObj?.email || '').toLowerCase().trim(),
-        student_id: studentId,
-        student_name: studentObj?.full_name || 'Học sinh Sương Mai',
-        student_code: studentObj?.student_code || '',
-        class_name: classObj?.name || 'Mầm',
-        relationship: row.relationship || 'Phụ huynh',
-        is_verified: true,
-        created_at: row.created_at,
-      });
-    };
-
-    if (!spRes.error && Array.isArray(spRes.data)) {
-      spRes.data.forEach((r: any) => collect(r, 'parent_user_id'));
-    }
-    if (!sgRes.error && Array.isArray(sgRes.data)) {
-      sgRes.data.forEach((r: any) => collect(r, 'guardian_id'));
-    }
-
-    const mapped = Array.from(dedupe.values());
-    globalThis.__SUONGMAI_RELATIONS_CACHE__ = mapped;
-    return mapped;
-  } catch (e: any) {
-    console.warn('[API GET RELATIONS EXCEPTION]:', e?.message || e);
-    return globalThis.__SUONGMAI_RELATIONS_CACHE__ || [];
-  }
-}
-
 export async function GET(request: Request) {
   const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
   if ('response' in auth) return auth.response;
+  const { ctx } = auth;
 
   const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
   const hasServiceRoleKey = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -146,27 +61,30 @@ export async function GET(request: Request) {
 
   try {
     const [profRes, urRes, rels] = await Promise.all([
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(ctx, async (sb) =>
         await sb.from('profiles').select('*').order('created_at', { ascending: false })
       ),
-      executeWithAdminFallback(async (sb) =>
+      executeWithContextFallback(ctx, async (sb) =>
         await sb.from('user_roles').select('user_id, role_name')
       ),
-      fetchRelationsFromSupabase(),
+      fetchRelationsFromSupabase(ctx),
     ]);
 
     relations = rels;
 
-    if (!urRes.error && Array.isArray(urRes.data)) {
+    if (urRes.error) {
+      dbErrorDetail = `user_roles: ${urRes.error.message}`;
+    } else if (Array.isArray(urRes.data)) {
       urRes.data.forEach((row: any) => {
         const list = rolesByUserId.get(row.user_id) || [];
-        list.push(normalizeRole(row.role_name));
+        const norm = normalizeRole(row.role_name);
+        if (norm !== 'GUEST') list.push(norm);
         rolesByUserId.set(row.user_id, list);
       });
     }
 
     if (profRes.error) {
-      dbErrorDetail = profRes.error.message;
+      dbErrorDetail = dbErrorDetail || profRes.error.message;
       console.error('[API GET APPROVALS ERROR]:', profRes.error.message);
     } else if (Array.isArray(profRes.data) && profRes.data.length > 0) {
       dbProfilesCount = profRes.data.length;
@@ -220,9 +138,10 @@ export async function GET(request: Request) {
       const hasRel = relations.some(
         (r) => r.parent_id === p.id || r.parent_email?.toLowerCase().trim() === clean
       );
+      const dbUserRoles = rolesByUserId.get(p.id) || [];
       const heldRoles = sortRolesByPriority([
-        ...(rolesByUserId.get(p.id) || []),
-        ...(baseRole !== 'GUEST' ? [baseRole] : []),
+        ...dbUserRoles,
+        ...(dbUserRoles.length === 0 && baseRole !== 'GUEST' ? [baseRole] : []),
         ...(hasRel ? (['PARENT'] as UserRole[]) : []),
       ]);
 
@@ -267,7 +186,6 @@ export async function POST(request: Request) {
     const fullName = body.full_name || '';
     const avatarUrl = body.avatar_url;
 
-    // Authenticate caller: Admin session OR matching Supabase Bearer JWT
     const { ctx } = await getSessionContext(request);
     let bearerUser: { id?: string; email?: string } | null = null;
 
@@ -382,299 +300,24 @@ export async function PUT(request: Request) {
     const { ctx } = auth;
 
     const body = await request.json().catch(() => ({}));
-    const email = (body.email || '').toLowerCase().trim();
+    const result = await syncUserMultiRolesAndLinks(ctx, body);
 
-    if (!email) {
-      return NextResponse.json(
-        { success: false, message: 'Email là bắt buộc' },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      );
-    }
-
-    const { data: existingDbProfile } = await executeWithAdminFallback(async (sb) =>
-      await sb.from('profiles').select('*').ilike('email', email).maybeSingle()
-    );
-
-    const serverCache = [...(globalThis.__SUONGMAI_PROFILES_CACHE__ || INITIAL_SERVER_PROFILES)];
-    const idx = serverCache.findIndex((p) => p.email.toLowerCase().trim() === email);
-    const resolvedId = ensureValidUuid(
-      existingDbProfile?.id || (idx !== -1 ? serverCache[idx].id : undefined)
-    );
-
-    // Fetch existing user_roles
-    const { data: existingRoleRows } = await executeWithAdminFallback(async (sb) =>
-      await sb.from('user_roles').select('role_name').eq('user_id', resolvedId)
-    );
-    const currentRoles = (existingRoleRows || []).map((r: any) => normalizeRole(r.role_name));
-    if (existingDbProfile?.role && normalizeRole(existingDbProfile.role) !== 'GUEST') {
-      currentRoles.push(normalizeRole(existingDbProfile.role));
-    }
-
-    // Resolve requested multi-role list vs legacy single role
-    let effectiveRoles: AssignableRole[] = [];
-    const isExplicitRolesArray = Array.isArray(body.roles);
-
-    if (isExplicitRolesArray) {
-      effectiveRoles = sortRolesByPriority(
-        body.roles
-          .map((r: unknown) => normalizeRole(r))
-          .filter((r: UserRole): r is AssignableRole =>
-            ASSIGNABLE_ROLES.includes(r as AssignableRole)
-          )
-      ) as AssignableRole[];
-    } else if (body.role) {
-      const requestedSingle = normalizeRole(body.role);
-      const retainedParent =
-        body.clear_student_links !== true &&
-        (requestedSingle === 'TEACHER' || requestedSingle === 'STAFF') &&
-        currentRoles.includes('PARENT');
-
-      effectiveRoles = sortRolesByPriority([
-        ...(ASSIGNABLE_ROLES.includes(requestedSingle as AssignableRole)
-          ? [requestedSingle]
-          : []),
-        ...(retainedParent ? (['PARENT'] as UserRole[]) : []),
-      ]) as AssignableRole[];
-    } else {
-      effectiveRoles = sortRolesByPriority(
-        currentRoles.filter((r): r is AssignableRole =>
-          ASSIGNABLE_ROLES.includes(r as AssignableRole)
-        )
-      ) as AssignableRole[];
-    }
-
-    // Only SUPER_ADMIN can assign/grant SUPER_ADMIN or SCHOOL_ADMIN
-    const tryingAdminGrant = effectiveRoles.some(
-      (r) => (r === 'SUPER_ADMIN' || r === 'SCHOOL_ADMIN') && !currentRoles.includes(r)
-    );
-    if (tryingAdminGrant && ctx.activeRole !== 'SUPER_ADMIN') {
+    if (!result.ok) {
       return NextResponse.json(
         {
           success: false,
-          error: 'FORBIDDEN_ROLE_ESCALATION',
-          message: 'Chỉ Quản trị tối cao (SUPER_ADMIN) mới có quyền cấp vai trò Quản trị trường.',
+          error: result.error || 'MULTI_ROLE_SYNC_FAILED',
+          message: result.message,
         },
-        { status: 403, headers: NO_CACHE_HEADERS }
+        { status: result.status, headers: NO_CACHE_HEADERS }
       );
     }
-
-    const resolvedStatus =
-      body.approval_status ||
-      existingDbProfile?.approval_status ||
-      (idx !== -1 ? serverCache[idx].approval_status : 'ACTIVE');
-
-    const primaryRole: UserRole =
-      resolvedStatus === 'REJECTED'
-        ? existingDbProfile?.role || 'GUEST'
-        : getHighestPriorityRole(effectiveRoles) ||
-          (body.role ? normalizeRole(body.role) : existingDbProfile?.role || 'GUEST');
-
-    const holdsTeacher = effectiveRoles.includes('TEACHER');
-    const holdsParent = effectiveRoles.includes('PARENT');
-
-    let canonicalClassIds: string[] = [];
-    let liveClassesList: Array<{ id: string; name: string }> = [];
-
-    if (holdsTeacher && Array.isArray(body.assigned_class_ids)) {
-      const { data: classesData } = await executeWithAdminFallback(async (sb) =>
-        await sb.from('classes').select('id, name')
-      );
-      liveClassesList = Array.isArray(classesData) ? classesData : [];
-      canonicalClassIds = Array.from(
-        new Set(
-          body.assigned_class_ids
-            .filter(Boolean)
-            .map((rawId: unknown) => resolveCanonicalClassId(String(rawId), liveClassesList))
-            .filter(Boolean)
-        )
-      );
-    }
-
-    const derivedClassId =
-      canonicalClassIds.length > 0
-        ? canonicalClassIds[0]
-        : body.assigned_class_id !== undefined && body.assigned_class_id !== null
-        ? resolveCanonicalClassId(String(body.assigned_class_id), liveClassesList)
-        : existingDbProfile?.assigned_class_id ?? (idx !== -1 ? serverCache[idx].assigned_class_id : null);
-
-    const derivedClassNames =
-      canonicalClassIds.length > 0
-        ? canonicalClassIds
-            .map((cid) => resolveClassDisplayName(cid, liveClassesList) || DEFAULT_UUID_TO_NAME[cid] || cid)
-            .filter(Boolean)
-            .join(', ')
-        : body.assigned_class_name !== undefined
-        ? body.assigned_class_name
-        : existingDbProfile?.assigned_class_name ?? (idx !== -1 ? serverCache[idx].assigned_class_name : null);
-
-    const resolvedClassId = !holdsTeacher ? null : derivedClassId;
-    const resolvedClassName = !holdsTeacher ? null : derivedClassNames;
-
-    const upsertPayload: Record<string, any> = {
-      id: resolvedId,
-      email,
-      full_name:
-        body.full_name ||
-        existingDbProfile?.full_name ||
-        (idx !== -1 ? serverCache[idx].full_name : email.split('@')[0]),
-      role: primaryRole,
-      approval_status: resolvedStatus,
-      assigned_class_id: resolvedClassId,
-      assigned_class_name: resolvedClassName,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: upsertedData, error: upsertErr } = await executeWithAdminFallback(async (sb) =>
-      await sb.from('profiles').upsert(upsertPayload, { onConflict: 'email' }).select()
-    );
-
-    if (upsertErr) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Không thể lưu vai trò vào Supabase: ${upsertErr.message}`,
-        },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      );
-    }
-
-    const persistedId =
-      upsertedData && upsertedData.length > 0 ? upsertedData[0].id : resolvedId;
-
-    // 1. Sync public.user_roles
-    if (resolvedStatus !== 'REJECTED' && (isExplicitRolesArray || body.role)) {
-      if (effectiveRoles.length > 0) {
-        await executeWithAdminFallback(async (sb) =>
-          await sb.from('user_roles').upsert(
-            effectiveRoles.map((role_name) => ({ user_id: persistedId, role_name })),
-            { onConflict: 'user_id,role_name', ignoreDuplicates: true }
-          )
-        );
-      }
-
-      if (isExplicitRolesArray) {
-        const removedRoles = ASSIGNABLE_ROLES.filter((r) => !effectiveRoles.includes(r));
-        if (removedRoles.length > 0) {
-          await executeWithAdminFallback(async (sb) =>
-            await sb
-              .from('user_roles')
-              .delete()
-              .eq('user_id', persistedId)
-              .in('role_name', removedRoles)
-          );
-        }
-      }
-    }
-
-    // 2. Sync teacher_class_assignments cleanly when TEACHER role changes or class_ids provided
-    if (holdsTeacher && Array.isArray(body.assigned_class_ids)) {
-      await executeWithAdminFallback(async (sb) =>
-        await sb.from('teacher_class_assignments').delete().eq('teacher_email', email)
-      );
-
-      if (canonicalClassIds.length > 0) {
-        await executeWithAdminFallback(async (sb) =>
-          await sb.from('teacher_class_assignments').insert(
-            canonicalClassIds.map((cid) => ({
-              teacher_email: email,
-              teacher_id: persistedId,
-              class_id: cid,
-              class_name: resolveClassDisplayName(cid, liveClassesList) || DEFAULT_UUID_TO_NAME[cid] || '',
-              academic_year: '2026-2027',
-              is_main_teacher: true,
-            }))
-          )
-        );
-      }
-    } else if (!holdsTeacher && isExplicitRolesArray) {
-      await executeWithAdminFallback(async (sb) =>
-        await sb.from('teacher_class_assignments').delete().eq('teacher_email', email)
-      );
-    }
-
-    // 3. Sync student_parents & student_guardians ONLY when student_ids passed or explicit clear requested
-    // CR-01 BUGFIX: NEVER auto-delete student links when approving/granting TEACHER or STAFF!
-    if (Array.isArray(body.student_ids) && UUID_REGEX.test(String(persistedId))) {
-      const uniqueStudentIds: string[] = Array.from(
-        new Set<string>(
-          body.student_ids
-            .map((id: any) => String(id || '').trim())
-            .filter((id: string) => UUID_REGEX.test(id))
-        )
-      );
-
-      await Promise.all([
-        executeWithAdminFallback(async (sb) =>
-          await sb.from('student_parents').delete().eq('parent_user_id', persistedId)
-        ),
-        executeWithAdminFallback(async (sb) =>
-          await sb.from('student_guardians').delete().eq('guardian_id', persistedId)
-        ),
-      ]);
-
-      if (uniqueStudentIds.length > 0) {
-        await Promise.all([
-          executeWithAdminFallback(async (sb) =>
-            await sb.from('student_parents').upsert(
-              uniqueStudentIds.map((studentId, index) => ({
-                student_id: studentId,
-                parent_user_id: persistedId,
-                relationship: String(body.relationship || 'Phụ huynh'),
-                is_primary: index === 0,
-              })),
-              { onConflict: 'student_id,parent_user_id' }
-            )
-          ),
-          executeWithAdminFallback(async (sb) =>
-            await sb.from('student_guardians').upsert(
-              uniqueStudentIds.map((studentId, index) => ({
-                student_id: studentId,
-                guardian_id: persistedId,
-                relationship: toGuardianRelationship(String(body.relationship || 'NGƯỜI GIÁM HỘ')),
-                is_primary: index === 0,
-              })),
-              { onConflict: 'student_id,guardian_id' }
-            )
-          ),
-        ]);
-
-        if (!holdsParent) {
-          await executeWithAdminFallback(async (sb) =>
-            await sb.from('user_roles').upsert(
-              { user_id: persistedId, role_name: 'PARENT' },
-              { onConflict: 'user_id,role_name', ignoreDuplicates: true }
-            )
-          );
-          effectiveRoles = sortRolesByPriority([
-            ...effectiveRoles,
-            'PARENT' as AssignableRole,
-          ]) as AssignableRole[];
-        }
-      }
-    } else if (body.clear_student_links === true && UUID_REGEX.test(String(persistedId))) {
-      await Promise.all([
-        executeWithAdminFallback(async (sb) =>
-          await sb.from('student_parents').delete().eq('parent_user_id', persistedId)
-        ),
-        executeWithAdminFallback(async (sb) =>
-          await sb.from('student_guardians').delete().eq('guardian_id', persistedId)
-        ),
-      ]);
-    }
-
-    const relations = await fetchRelationsFromSupabase();
-    const targetProfile = {
-      ...(existingDbProfile || {}),
-      ...(upsertedData?.[0] || upsertPayload),
-      id: persistedId,
-      roles: effectiveRoles,
-    };
 
     return NextResponse.json(
       {
         success: true,
-        profile: targetProfile,
-        relations,
+        profile: result.profile,
+        relations: result.relations,
       },
       { headers: NO_CACHE_HEADERS }
     );
@@ -708,9 +351,15 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await executeWithAdminFallback(async (sb) =>
+    const { error: delErr } = await executeWithContextFallback(auth.ctx, async (sb) =>
       await sb.from('profiles').delete().eq('email', email)
     );
+    if (delErr) {
+      return NextResponse.json(
+        { success: false, message: `Không thể xóa tài khoản: ${delErr.message}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
 
     return NextResponse.json(
       { success: true, message: `Đã xóa tài khoản ${email}` },

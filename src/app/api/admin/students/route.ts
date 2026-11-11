@@ -1,45 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { isNonRegularStudent } from '@/lib/utils/studentClassification';
-import { requireActiveRole } from '@/lib/auth/sessionContext';
+import {
+  executeWithContextFallback,
+  requireActiveRole,
+  SessionContext,
+} from '@/lib/auth/sessionContext';
+import { getSupabaseConfig, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const NO_CACHE_HEADERS = {
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0',
-};
-
-const FALLBACK_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyaWV1YW1pYnFqeWFzbHByZGVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTQxNTAsImV4cCI6MjEwNDYzMDE1MH0.q8OQ1wDnsTWCniXmHXjzLAQ_q-k0VrjX99kSK_TYAEw';
-
-function getSupabaseClient(preferAnon = false) {
-  const rawUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    'https://yrieuamibqjyaslprdeo.supabase.co';
-  const url = rawUrl.trim().replace(/^["']|["']$/g, '');
-
-  const rawKey = preferAnon
-    ? (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       FALLBACK_ANON_KEY)
-    : (process.env.SUPABASE_SERVICE_ROLE_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-       process.env.SUPABASE_ANON_KEY ||
-       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-       process.env.SUPABASE_PUBLISHABLE_KEY ||
-       FALLBACK_ANON_KEY);
-
-  const key = rawKey.trim().replace(/^["']|["']$/g, '') || FALLBACK_ANON_KEY;
-
-  if (!url || !key) return null;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
 
 const DEFAULT_CLASS_NAME_TO_UUID: Record<string, string> = {
   'Nhà trẻ': '14ccdb7e-c341-4fe4-8a59-78b2a2914096',
@@ -57,62 +26,65 @@ if (!globalThis.__SUONGMAI_STUDENT_CITIZEN_IDS__) {
   globalThis.__SUONGMAI_STUDENT_CITIZEN_IDS__ = {};
 }
 
-async function loadCitizenIdsMap(supabase: any): Promise<Record<string, string | null>> {
+async function loadCitizenIdsMap(ctx: SessionContext): Promise<Record<string, string | null>> {
   const map: Record<string, string | null> = { ...(globalThis.__SUONGMAI_STUDENT_CITIZEN_IDS__ || {}) };
-  if (!supabase) return map;
   try {
-    const { data } = await supabase
-      .from('system_settings')
-      .select('value')
-      .eq('key', 'student_citizen_ids_map')
-      .maybeSingle();
+    const { data } = await executeWithContextFallback(
+      ctx,
+      async (sb) =>
+        await sb
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'student_citizen_ids_map')
+          .maybeSingle()
+    );
     if (data?.value && typeof data.value === 'object') {
       Object.assign(map, data.value);
       globalThis.__SUONGMAI_STUDENT_CITIZEN_IDS__ = map;
     }
-  } catch (e) {}
+  } catch {
+    // ignore optional citizen id map errors
+  }
   return map;
 }
 
-async function saveCitizenIdToMap(supabase: any, studentId: string, citizenId: string | null) {
-  const current = await loadCitizenIdsMap(supabase);
+async function saveCitizenIdToMap(ctx: SessionContext, studentId: string, citizenId: string | null) {
+  const current = await loadCitizenIdsMap(ctx);
   current[studentId] = citizenId;
   globalThis.__SUONGMAI_STUDENT_CITIZEN_IDS__ = current;
-  if (!supabase) return;
   try {
-    await supabase.from('system_settings').upsert(
-      {
-        key: 'student_citizen_ids_map',
-        value: current,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'key' }
+    await executeWithContextFallback(
+      ctx,
+      async (sb) =>
+        await sb.from('system_settings').upsert(
+          {
+            key: 'student_citizen_ids_map',
+            value: current,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        )
     );
-  } catch (e) {}
+  } catch {
+    // ignore optional citizen id persistence errors
+  }
 }
 
 export async function GET(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'STAFF']);
     if ('response' in auth) return auth.response;
+    const { ctx } = auth;
 
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, error: 'Database client credentials not configured' },
-        { status: 500 }
-      );
-    }
-
-    // 1. Fetch available classes for mapping
-    const { data: classesData } = await supabase.from('classes').select('id, name');
-    const classMap: Record<string, string> = { ...DEFAULT_CLASS_NAME_TO_UUID };
+    // 1. Fetch available classes for mapping (using service_role or active_role scoped JWT)
+    const { data: classesData } = await executeWithContextFallback(
+      ctx,
+      async (sb) => await sb.from('classes').select('id, name')
+    );
     const idToNameMap: Record<string, string> = {};
-
-    if (classesData && classesData.length > 0) {
+    if (Array.isArray(classesData) && classesData.length > 0) {
       classesData.forEach((c: { id: string; name: string }) => {
         idToNameMap[c.id] = c.name;
-        classMap[c.name] = c.id;
       });
     }
 
@@ -122,43 +94,53 @@ export async function GET(request: Request) {
       allowNonRegular = globalThis.__SUONGMAI_SYSTEM_SETTINGS__.allow_school_admin_view_non_regular;
     }
 
-    const citizenIdsMap = await loadCitizenIdsMap(supabase);
+    const [citizenIdsMap, settingRes, studentsRes] = await Promise.all([
+      loadCitizenIdsMap(ctx),
+      executeWithContextFallback(
+        ctx,
+        async (sb) =>
+          await sb
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'allow_school_admin_view_non_regular')
+            .maybeSingle()
+      ).catch(() => ({ data: null, error: null })),
+      executeWithContextFallback(
+        ctx,
+        async (sb) =>
+          await sb
+            .from('students')
+            .select('*, classes(id, name)')
+            .order('full_name', { ascending: true })
+      ),
+    ]);
 
-    try {
-      const { data: settingRow } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'allow_school_admin_view_non_regular')
-        .maybeSingle();
-
-      if (settingRow && settingRow.value !== undefined) {
-        allowNonRegular = Boolean(settingRow.value);
-      }
-    } catch (e) {}
-
-    // 3. Fetch all students joined with classes
-    let { data: studentsData, error } = await supabase
-      .from('students')
-      .select('*, classes(id, name)')
-      .order('full_name', { ascending: true });
-
-    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
-      const anonClient = getSupabaseClient(true);
-      if (anonClient) {
-        const retry = await anonClient
-          .from('students')
-          .select('*, classes(id, name)')
-          .order('full_name', { ascending: true });
-        studentsData = retry.data;
-        error = retry.error;
-      }
+    if (settingRes.data && settingRes.data.value !== undefined) {
+      allowNonRegular = Boolean(settingRes.data.value);
     }
 
-    if (error) {
-      console.error('Error querying students from Supabase:', error);
+    if (studentsRes.error) {
+      console.error('Error querying students from Supabase:', studentsRes.error);
       return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
+        { success: false, error: studentsRes.error.message },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const studentsData = studentsRes.data || [];
+    const { serviceRoleKey, jwtSecret } = getSupabaseConfig();
+    if (
+      studentsData.length === 0 &&
+      !serviceRoleKey &&
+      (!jwtSecret || ctx.profileId.startsWith('bootstrap-'))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Không thể đọc bảng học sinh do thiếu SUPABASE_SERVICE_ROLE_KEY trên server (hoặc tài khoản sadmin chưa có hồ sơ trong bảng profiles/user_roles để vượt RLS).',
+        },
+        { status: 403, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -166,18 +148,26 @@ export async function GET(request: Request) {
     const pickupsMap: Record<string, any[]> = {};
     try {
       let pickupsData: any[] | null = null;
-      const { data: authData, error: authError } = await supabase
-        .from('pickup_authorizations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: authData, error: authError } = await executeWithContextFallback(
+        ctx,
+        async (sb) =>
+          await sb
+            .from('pickup_authorizations')
+            .select('*')
+            .order('created_at', { ascending: false })
+      );
 
       if (!authError && Array.isArray(authData)) {
         pickupsData = authData;
       } else {
-        const { data: legData } = await supabase
-          .from('authorized_pickups')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const { data: legData } = await executeWithContextFallback(
+          ctx,
+          async (sb) =>
+            await sb
+              .from('authorized_pickups')
+              .select('*')
+              .order('created_at', { ascending: false })
+        );
         pickupsData = legData || [];
       }
 
@@ -191,7 +181,8 @@ export async function GET(request: Request) {
             relationship: p.relationship,
             phone: p.phone,
             avatar_url: p.avatar_url || '',
-            is_active: p.is_active !== undefined ? Boolean(p.is_active) : (p.approval_status !== 'REJECTED'),
+            is_active:
+              p.is_active !== undefined ? Boolean(p.is_active) : p.approval_status !== 'REJECTED',
             approval_status: p.approval_status || (p.is_active !== false ? 'APPROVED' : 'PENDING'),
             created_at: p.created_at,
           });
@@ -202,7 +193,7 @@ export async function GET(request: Request) {
     }
 
     // 4. Map students with proper class names, citizen_id, and non-regular flags
-    const students = (studentsData || []).map((s: any) => {
+    const students = studentsData.map((s: any) => {
       let friendlyClassName = s.classes?.name;
       if (!friendlyClassName && s.class_id && idToNameMap[s.class_id]) {
         friendlyClassName = idToNameMap[s.class_id];
@@ -214,7 +205,9 @@ export async function GET(request: Request) {
       const resolvedCitizenId =
         s.citizen_id !== undefined && s.citizen_id !== null
           ? s.citizen_id
-          : (citizenIdsMap[s.id] !== undefined ? citizenIdsMap[s.id] : null);
+          : citizenIdsMap[s.id] !== undefined
+          ? citizenIdsMap[s.id]
+          : null;
 
       const isNonReg = isNonRegularStudent(s, friendlyClassName);
 
@@ -223,7 +216,7 @@ export async function GET(request: Request) {
         student_code: s.student_code || s.code || '',
         citizen_id: resolvedCitizenId,
         full_name: s.full_name || '',
-        gender: (s.gender === 'NAM' || s.gender === 'NỮ') ? s.gender : 'NAM',
+        gender: s.gender === 'NAM' || s.gender === 'NỮ' ? s.gender : 'NAM',
         dob: s.dob || '',
         class_id: s.class_id || '',
         class_name: friendlyClassName,
@@ -263,14 +256,7 @@ export async function POST(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
     if ('response' in auth) return auth.response;
-
-    let supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, error: 'Database client credentials not configured' },
-        { status: 500 }
-      );
-    }
+    const { ctx } = auth;
 
     const body = await request.json();
     const normalizedCitizenId =
@@ -280,11 +266,10 @@ export async function POST(request: Request) {
 
     let resolvedClassId = body.class_id || DEFAULT_CLASS_NAME_TO_UUID[body.class_name || 'Mầm'];
     if (!resolvedClassId && body.class_name) {
-      const { data: matchedClass } = await supabase
-        .from('classes')
-        .select('id')
-        .eq('name', body.class_name)
-        .maybeSingle();
+      const { data: matchedClass } = await executeWithContextFallback(
+        ctx,
+        async (sb) => await sb.from('classes').select('id').eq('name', body.class_name).maybeSingle()
+      );
       if (matchedClass?.id) resolvedClassId = matchedClass.id;
     }
 
@@ -301,34 +286,19 @@ export async function POST(request: Request) {
     if (body.avatar_url !== undefined) insertPayload.avatar_url = body.avatar_url;
     if (body.is_non_regular !== undefined) insertPayload.is_non_regular = Boolean(body.is_non_regular);
 
-    let { data, error } = await supabase
-      .from('students')
-      .insert(insertPayload)
-      .select('*, classes(id, name)')
-      .single();
-
-    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
-      const anonClient = getSupabaseClient(true);
-      if (anonClient) {
-        supabase = anonClient;
-        const retry = await supabase
-          .from('students')
-          .insert(insertPayload)
-          .select('*, classes(id, name)')
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
-    }
+    let { data, error } = await executeWithContextFallback(
+      ctx,
+      async (sb) => await sb.from('students').insert(insertPayload).select('*, classes(id, name)').single()
+    );
 
     if (error && error.message?.includes('citizen_id')) {
       const fallbackPayload = { ...insertPayload };
       delete fallbackPayload.citizen_id;
-      const retry = await supabase
-        .from('students')
-        .insert(fallbackPayload)
-        .select('*, classes(id, name)')
-        .single();
+      const retry = await executeWithContextFallback(
+        ctx,
+        async (sb) =>
+          await sb.from('students').insert(fallbackPayload).select('*, classes(id, name)').single()
+      );
       data = retry.data;
       error = retry.error;
     }
@@ -337,27 +307,30 @@ export async function POST(request: Request) {
       console.error('POST /api/admin/students error:', error);
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 500 }
+        { status: 500, headers: NO_CACHE_HEADERS }
       );
     }
 
     if (data?.id && body.citizen_id !== undefined) {
-      await saveCitizenIdToMap(supabase, data.id, normalizedCitizenId);
+      await saveCitizenIdToMap(ctx, data.id, normalizedCitizenId);
     }
 
-    return NextResponse.json({
-      success: true,
-      student: {
-        ...data,
-        citizen_id: data.citizen_id ?? normalizedCitizenId,
-        class_name: data.classes?.name || 'Chưa phân lớp',
+    return NextResponse.json(
+      {
+        success: true,
+        student: {
+          ...data,
+          citizen_id: data.citizen_id ?? normalizedCitizenId,
+          class_name: data.classes?.name || 'Chưa phân lớp',
+        },
       },
-    });
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('POST /api/admin/students exception:', err);
     return NextResponse.json(
       { success: false, error: err?.message || 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -366,14 +339,7 @@ export async function PUT(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
     if ('response' in auth) return auth.response;
-
-    let supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json(
-        { success: false, error: 'Database client credentials not configured' },
-        { status: 500 }
-      );
-    }
+    const { ctx } = auth;
 
     const body = await request.json();
     const { id, target_class_name, target_class_id, ...otherFields } = body;
@@ -381,7 +347,7 @@ export async function PUT(request: Request) {
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'Student ID is required' },
-        { status: 400 }
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -391,14 +357,13 @@ export async function PUT(request: Request) {
     if (target_class_id) {
       updatePayload.class_id = target_class_id;
     } else if (target_class_name) {
-      // Find UUID for target class name
       let resolvedId = DEFAULT_CLASS_NAME_TO_UUID[target_class_name];
       if (!resolvedId) {
-        const { data: matchedClass } = await supabase
-          .from('classes')
-          .select('id')
-          .eq('name', target_class_name)
-          .maybeSingle();
+        const { data: matchedClass } = await executeWithContextFallback(
+          ctx,
+          async (sb) =>
+            await sb.from('classes').select('id').eq('name', target_class_name).maybeSingle()
+        );
         if (matchedClass?.id) {
           resolvedId = matchedClass.id;
         }
@@ -424,46 +389,34 @@ export async function PUT(request: Request) {
     if (otherFields.status !== undefined) updatePayload.status = otherFields.status;
     if (otherFields.avatar_url !== undefined) updatePayload.avatar_url = otherFields.avatar_url;
 
-    let { data, error } = await supabase
-      .from('students')
-      .update(updatePayload)
-      .eq('id', id)
-      .select('*, classes(id, name)')
-      .single();
-
-    if (error && (error.message?.toLowerCase().includes('api key') || error.message?.toLowerCase().includes('jwt'))) {
-      const anonClient = getSupabaseClient(true);
-      if (anonClient) {
-        supabase = anonClient;
-        const retry = await supabase
-          .from('students')
-          .update(updatePayload)
-          .eq('id', id)
-          .select('*, classes(id, name)')
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
-    }
+    let { data, error } = await executeWithContextFallback(
+      ctx,
+      async (sb) =>
+        await sb.from('students').update(updatePayload).eq('id', id).select('*, classes(id, name)').single()
+    );
 
     if (error && error.message?.includes('citizen_id')) {
       const fallbackPayload = { ...updatePayload };
       delete fallbackPayload.citizen_id;
       if (Object.keys(fallbackPayload).length > 0) {
-        const retry = await supabase
-          .from('students')
-          .update(fallbackPayload)
-          .eq('id', id)
-          .select('*, classes(id, name)')
-          .single();
+        const retry = await executeWithContextFallback(
+          ctx,
+          async (sb) =>
+            await sb
+              .from('students')
+              .update(fallbackPayload)
+              .eq('id', id)
+              .select('*, classes(id, name)')
+              .single()
+        );
         data = retry.data;
         error = retry.error;
       } else {
-        const fetched = await supabase
-          .from('students')
-          .select('*, classes(id, name)')
-          .eq('id', id)
-          .single();
+        const fetched = await executeWithContextFallback(
+          ctx,
+          async (sb) =>
+            await sb.from('students').select('*, classes(id, name)').eq('id', id).single()
+        );
         data = fetched.data;
         error = fetched.error;
       }
@@ -473,30 +426,33 @@ export async function PUT(request: Request) {
       console.error('PUT /api/admin/students error:', error);
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 500 }
+        { status: 500, headers: NO_CACHE_HEADERS }
       );
     }
 
     if (normalizedCitizenId !== undefined) {
-      await saveCitizenIdToMap(supabase, id, normalizedCitizenId);
+      await saveCitizenIdToMap(ctx, id, normalizedCitizenId);
     }
-    const citizenIdsMap = await loadCitizenIdsMap(supabase);
+    const citizenIdsMap = await loadCitizenIdsMap(ctx);
 
-    return NextResponse.json({
-      success: true,
-      student: {
-        ...data,
-        citizen_id:
-          data.citizen_id ??
-          (normalizedCitizenId !== undefined ? normalizedCitizenId : (citizenIdsMap[id] ?? null)),
-        class_name: data.classes?.name || 'Chưa phân lớp',
+    return NextResponse.json(
+      {
+        success: true,
+        student: {
+          ...data,
+          citizen_id:
+            data.citizen_id ??
+            (normalizedCitizenId !== undefined ? normalizedCitizenId : citizenIdsMap[id] ?? null),
+          class_name: data.classes?.name || 'Chưa phân lớp',
+        },
       },
-    });
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('PUT /api/admin/students exception:', err);
     return NextResponse.json(
       { success: false, error: err?.message || 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

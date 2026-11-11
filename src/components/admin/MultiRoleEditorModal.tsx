@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertCircle,
   Baby,
   Check,
   Crown,
   GraduationCap,
   Heart,
   ChefHat,
+  RefreshCw,
   Search,
   Shield,
   X,
@@ -31,10 +33,12 @@ export interface MultiRoleEditorModalProps {
   isSuperAdmin: boolean;
   students: Student[];
   loadingStudents?: boolean;
+  studentsError?: string | null;
   availableClasses?: Array<{ id: string; name: string }>;
   initialRoles?: UserRole[];
   initialClassIds?: string[];
   initialStudentIds?: string[];
+  onStudentsLoaded?: (students: Student[]) => void;
   onClose: () => void;
   onSaved: (message: string) => void | Promise<void>;
   onError?: (message: string) => void;
@@ -57,15 +61,28 @@ const SELECTABLE_ROLES: Array<{
   },
 ];
 
+function normalizeRoleArray(raw: unknown[], fallback: UserRole[]): UserRole[] {
+  const normalized = Array.from(
+    new Set(
+      raw
+        .map((r) => (String(r || '').toUpperCase().trim() === 'ADMIN' ? 'SCHOOL_ADMIN' : String(r || '').toUpperCase().trim()))
+        .filter((r): r is UserRole => Boolean(r) && r !== 'GUEST')
+    )
+  );
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 export function MultiRoleEditorModal({
   user,
   isSuperAdmin,
   students,
   loadingStudents = false,
+  studentsError: parentStudentsError = null,
   availableClasses,
   initialRoles,
   initialClassIds,
   initialStudentIds,
+  onStudentsLoaded,
   onClose,
   onSaved,
   onError,
@@ -81,42 +98,44 @@ export function MultiRoleEditorModal({
         : user.role && user.role !== 'GUEST'
         ? [user.role]
         : ['PARENT'];
-    return Array.from(
-      new Set(
-        raw
-          .map((r) => (r === 'ADMIN' ? 'SCHOOL_ADMIN' : r))
-          .filter((r): r is UserRole => r !== 'GUEST')
-      )
-    );
+    return normalizeRoleArray(raw, ['PARENT']);
   }, [user, initialRoles]);
 
-  const derivedInitialClassIds = useMemo<string[]>(() => {
-    if (initialClassIds && initialClassIds.length > 0) {
-      return Array.from(new Set(initialClassIds.map((c) => resolveCanonicalClassId(c, classOptions))));
-    }
-    const found = new Set<string>();
-    if (Array.isArray(user.assigned_classes)) {
-      user.assigned_classes.forEach((ac) => {
-        const cid = resolveCanonicalClassId(ac.class_id || ac.class_name, classOptions);
-        if (cid) found.add(cid);
-      });
-    }
-    if (user.assigned_class_name) {
-      user.assigned_class_name
-        .split(',')
-        .map((n) => n.trim())
-        .filter(Boolean)
-        .forEach((name) => {
-          const cid = resolveCanonicalClassId(name, classOptions);
+  const extractClassIds = useCallback(
+    (sourceUser: Profile, preset?: string[]): string[] => {
+      if (preset && preset.length > 0) {
+        return Array.from(new Set(preset.map((c) => resolveCanonicalClassId(c, classOptions)).filter(Boolean)));
+      }
+      const found = new Set<string>();
+      if (Array.isArray(sourceUser.assigned_classes)) {
+        sourceUser.assigned_classes.forEach((ac) => {
+          const cid = resolveCanonicalClassId(ac.class_id || ac.class_name, classOptions);
           if (cid) found.add(cid);
         });
-    }
-    if (user.assigned_class_id) {
-      const cid = resolveCanonicalClassId(user.assigned_class_id, classOptions);
-      if (cid) found.add(cid);
-    }
-    return Array.from(found);
-  }, [user, initialClassIds, classOptions]);
+      }
+      if (sourceUser.assigned_class_name) {
+        sourceUser.assigned_class_name
+          .split(',')
+          .map((n) => n.trim())
+          .filter(Boolean)
+          .forEach((name) => {
+            const cid = resolveCanonicalClassId(name, classOptions);
+            if (cid) found.add(cid);
+          });
+      }
+      if (sourceUser.assigned_class_id) {
+        const cid = resolveCanonicalClassId(sourceUser.assigned_class_id, classOptions);
+        if (cid) found.add(cid);
+      }
+      return Array.from(found);
+    },
+    [classOptions]
+  );
+
+  const derivedInitialClassIds = useMemo<string[]>(
+    () => extractClassIds(user, initialClassIds),
+    [user, initialClassIds, extractClassIds]
+  );
 
   const derivedInitialStudentIds = useMemo<string[]>(() => {
     if (initialStudentIds) return initialStudentIds;
@@ -129,39 +148,181 @@ export function MultiRoleEditorModal({
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>(derivedInitialRoles);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>(derivedInitialClassIds);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>(derivedInitialStudentIds);
+  const [hydratedLinkedStudents, setHydratedLinkedStudents] = useState(user.linked_students || []);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+
+  const [localStudents, setLocalStudents] = useState<Student[]>(students);
+  const [fetchingStudents, setFetchingStudents] = useState<boolean>(false);
+  const [studentsError, setStudentsError] = useState<string | null>(parentStudentsError);
+
   const [studentSearch, setStudentSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // Guard flags so async fetches never overwrite selections already modified by the admin
+  const dirtyRolesRef = useRef(false);
+  const dirtyClassesRef = useRef(false);
+  const dirtyStudentsRef = useRef(false);
+  const fetchedStudentsOnceRef = useRef(false);
+  const lastEmailRef = useRef<string>('');
+
+  // Reset selections only when opening for a different user
   useEffect(() => {
-    setSelectedRoles(derivedInitialRoles);
-  }, [derivedInitialRoles]);
+    const cleanEmail = (user.email || '').toLowerCase().trim();
+    if (lastEmailRef.current !== cleanEmail) {
+      lastEmailRef.current = cleanEmail;
+      dirtyRolesRef.current = false;
+      dirtyClassesRef.current = false;
+      dirtyStudentsRef.current = false;
+      setSelectedRoles(derivedInitialRoles);
+      setSelectedClassIds(derivedInitialClassIds);
+      setSelectedStudentIds(derivedInitialStudentIds);
+      setHydratedLinkedStudents(user.linked_students || []);
+      setLocalError(null);
+    }
+  }, [user.email, user.linked_students, derivedInitialRoles, derivedInitialClassIds, derivedInitialStudentIds]);
+
+  // Sync parent students prop if populated
+  useEffect(() => {
+    if (Array.isArray(students) && students.length > 0) {
+      setLocalStudents(students);
+      setStudentsError(null);
+    }
+  }, [students]);
 
   useEffect(() => {
-    setSelectedClassIds(derivedInitialClassIds);
-  }, [derivedInitialClassIds]);
+    if (parentStudentsError) {
+      setStudentsError(parentStudentsError);
+    }
+  }, [parentStudentsError]);
+
+  // Fetch authoritative multi-role list from public.user_roles via /api/admin/users?email=...
+  useEffect(() => {
+    const cleanEmail = (user.email || '').toLowerCase().trim();
+    if (!cleanEmail) return;
+
+    let cancelled = false;
+    setLoadingUserDetails(true);
+    fetch(`/api/admin/users?email=${encodeURIComponent(cleanEmail)}`, { cache: 'no-store' })
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok || !json.success) {
+          return;
+        }
+        const fetchedUser: Profile | null = json.user || json.users?.[0] || null;
+        if (fetchedUser) {
+          if (Array.isArray(fetchedUser.linked_students)) {
+            setHydratedLinkedStudents(fetchedUser.linked_students);
+          }
+          if (!initialRoles && !dirtyRolesRef.current) {
+            const dbRoles =
+              Array.isArray(fetchedUser.roles) && fetchedUser.roles.length > 0
+                ? fetchedUser.roles
+                : fetchedUser.role && fetchedUser.role !== 'GUEST'
+                ? [fetchedUser.role]
+                : [];
+            if (dbRoles.length > 0) {
+              setSelectedRoles(normalizeRoleArray(dbRoles, ['PARENT']));
+            }
+          }
+          if (!initialClassIds && !dirtyClassesRef.current) {
+            const dbClassIds = extractClassIds(fetchedUser);
+            if (dbClassIds.length > 0) {
+              setSelectedClassIds(dbClassIds);
+            }
+          }
+          if (!initialStudentIds && !dirtyStudentsRef.current && Array.isArray(fetchedUser.linked_students)) {
+            setSelectedStudentIds(fetchedUser.linked_students.map((ls) => ls.student_id).filter(Boolean));
+          }
+        }
+      })
+      .catch(() => {
+        // Keep existing derived props if offline
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUserDetails(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.email, initialRoles, initialClassIds, initialStudentIds, extractClassIds]);
+
+  const fetchStudentsList = useCallback(async () => {
+    setFetchingStudents(true);
+    setStudentsError(null);
+    try {
+      const res = await fetch('/api/admin/students', { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        const errText =
+          json.error ||
+          json.message ||
+          `Không thể tải danh sách học sinh (HTTP ${res.status}).`;
+        setStudentsError(errText);
+        return;
+      }
+      const list: Student[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json.students)
+        ? json.students
+        : Array.isArray(json.data)
+        ? json.data
+        : [];
+      setLocalStudents(list);
+      onStudentsLoaded?.(list);
+    } catch (err: any) {
+      setStudentsError(err?.message || 'Lỗi kết nối khi tải danh sách học sinh.');
+    } finally {
+      fetchedStudentsOnceRef.current = true;
+      setFetchingStudents(false);
+    }
+  }, [onStudentsLoaded]);
+
+  // Fetch students on modal open (when list is empty) OR whenever PARENT role is active/toggled and list is empty
+  useEffect(() => {
+    if (!fetchedStudentsOnceRef.current && localStudents.length === 0 && !loadingStudents && !fetchingStudents) {
+      fetchStudentsList();
+    }
+  }, [localStudents.length, loadingStudents, fetchingStudents, fetchStudentsList]);
 
   useEffect(() => {
-    setSelectedStudentIds(derivedInitialStudentIds);
-  }, [derivedInitialStudentIds]);
+    if (
+      selectedRoles.includes('PARENT') &&
+      localStudents.length === 0 &&
+      !loadingStudents &&
+      !fetchingStudents &&
+      !fetchedStudentsOnceRef.current
+    ) {
+      fetchStudentsList();
+    }
+  }, [selectedRoles, localStudents.length, loadingStudents, fetchingStudents, fetchStudentsList]);
 
   const isTargetSuperAdmin =
     user.role === 'SUPER_ADMIN' || user.email.toLowerCase().trim() === 'sadmin@suongmai.edu.vn';
 
   const toggleRole = (role: UserRole) => {
     if (role === 'SCHOOL_ADMIN' && !isSuperAdmin) return;
+    dirtyRolesRef.current = true;
+    const enablingParent = role === 'PARENT' && !selectedRoles.includes('PARENT');
     setSelectedRoles((prev) =>
       prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
     );
+    if (enablingParent && localStudents.length === 0 && !fetchingStudents) {
+      void fetchStudentsList();
+    }
   };
 
   const toggleClass = (cid: string) => {
+    dirtyClassesRef.current = true;
     setSelectedClassIds((prev) =>
       prev.includes(cid) ? prev.filter((x) => x !== cid) : [...prev, cid]
     );
   };
 
   const toggleStudent = (sid: string) => {
+    dirtyStudentsRef.current = true;
     setSelectedStudentIds((prev) =>
       prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
     );
@@ -169,8 +330,8 @@ export function MultiRoleEditorModal({
 
   const filteredStudents = useMemo(() => {
     const q = normalizeVietnameseSearch(studentSearch);
-    if (!q) return students;
-    return students.filter((s) => {
+    if (!q) return localStudents;
+    return localStudents.filter((s) => {
       return (
         normalizeVietnameseSearch(s.full_name).includes(q) ||
         normalizeVietnameseSearch(s.student_code).includes(q) ||
@@ -178,13 +339,13 @@ export function MultiRoleEditorModal({
         normalizeVietnameseSearch(s.citizen_id || '').includes(q)
       );
     });
-  }, [students, studentSearch]);
+  }, [localStudents, studentSearch]);
 
   const handleSave = async () => {
     setLocalError(null);
     const rolesToPersist: UserRole[] = isTargetSuperAdmin
       ? Array.from(new Set<UserRole>(['SUPER_ADMIN', ...selectedRoles]))
-      : selectedRoles;
+      : Array.from(new Set<UserRole>(selectedRoles));
 
     if (rolesToPersist.length === 0) {
       setLocalError('Vui lòng chọn ít nhất 1 vai trò cho tài khoản này.');
@@ -225,6 +386,8 @@ export function MultiRoleEditorModal({
       setSaving(false);
     }
   };
+
+  const isStudentListLoading = loadingStudents || fetchingStudents;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -268,11 +431,17 @@ export function MultiRoleEditorModal({
               </p>
               <p className="text-xs font-mono text-slate-500 truncate">{user.email}</p>
             </div>
+            {loadingUserDetails && (
+              <span className="text-[11px] font-medium text-slate-500 shrink-0">
+                Đang đồng bộ quyền...
+              </span>
+            )}
           </div>
 
           {localError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold">
-              {localError}
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{localError}</span>
             </div>
           )}
 
@@ -351,20 +520,32 @@ export function MultiRoleEditorModal({
           {/* 3. Parent Child Linking */}
           {(selectedRoles.includes('PARENT') || selectedStudentIds.length > 0) && (
             <div className="space-y-2.5 p-4 bg-sky-50/40 border border-sky-200 rounded-xl">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-sky-900">
                   {selectedRoles.includes('TEACHER') ? '3.' : '2.'} Liên kết hồ sơ con em (Phụ huynh)
                 </label>
-                <span className="text-[11px] font-bold text-sky-700 bg-white px-2.5 py-0.5 rounded-pill border border-sky-200">
-                  Đã chọn: {selectedStudentIds.length} bé
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isStudentListLoading}
+                    onClick={fetchStudentsList}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-pill text-[11px] font-semibold bg-white hover:bg-sky-100 text-sky-700 border border-sky-200 disabled:opacity-50 cursor-pointer"
+                    title="Tải lại danh sách học sinh"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isStudentListLoading ? 'animate-spin' : ''}`} />
+                    <span>Tải lại ({localStudents.length})</span>
+                  </button>
+                  <span className="text-[11px] font-bold text-sky-700 bg-white px-2.5 py-0.5 rounded-pill border border-sky-200">
+                    Đã chọn: {selectedStudentIds.length} bé
+                  </span>
+                </div>
               </div>
 
               {selectedStudentIds.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedStudentIds.map((sid) => {
-                    const st = students.find((s) => s.id === sid);
-                    const fallback = user.linked_students?.find((ls) => ls.student_id === sid);
+                    const st = localStudents.find((s) => s.id === sid);
+                    const fallback = hydratedLinkedStudents.find((ls) => ls.student_id === sid);
                     const name = st?.full_name || fallback?.full_name || 'Học sinh';
                     const cls = st?.class_name || fallback?.class_name || '';
                     return (
@@ -384,6 +565,22 @@ export function MultiRoleEditorModal({
                       </button>
                     );
                   })}
+                </div>
+              )}
+
+              {studentsError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-medium flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{studentsError}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={fetchStudentsList}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 font-bold text-[11px] hover:bg-rose-100 shrink-0 cursor-pointer"
+                  >
+                    Thử lại
+                  </button>
                 </div>
               )}
 
@@ -408,10 +605,28 @@ export function MultiRoleEditorModal({
               </div>
 
               <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-white">
-                {loadingStudents ? (
+                {isStudentListLoading ? (
                   <p className="py-6 text-center text-xs text-slate-500">Đang tải danh sách học sinh...</p>
                 ) : filteredStudents.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-slate-400">Không tìm thấy học sinh phù hợp.</p>
+                  <div className="py-6 text-center space-y-2">
+                    <p className="text-xs text-slate-500">
+                      {studentsError
+                        ? 'Không thể tải danh sách học sinh do lỗi máy chủ/CSDL.'
+                        : localStudents.length === 0
+                        ? 'Chưa tải được danh sách học sinh nào.'
+                        : 'Không tìm thấy học sinh phù hợp từ khóa tìm kiếm.'}
+                    </p>
+                    {localStudents.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={fetchStudentsList}
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[11px] font-semibold cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Tải danh sách học sinh</span>
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   filteredStudents.map((s) => {
                     const checked = selectedStudentIds.includes(s.id);

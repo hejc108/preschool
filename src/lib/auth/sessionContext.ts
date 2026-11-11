@@ -5,7 +5,10 @@ import {
   verifyAndExtractCookieValue,
 } from '@/lib/utils/cookieSigner';
 import {
+  AuthDbContext,
+  executeWithPrivilegedFallback,
   getSupabaseAdminClient,
+  getSupabaseConfig,
   getSupabaseRlsScopedClient,
   NO_CACHE_HEADERS,
 } from '@/lib/supabase/server';
@@ -148,14 +151,22 @@ export async function resolveProfileAndRolesByEmail(
   const profileId = profile.id as string;
   const profilePrimaryRole = normalizeRole(profile.role);
 
-  // 1. Read multi-role assignments from public.user_roles (with pre-00013 safety)
+  const baseAuthCtx: AuthDbContext = {
+    profileId,
+    authUserId: profile.auth_user_id || null,
+    email,
+    activeRole: claimedActiveRole && claimedActiveRole !== 'GUEST' ? claimedActiveRole : profilePrimaryRole,
+    roles: profilePrimaryRole !== 'GUEST' ? [profilePrimaryRole] : [],
+  };
+
+  // 1. Read multi-role assignments from public.user_roles (with pre-00013 safety & scoped JWT fallback)
   let dbRoles: UserRole[] = [];
   let hasUserRolesTable = true;
   try {
-    const { data: urRows, error: urErr } = await supabase
-      .from('user_roles')
-      .select('role_name')
-      .eq('user_id', profileId);
+    const { data: urRows, error: urErr } = await executeWithPrivilegedFallback(
+      async (sb) => await sb.from('user_roles').select('role_name').eq('user_id', profileId),
+      baseAuthCtx
+    );
 
     if (urErr) {
       if (urErr.code === '42P01' || urErr.message?.includes('does not exist')) {
@@ -167,6 +178,8 @@ export async function resolveProfileAndRolesByEmail(
   } catch {
     hasUserRolesTable = false;
   }
+
+  const resolvedContextRoles = dbRoles.length > 0 ? dbRoles : baseAuthCtx.roles;
 
   // 2. Read student links from student_parents + fallback student_guardians
   const studentMap = new Map<string, LinkedStudentSummary>();
@@ -188,13 +201,23 @@ export async function resolveProfileAndRolesByEmail(
     }
   };
 
+  const parentScopeCtx: AuthDbContext = {
+    ...baseAuthCtx,
+    activeRole: resolvedContextRoles.includes('PARENT') ? 'PARENT' : baseAuthCtx.activeRole,
+    roles: resolvedContextRoles,
+  };
+
   try {
-    const { data: spRows, error: spErr } = await supabase
-      .from('student_parents')
-      .select(
-        'student_id, relationship, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
-      )
-      .eq('parent_user_id', profileId);
+    const { data: spRows, error: spErr } = await executeWithPrivilegedFallback(
+      async (sb) =>
+        await sb
+          .from('student_parents')
+          .select(
+            'student_id, relationship, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
+          )
+          .eq('parent_user_id', profileId),
+      parentScopeCtx
+    );
 
     if (!spErr && Array.isArray(spRows)) {
       spRows.forEach((r) => collectStudentRow(r, 'relationship'));
@@ -204,12 +227,16 @@ export async function resolveProfileAndRolesByEmail(
   }
 
   try {
-    const { data: sgRows, error: sgErr } = await supabase
-      .from('student_guardians')
-      .select(
-        'student_id, relationship, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
-      )
-      .eq('guardian_id', profileId);
+    const { data: sgRows, error: sgErr } = await executeWithPrivilegedFallback(
+      async (sb) =>
+        await sb
+          .from('student_guardians')
+          .select(
+            'student_id, relationship, students(id, full_name, student_code, class_id, allergies, avatar_url, classes(id, name))'
+          )
+          .eq('guardian_id', profileId),
+      parentScopeCtx
+    );
 
     if (!sgErr && Array.isArray(sgRows)) {
       sgRows.forEach((r) => collectStudentRow(r, 'relationship'));
@@ -238,13 +265,27 @@ export async function resolveProfileAndRolesByEmail(
       addClassRef(profile.assigned_class_id, null);
     }
   }
+
+  const teacherScopeCtx: AuthDbContext = {
+    ...baseAuthCtx,
+    activeRole: resolvedContextRoles.includes('TEACHER') ? 'TEACHER' : baseAuthCtx.activeRole,
+    roles: resolvedContextRoles,
+  };
+
   try {
     const [{ data: assignRows }, { data: mainClassRows }] = await Promise.all([
-      supabase
-        .from('teacher_class_assignments')
-        .select('class_id, class_name')
-        .or(`teacher_id.eq.${profileId},teacher_email.ilike.${email}`),
-      supabase.from('classes').select('id, name').eq('main_teacher_id', profileId),
+      executeWithPrivilegedFallback(
+        async (sb) =>
+          await sb
+            .from('teacher_class_assignments')
+            .select('class_id, class_name')
+            .or(`teacher_id.eq.${profileId},teacher_email.ilike.${email}`),
+        teacherScopeCtx
+      ),
+      executeWithPrivilegedFallback(
+        async (sb) => await sb.from('classes').select('id, name').eq('main_teacher_id', profileId),
+        teacherScopeCtx
+      ),
     ]);
     (assignRows || []).forEach((r: any) => addClassRef(r.class_id, r.class_name));
     (mainClassRows || []).forEach((c: any) => addClassRef(c.id, c.name));
@@ -546,6 +587,23 @@ export function assertParentStudentAccess(
  */
 export async function getScopedDbClient(ctx: SessionContext) {
   return getSupabaseRlsScopedClient({
+    profileId: ctx.profileId,
+    authUserId: ctx.authUserId,
+    email: ctx.email,
+    activeRole: ctx.activeRole,
+    roles: ctx.roles,
+  });
+}
+
+/**
+ * Executes a DB callback using Service Role if valid, otherwise falls back to
+ * an authenticated HS256 JWT scoped to the verified SessionContext before anon.
+ */
+export async function executeWithContextFallback<T>(
+  ctx: SessionContext,
+  fn: Parameters<typeof executeWithPrivilegedFallback<T>>[0]
+): Promise<{ data: T; error: any }> {
+  return executeWithPrivilegedFallback<T>(fn, {
     profileId: ctx.profileId,
     authUserId: ctx.authUserId,
     email: ctx.email,

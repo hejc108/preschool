@@ -523,7 +523,7 @@ export async function saveMultiRoleUser(params: {
   clear_student_links?: boolean;
 }): Promise<{ profile: Profile | null; relations: ParentStudentRelation[] }> {
   const cleanEmail = params.email.toLowerCase().trim();
-  const res = await fetch('/api/users/approvals', {
+  const res = await fetch('/api/admin/users', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

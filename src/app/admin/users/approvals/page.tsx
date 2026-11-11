@@ -79,6 +79,7 @@ export default function UserApprovalsPage() {
   const [relations, setRelations] = useState<ParentStudentRelation[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loadingStudents, setLoadingStudents] = useState<boolean>(false);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
   const [classes, setClasses] = useState<Array<{ id: string; name: string }>>(DEFAULT_CLASSES_LIST);
 
   const [search, setSearch] = useState('');
@@ -109,14 +110,21 @@ export default function UserApprovalsPage() {
 
   const loadStudentsAndClasses = useCallback(async () => {
     setLoadingStudents(true);
+    setStudentsError(null);
     try {
       const [studentsRes, assignRes] = await Promise.all([
         fetch('/api/admin/students', { cache: 'no-store' }),
         fetch('/api/admin/teacher-assignments', { cache: 'no-store' }).catch(() => null),
       ]);
 
-      if (studentsRes.ok) {
-        const json = await studentsRes.json().catch(() => ({}));
+      const json = await studentsRes.json().catch(() => ({}));
+      if (!studentsRes.ok || json.success === false) {
+        setStudentsError(
+          json.error ||
+            json.message ||
+            `Không thể tải danh sách học sinh (HTTP ${studentsRes.status}).`
+        );
+      } else {
         const list: Student[] = Array.isArray(json)
           ? json
           : (json.students || json.data || []);
@@ -131,8 +139,9 @@ export default function UserApprovalsPage() {
           setClasses(aJson.classes);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('[loadStudentsAndClasses] Error loading data:', e);
+      setStudentsError(e?.message || 'Lỗi kết nối khi tải danh sách học sinh.');
     } finally {
       setLoadingStudents(false);
     }
@@ -789,10 +798,15 @@ export default function UserApprovalsPage() {
           isSuperAdmin={isSuperAdmin}
           students={students}
           loadingStudents={loadingStudents}
+          studentsError={studentsError}
           availableClasses={classes}
           initialRoles={modalTarget.roles}
           initialClassIds={modalTarget.classIds}
           initialStudentIds={modalTarget.studentIds}
+          onStudentsLoaded={(list) => {
+            setStudents(list);
+            setStudentsError(null);
+          }}
           onClose={() => setModalTarget(null)}
           onSaved={async (msg) => {
             await refreshData();
