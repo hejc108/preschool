@@ -10,6 +10,8 @@ const GOOGLE_DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3/fil
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_REQUEST_TIMEOUT_MS = 15000;
 
+export const DEFAULT_DRIVE_ARCHIVE_ROOT_FOLDER_ID = '1ZoDu4DCYYDP615etwu0pjk8vRmndHfzd';
+
 interface ServiceAccountCredentials {
   client_email: string;
   private_key: string;
@@ -41,30 +43,88 @@ function base64UrlEncode(input: string | Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+export function normalizeDriveFolderId(rawValue: string | undefined | null): string {
+  let cleaned = cleanEnv(rawValue)
+    .replace(/\\r|\\n/g, '')
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .trim();
+
+  if (!cleaned) {
+    return DEFAULT_DRIVE_ARCHIVE_ROOT_FOLDER_ID;
+  }
+
+  // Hỗ trợ nếu admin dán cả URL thư mục Google Drive thay vì chỉ ID
+  const folderUrlMatch = cleaned.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (folderUrlMatch?.[1]) {
+    cleaned = folderUrlMatch[1];
+  } else {
+    const queryIdMatch = cleaned.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+    if (queryIdMatch?.[1]) {
+      cleaned = queryIdMatch[1];
+    }
+  }
+
+  // Tránh các giá trị rác/placeholder như ".", "..", "null", "undefined" hoặc chuỗi không hợp lệ
+  if (
+    !cleaned ||
+    cleaned === '.' ||
+    cleaned === '..' ||
+    cleaned.toLowerCase() === 'null' ||
+    cleaned.toLowerCase() === 'undefined' ||
+    !/^[a-zA-Z0-9_-]{10,}$/.test(cleaned)
+  ) {
+    return DEFAULT_DRIVE_ARCHIVE_ROOT_FOLDER_ID;
+  }
+
+  return cleaned;
+}
+
+function normalizePrivateKey(rawPrivateKey: unknown): string {
+  return String(rawPrivateKey || '')
+    .replace(/\\\\n/g, '\n')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
 function parseServiceAccountCredentials(rawKey: string | undefined): ServiceAccountCredentials | null {
-  const cleaned = cleanEnv(rawKey);
+  const cleaned = cleanEnv(rawKey).trim();
   if (!cleaned) return null;
 
   const tryParseJson = (jsonText: string): ServiceAccountCredentials | null => {
-    try {
-      const parsed = JSON.parse(jsonText);
-      if (!parsed || typeof parsed !== 'object') return null;
-      const clientEmail = String(parsed.client_email || '').trim();
-      const privateKey = String(parsed.private_key || '').replace(/\\n/g, '\n').trim();
-      if (!clientEmail || !privateKey.includes('-----BEGIN')) return null;
-      return { client_email: clientEmail, private_key: privateKey };
-    } catch {
-      return null;
-    }
+    const attempt = (candidate: string): ServiceAccountCredentials | null => {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const clientEmail = String(parsed.client_email || '').trim();
+        const privateKey = normalizePrivateKey(parsed.private_key);
+        if (!clientEmail || !privateKey.includes('-----BEGIN')) return null;
+        return { client_email: clientEmail, private_key: privateKey };
+      } catch {
+        return null;
+      }
+    };
+
+    const direct = attempt(jsonText);
+    if (direct) return direct;
+
+    // Fallback khi JSON bị dán có xuống dòng thật bên trong chuỗi private_key
+    const repairedNewlines = jsonText.replace(
+      /"private_key"\s*:\s*"([\s\S]*?)"/,
+      (_match, inner) => `"private_key":"${String(inner).replace(/\r?\n/g, '\\n')}"`
+    );
+    return attempt(repairedNewlines);
   };
 
   if (cleaned.startsWith('{')) {
     return tryParseJson(cleaned);
   }
 
-  // Hỗ trợ cấu hình GOOGLE_SERVICE_ACCOUNT_KEY dạng Base64 JSON
+  // Hỗ trợ cấu hình GOOGLE_SERVICE_ACCOUNT_KEY dạng Base64 / Base64URL JSON
   try {
-    const decoded = Buffer.from(cleaned, 'base64').toString('utf8');
+    const base64Standard = cleaned.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = Buffer.from(base64Standard, 'base64').toString('utf8');
     return tryParseJson(decoded);
   } catch {
     return null;
@@ -77,26 +137,9 @@ export function getGoogleDriveArchiveConfig(): {
   credentials: ServiceAccountCredentials | null;
   missingReason?: string;
 } {
-  const rootFolderId = cleanEnv(process.env.GOOGLE_DRIVE_ARCHIVE_ROOT_FOLDER_ID);
+  const rootFolderId = normalizeDriveFolderId(process.env.GOOGLE_DRIVE_ARCHIVE_ROOT_FOLDER_ID);
   const credentials = parseServiceAccountCredentials(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
 
-  if (!rootFolderId && !credentials) {
-    return {
-      configured: false,
-      rootFolderId: '',
-      credentials: null,
-      missingReason:
-        'Chưa cấu hình GOOGLE_DRIVE_ARCHIVE_ROOT_FOLDER_ID và GOOGLE_SERVICE_ACCOUNT_KEY.',
-    };
-  }
-  if (!rootFolderId) {
-    return {
-      configured: false,
-      rootFolderId: '',
-      credentials,
-      missingReason: 'Chưa cấu hình GOOGLE_DRIVE_ARCHIVE_ROOT_FOLDER_ID.',
-    };
-  }
   if (!credentials) {
     return {
       configured: false,
@@ -176,22 +219,101 @@ async function extractDriveError(res: Response): Promise<string> {
   }
 }
 
+function buildDrivePermissionError(params: {
+  actionLabel: string;
+  folderLabel: string;
+  folderId: string;
+  clientEmail: string;
+  rawError: string;
+  status?: number;
+}): string {
+  const lower = params.rawError.toLowerCase();
+  const isQuotaError = lower.includes('quota') || lower.includes('storagequotaexceeded');
+  if (isQuotaError) {
+    return `${params.actionLabel} "${params.folderLabel}" (ID: ${params.folderId}): Service Account (${params.clientEmail}) không có dung lượng My Drive cá nhân. Vui lòng dùng Google Workspace Shared Drive và cấp quyền Content Manager cho ${params.clientEmail}. Chi tiết: ${params.rawError}`;
+  }
+
+  const isNotFoundOrForbidden =
+    params.status === 403 ||
+    params.status === 404 ||
+    lower.includes('file not found') ||
+    lower.includes('not found') ||
+    lower.includes('insufficient') ||
+    lower.includes('permission') ||
+    lower.includes('forbidden');
+
+  if (isNotFoundOrForbidden) {
+    return `${params.actionLabel} "${params.folderLabel}" (ID: ${params.folderId}): ${params.rawError}. Vui lòng kiểm tra ID thư mục và cấp quyền Editor (hoặc Content Manager trên Shared Drive) cho Service Account (${params.clientEmail}).`;
+  }
+
+  return `${params.actionLabel} "${params.folderLabel}": ${params.rawError}`;
+}
+
+async function ensureRootFolderAccessible(params: {
+  token: string;
+  rootFolderId: string;
+  clientEmail: string;
+}): Promise<void> {
+  const url = `${GOOGLE_DRIVE_API_BASE}/${encodeURIComponent(
+    params.rootFolderId
+  )}?supportsAllDrives=true&fields=id,name,mimeType,trashed,driveId`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${params.token}` },
+    signal: AbortSignal.timeout(DRIVE_REQUEST_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const rawError = await extractDriveError(res);
+    throw new Error(
+      buildDrivePermissionError({
+        actionLabel: 'Không thể truy cập thư mục gốc Drive',
+        folderLabel: params.rootFolderId,
+        folderId: params.rootFolderId,
+        clientEmail: params.clientEmail,
+        rawError,
+        status: res.status,
+      })
+    );
+  }
+
+  const info = await res.json().catch(() => null);
+  if (!info?.id || info.trashed) {
+    throw new Error(
+      `Thư mục gốc Google Drive (ID: ${params.rootFolderId}) đã bị xóa vào thùng rác hoặc không hợp lệ. Vui lòng kiểm tra quyền Editor của ${params.clientEmail}.`
+    );
+  }
+  if (info.mimeType && info.mimeType !== 'application/vnd.google-apps.folder') {
+    throw new Error(
+      `ID "${params.rootFolderId}" không phải là thư mục Google Drive (mimeType: ${info.mimeType}).`
+    );
+  }
+}
+
 async function findOrCreateDriveFolder(
   token: string,
   parentId: string,
-  folderName: string
+  folderName: string,
+  clientEmail: string
 ): Promise<string> {
+  const cleanParentId = parentId.trim();
   const safeName = folderName.trim() || 'Khác';
   const query = [
     `name = '${escapeDriveQueryLiteral(safeName)}'`,
     `mimeType = 'application/vnd.google-apps.folder'`,
-    `'${escapeDriveQueryLiteral(parentId)}' in parents`,
+    `'${escapeDriveQueryLiteral(cleanParentId)}' in parents`,
     'trashed = false',
   ].join(' and ');
 
-  const searchUrl = `${GOOGLE_DRIVE_API_BASE}?q=${encodeURIComponent(
-    query
-  )}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true&pageSize=1`;
+  const searchParams = new URLSearchParams({
+    q: query,
+    fields: 'files(id,name)',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+    corpora: 'allDrives',
+    pageSize: '1',
+  });
+  const searchUrl = `${GOOGLE_DRIVE_API_BASE}?${searchParams.toString()}`;
 
   const searchRes = await fetch(searchUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -199,7 +321,17 @@ async function findOrCreateDriveFolder(
   });
 
   if (!searchRes.ok) {
-    throw new Error(`Không thể tìm thư mục Drive "${safeName}": ${await extractDriveError(searchRes)}`);
+    const rawError = await extractDriveError(searchRes);
+    throw new Error(
+      buildDrivePermissionError({
+        actionLabel: 'Không thể tìm thư mục Drive',
+        folderLabel: safeName,
+        folderId: cleanParentId,
+        clientEmail,
+        rawError,
+        status: searchRes.status,
+      })
+    );
   }
 
   const searchJson = await searchRes.json().catch(() => ({}));
@@ -217,13 +349,23 @@ async function findOrCreateDriveFolder(
     body: JSON.stringify({
       name: safeName,
       mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentId],
+      parents: [cleanParentId],
     }),
     signal: AbortSignal.timeout(DRIVE_REQUEST_TIMEOUT_MS),
   });
 
   if (!createRes.ok) {
-    throw new Error(`Không thể tạo thư mục Drive "${safeName}": ${await extractDriveError(createRes)}`);
+    const rawError = await extractDriveError(createRes);
+    throw new Error(
+      buildDrivePermissionError({
+        actionLabel: 'Không thể tạo thư mục Drive',
+        folderLabel: safeName,
+        folderId: cleanParentId,
+        clientEmail,
+        rawError,
+        status: createRes.status,
+      })
+    );
   }
 
   const created = await createRes.json();
@@ -533,12 +675,25 @@ export async function syncDocumentToGoogleDrive(params: {
 
   try {
     const token = await getGoogleDriveAccessToken(config.credentials);
+    const clientEmail = config.credentials.client_email;
+    await ensureRootFolderAccessible({
+      token,
+      rootFolderId: config.rootFolderId,
+      clientEmail,
+    });
+
     const yearFolderName = `Năm ${extractDocumentYear(doc.issued_date)}`;
-    const yearFolderId = await findOrCreateDriveFolder(token, config.rootFolderId, yearFolderName);
+    const yearFolderId = await findOrCreateDriveFolder(
+      token,
+      config.rootFolderId,
+      yearFolderName,
+      clientEmail
+    );
     const categoryFolderId = await findOrCreateDriveFolder(
       token,
       yearFolderId,
-      category.name || category.code || 'Tài liệu chung'
+      category.name || category.code || 'Tài liệu chung',
+      clientEmail
     );
 
     const driveName = buildDriveDocumentName(doc);
@@ -633,7 +788,32 @@ export async function syncDocumentToGoogleDrive(params: {
       drive_sync_error: null,
     };
   } catch (err: any) {
-    const message = err?.message || 'Lỗi đồng bộ Google Drive không xác định.';
+    const rawMsg = String(err?.message || 'Lỗi đồng bộ Google Drive không xác định.');
+    let message = rawMsg;
+    if (!rawMsg.includes(config.credentials.client_email)) {
+      const lower = rawMsg.toLowerCase();
+      if (lower.includes('quota') || lower.includes('storagequotaexceeded')) {
+        message = buildDrivePermissionError({
+          actionLabel: 'Tải tệp lên Google Drive',
+          folderLabel: doc.title,
+          folderId: config.rootFolderId,
+          clientEmail: config.credentials.client_email,
+          rawError: rawMsg,
+        });
+      } else if (
+        lower.includes('file not found') ||
+        lower.includes('insufficient') ||
+        lower.includes('permission')
+      ) {
+        message = buildDrivePermissionError({
+          actionLabel: 'Đồng bộ Google Drive',
+          folderLabel: doc.title,
+          folderId: config.rootFolderId,
+          clientEmail: config.credentials.client_email,
+          rawError: rawMsg,
+        });
+      }
+    }
     console.warn('[GoogleDriveArchive] Sync warning:', message);
     return {
       drive_sync_status: 'FAILED',

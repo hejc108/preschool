@@ -944,6 +944,14 @@ export default function AdminDocumentsPage() {
                                     <CloudOff className="w-3 h-3" />
                                     Lỗi đồng bộ
                                   </span>
+                                  {doc.drive_sync_error && (
+                                    <p
+                                      className="text-[11px] leading-snug text-rose-700 max-w-[240px] whitespace-normal line-clamp-2 select-text"
+                                      title={doc.drive_sync_error}
+                                    >
+                                      {doc.drive_sync_error}
+                                    </p>
+                                  )}
                                   {doc.status === 'ACTIVE' && (
                                     <button
                                       type="button"
