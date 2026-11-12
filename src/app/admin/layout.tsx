@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
   Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck, KeyRound, ShieldCheck, QrCode,
-  Menu, X, SlidersHorizontal
+  Menu, X, SlidersHorizontal, FileText
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -82,6 +82,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
+    { label: 'Quản lý tài liệu', href: '/admin/documents', icon: FileText },
     { label: 'Mã QR', href: '/admin/qr-codes', icon: QrCode, badge: 'Standee' },
   ];
 

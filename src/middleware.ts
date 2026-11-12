@@ -362,6 +362,12 @@ export async function middleware(request: NextRequest) {
       return attachUpdatedCookies(NextResponse.redirect(dashboardUrl));
     }
 
+    if (pathname.startsWith('/admin/documents') && !hasAdminRole) {
+      const staffUrl = new URL('/admin/menu', request.url);
+      staffUrl.searchParams.set('warning', 'admin_required');
+      return attachUpdatedCookies(NextResponse.redirect(staffUrl));
+    }
+
     if (isTeacherRoute && !hasTeacherRole && !hasAdminRole && !hasStaffRole) {
       if (hasParentRole) {
         const parentUrl = new URL('/parent', request.url);

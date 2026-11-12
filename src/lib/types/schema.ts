@@ -533,3 +533,46 @@ export interface PreschoolAISchemaResponse {
   image_prompts: string[];
   youtube_keyword: string;
 }
+
+// --- PHẦN 6: QUẢN LÝ TÀI LIỆU / VĂN BẢN (ADMIN WEB) ---
+export type DocumentStorageType = 'SUPABASE_STORAGE' | 'EXTERNAL_LINK';
+export type DocumentVisibilityScope = 'ALL_ADMINS' | 'SUPER_ADMIN_ONLY';
+export type DocumentStatus = 'ACTIVE' | 'ARCHIVED';
+export type DocumentDriveSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED' | 'SKIPPED';
+
+export interface DocumentCategory {
+  id: string;
+  code: string;
+  name: string;
+  sort_order: number;
+  created_at?: string;
+  document_count?: number;
+}
+
+export interface SchoolDocument {
+  id: string;
+  title: string;
+  document_number?: string | null;
+  issued_date: string; // YYYY-MM-DD
+  category_id: string;
+  category?: DocumentCategory | null;
+  storage_type: DocumentStorageType;
+  storage_path?: string | null;
+  external_url?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  mime_type?: string | null;
+  description?: string | null;
+  visibility_scope: DocumentVisibilityScope;
+  status: DocumentStatus;
+  uploaded_by?: string | null;
+  uploader_name?: string | null;
+  drive_sync_status: DocumentDriveSyncStatus;
+  drive_file_id?: string | null;
+  drive_web_view_link?: string | null;
+  drive_synced_at?: string | null;
+  drive_sync_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
