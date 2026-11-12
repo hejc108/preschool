@@ -2,6 +2,7 @@ import { requireActiveRole } from '@/lib/auth/sessionContext';
 import {
   deleteDocumentPermanently,
   getDocumentById,
+  listDocumentAuditLogs,
   updateDocumentRecord,
 } from '@/lib/documents/documentService';
 import { fromServiceError, jsonError, jsonOk } from '@/lib/documents/apiHelpers';
@@ -17,10 +18,12 @@ export async function GET(
     const auth = await requireActiveRole(request, ['SUPER_ADMIN', 'SCHOOL_ADMIN']);
     if ('response' in auth) return auth.response;
 
-    const result = await getDocumentById(auth.ctx, context.params?.id || '');
+    const id = context.params?.id || '';
+    const result = await getDocumentById(auth.ctx, id);
     if (!result.ok) return fromServiceError(result);
 
-    return jsonOk({ document: result.document });
+    const auditLogs = await listDocumentAuditLogs(auth.ctx, result.document.id);
+    return jsonOk({ document: result.document, audit_logs: auditLogs });
   } catch (err: any) {
     console.error('GET /api/admin/documents/[id] error:', err);
     return jsonError(

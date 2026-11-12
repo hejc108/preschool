@@ -534,10 +534,33 @@ export interface PreschoolAISchemaResponse {
   youtube_keyword: string;
 }
 
-// --- PHẦN 6: QUẢN LÝ TÀI LIỆU / VĂN BẢN (ADMIN WEB) ---
+// --- PHẦN 6: QUẢN LÝ TÀI LIỆU / VĂN BẢN (ADMIN WEB - SRS 6 TRẠNG THÁI) ---
 export type DocumentStorageType = 'SUPABASE_STORAGE' | 'EXTERNAL_LINK';
 export type DocumentVisibilityScope = 'ALL_ADMINS' | 'SUPER_ADMIN_ONLY';
-export type DocumentStatus = 'ACTIVE' | 'ARCHIVED';
+export type DocumentStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'APPROVED'
+  | 'WITHDRAWN'
+  | 'SUPERSEDED'
+  | 'EXPIRED';
+export type DocumentWorkflowAction =
+  | 'submit_for_approval'
+  | 'approve'
+  | 'reject'
+  | 'supersede'
+  | 'withdraw'
+  | 'expire';
+export type DocumentAuditAction =
+  | 'CREATE_DRAFT'
+  | 'UPDATE_METADATA'
+  | 'SUBMIT'
+  | 'APPROVE'
+  | 'REJECT'
+  | 'SUPERSEDE'
+  | 'WITHDRAW'
+  | 'EXPIRE'
+  | 'DRIVE_SYNC';
 export type DocumentDriveSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED' | 'SKIPPED';
 
 export interface DocumentCategory {
@@ -549,11 +572,26 @@ export interface DocumentCategory {
   document_count?: number;
 }
 
+export interface DocumentAuditLog {
+  id: string;
+  document_id: string;
+  action: DocumentAuditAction;
+  from_status?: DocumentStatus | null;
+  to_status: DocumentStatus;
+  reason?: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  metadata?: Record<string, any> | null;
+  created_at: string;
+}
+
 export interface SchoolDocument {
   id: string;
   title: string;
   document_number?: string | null;
   issued_date: string; // YYYY-MM-DD
+  effective_date?: string | null; // YYYY-MM-DD
+  expiration_date?: string | null; // YYYY-MM-DD
   category_id: string;
   category?: DocumentCategory | null;
   storage_type: DocumentStorageType;
@@ -565,6 +603,13 @@ export interface SchoolDocument {
   description?: string | null;
   visibility_scope: DocumentVisibilityScope;
   status: DocumentStatus;
+  rejection_reason?: string | null;
+  superseded_by_id?: string | null;
+  superseded_by_title?: string | null;
+  superseded_by_number?: string | null;
+  approved_by?: string | null;
+  approver_name?: string | null;
+  approved_at?: string | null;
   uploaded_by?: string | null;
   uploader_name?: string | null;
   drive_sync_status: DocumentDriveSyncStatus;
@@ -575,4 +620,3 @@ export interface SchoolDocument {
   created_at: string;
   updated_at: string;
 }
-

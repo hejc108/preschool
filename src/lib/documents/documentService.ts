@@ -12,6 +12,8 @@ import {
   getTodayVietnamDate,
 } from '@/lib/supabase/server';
 import {
+  DocumentAuditAction,
+  DocumentAuditLog,
   DocumentCategory,
   DocumentStatus,
   DocumentStorageType,
@@ -25,12 +27,17 @@ import {
   DOCUMENT_BUCKET_NAME,
   EXTENSION_TO_MIME,
   extractDocumentYear,
+  formatSequentialDocumentNumber,
+  getDefaultDocumentSymbolForCategory,
   MAX_DOCUMENT_FILE_SIZE,
   normalizeDocumentNumber,
   normalizeIssuedDate,
+  normalizeOptionalDate,
   SIGNED_URL_TTL_SECONDS,
   validateDocumentFileMeta,
+  validateEffectiveAndExpirationDates,
   validateExternalDocumentUrl,
+  validateWorkflowTransition,
 } from '@/lib/documents/validation';
 import { syncDocumentToGoogleDrive } from '@/lib/documents/googleDriveService';
 
@@ -51,8 +58,12 @@ function fail(status: number, error: string, message: string): ServiceErrorResul
   return { ok: false, status, error, message };
 }
 
-function getSafeUploadedBy(ctx: SessionContext): string | null {
+function getSafeProfileUuid(ctx: SessionContext): string | null {
   return isValidUuid(ctx.profileId) ? ctx.profileId : null;
+}
+
+function getActorDisplayName(ctx: SessionContext): string {
+  return (ctx.fullName || ctx.email || 'Quản trị viên').trim();
 }
 
 async function getPreferredStorageClient(ctx: SessionContext): Promise<SupabaseClient> {
@@ -102,7 +113,7 @@ async function fetchCategoryById(
   return data as DocumentCategory;
 }
 
-async function checkDuplicateActiveDocumentNumber(
+async function checkDuplicateApprovedDocumentNumber(
   ctx: SessionContext,
   documentNumber: string | null,
   excludeId?: string
@@ -114,7 +125,7 @@ async function checkDuplicateActiveDocumentNumber(
     await sb
       .from('school_documents')
       .select('id, title, document_number')
-      .eq('status', 'ACTIVE')
+      .eq('status', 'APPROVED')
       .not('document_number', 'is', null)
   );
 
@@ -126,45 +137,12 @@ async function checkDuplicateActiveDocumentNumber(
   return match || null;
 }
 
-function hydrateDocuments(
-  rows: any[],
-  categoriesMap: Map<string, DocumentCategory>,
-  uploaderNameMap: Map<string, string>
-): SchoolDocument[] {
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    document_number: r.document_number ?? null,
-    issued_date: r.issued_date,
-    category_id: r.category_id,
-    category: categoriesMap.get(r.category_id) || null,
-    storage_type: r.storage_type as DocumentStorageType,
-    storage_path: r.storage_path ?? null,
-    external_url: r.external_url ?? null,
-    file_name: r.file_name ?? null,
-    file_size: r.file_size !== null && r.file_size !== undefined ? Number(r.file_size) : null,
-    mime_type: r.mime_type ?? null,
-    description: r.description ?? null,
-    visibility_scope: r.visibility_scope as DocumentVisibilityScope,
-    status: r.status as DocumentStatus,
-    uploaded_by: r.uploaded_by ?? null,
-    uploader_name: r.uploaded_by ? uploaderNameMap.get(r.uploaded_by) || null : null,
-    drive_sync_status: (r.drive_sync_status || 'PENDING') as SchoolDocument['drive_sync_status'],
-    drive_file_id: r.drive_file_id ?? null,
-    drive_web_view_link: r.drive_web_view_link ?? null,
-    drive_synced_at: r.drive_synced_at ?? null,
-    drive_sync_error: r.drive_sync_error ?? null,
-    created_at: r.created_at,
-    updated_at: r.updated_at,
-  }));
-}
-
-async function fetchUploaderNamesMap(
+async function fetchProfileNamesMap(
   ctx: SessionContext,
-  rows: Array<{ uploaded_by?: string | null }>
+  rawIds: Array<string | null | undefined>
 ): Promise<Map<string, string>> {
   const ids = Array.from(
-    new Set(rows.map((r) => r.uploaded_by).filter((id): id is string => Boolean(id)))
+    new Set(rawIds.filter((id): id is string => Boolean(id) && isValidUuid(id)))
   );
   const map = new Map<string, string>();
   if (ids.length === 0) return map;
@@ -182,6 +160,332 @@ async function fetchUploaderNamesMap(
     // Non-fatal
   }
   return map;
+}
+
+async function fetchSupersededSummaryMap(
+  ctx: SessionContext,
+  rows: any[]
+): Promise<Map<string, { title: string; document_number: string | null }>> {
+  const map = new Map<string, { title: string; document_number: string | null }>();
+  rows.forEach((r) => {
+    if (r?.id) {
+      map.set(r.id, { title: r.title, document_number: r.document_number ?? null });
+    }
+  });
+
+  const missingIds = Array.from(
+    new Set(
+      rows
+        .map((r) => r.superseded_by_id)
+        .filter((id): id is string => Boolean(id) && isValidUuid(id) && !map.has(id))
+    )
+  );
+
+  if (missingIds.length === 0) return map;
+
+  try {
+    const { data } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('school_documents')
+        .select('id, title, document_number')
+        .in('id', missingIds)
+    );
+    if (Array.isArray(data)) {
+      data.forEach((row: any) => {
+        map.set(row.id, { title: row.title, document_number: row.document_number ?? null });
+      });
+    }
+  } catch {
+    // Non-fatal
+  }
+  return map;
+}
+
+function hydrateDocuments(
+  rows: any[],
+  categoriesMap: Map<string, DocumentCategory>,
+  profileNameMap: Map<string, string>,
+  supersededMap: Map<string, { title: string; document_number: string | null }>
+): SchoolDocument[] {
+  return rows.map((r) => {
+    const supInfo = r.superseded_by_id ? supersededMap.get(r.superseded_by_id) : undefined;
+    return {
+      id: r.id,
+      title: r.title,
+      document_number: r.document_number ?? null,
+      issued_date: r.issued_date,
+      effective_date: r.effective_date ?? null,
+      expiration_date: r.expiration_date ?? null,
+      category_id: r.category_id,
+      category: categoriesMap.get(r.category_id) || null,
+      storage_type: r.storage_type as DocumentStorageType,
+      storage_path: r.storage_path ?? null,
+      external_url: r.external_url ?? null,
+      file_name: r.file_name ?? null,
+      file_size: r.file_size !== null && r.file_size !== undefined ? Number(r.file_size) : null,
+      mime_type: r.mime_type ?? null,
+      description: r.description ?? null,
+      visibility_scope: r.visibility_scope as DocumentVisibilityScope,
+      status: r.status as DocumentStatus,
+      rejection_reason: r.rejection_reason ?? null,
+      superseded_by_id: r.superseded_by_id ?? null,
+      superseded_by_title: supInfo?.title ?? null,
+      superseded_by_number: supInfo?.document_number ?? null,
+      approved_by: r.approved_by ?? null,
+      approver_name: r.approved_by ? profileNameMap.get(r.approved_by) || null : null,
+      approved_at: r.approved_at ?? null,
+      uploaded_by: r.uploaded_by ?? null,
+      uploader_name: r.uploaded_by ? profileNameMap.get(r.uploaded_by) || null : null,
+      drive_sync_status: (r.drive_sync_status || 'PENDING') as SchoolDocument['drive_sync_status'],
+      drive_file_id: r.drive_file_id ?? null,
+      drive_web_view_link: r.drive_web_view_link ?? null,
+      drive_synced_at: r.drive_synced_at ?? null,
+      drive_sync_error: r.drive_sync_error ?? null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    };
+  });
+}
+
+async function hydrateSingleDocument(
+  ctx: SessionContext,
+  row: any,
+  category?: DocumentCategory | null
+): Promise<SchoolDocument> {
+  const cat = category || (await fetchCategoryById(ctx, row.category_id));
+  const catMap = new Map<string, DocumentCategory>();
+  if (cat) catMap.set(cat.id, cat);
+
+  const [profileMap, supMap] = await Promise.all([
+    fetchProfileNamesMap(ctx, [row.uploaded_by, row.approved_by]),
+    fetchSupersededSummaryMap(ctx, [row]),
+  ]);
+
+  return hydrateDocuments([row], catMap, profileMap, supMap)[0];
+}
+
+async function appendDocumentAuditLog(
+  ctx: SessionContext,
+  params: {
+    documentId: string;
+    action: DocumentAuditAction;
+    fromStatus: DocumentStatus | null;
+    toStatus: DocumentStatus;
+    reason?: string | null;
+    metadata?: Record<string, any>;
+    systemActorName?: string;
+  }
+): Promise<void> {
+  try {
+    const payload = {
+      document_id: params.documentId,
+      action: params.action,
+      from_status: params.fromStatus,
+      to_status: params.toStatus,
+      reason: params.reason ? String(params.reason).trim() : null,
+      actor_id: params.systemActorName ? null : getSafeProfileUuid(ctx),
+      actor_name: params.systemActorName || getActorDisplayName(ctx),
+      metadata: params.metadata || {},
+    };
+
+    const cfg = getSupabaseConfig();
+    if (params.systemActorName && cfg.isValidServiceRoleKey) {
+      await getSupabaseAdminClient(false).from('document_audit_logs').insert(payload);
+      return;
+    }
+
+    await executeWithContextFallback(ctx, async (sb) =>
+      await sb.from('document_audit_logs').insert(payload)
+    );
+  } catch (err) {
+    console.warn('[DocumentAuditLog] Non-fatal insert error:', err);
+  }
+}
+
+export async function listDocumentAuditLogs(
+  ctx: SessionContext,
+  documentId: string
+): Promise<DocumentAuditLog[]> {
+  if (!isValidUuid(documentId)) return [];
+  const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+    await sb
+      .from('document_audit_logs')
+      .select('id, document_id, action, from_status, to_status, reason, actor_id, actor_name, metadata, created_at')
+      .eq('document_id', documentId)
+      .order('created_at', { ascending: false })
+  );
+
+  if (error || !Array.isArray(data)) return [];
+  const profileMap = await fetchProfileNamesMap(
+    ctx,
+    data.map((row: any) => row.actor_id)
+  );
+
+  return data.map((row: any) => ({
+    id: row.id,
+    document_id: row.document_id,
+    action: row.action as DocumentAuditAction,
+    from_status: (row.from_status || null) as DocumentStatus | null,
+    to_status: row.to_status as DocumentStatus,
+    reason: row.reason ?? null,
+    actor_id: row.actor_id ?? null,
+    actor_name:
+      row.actor_name || (row.actor_id ? profileMap.get(row.actor_id) || null : null) || 'Hệ thống',
+    metadata: (row.metadata || {}) as Record<string, any>,
+    created_at: row.created_at,
+  }));
+}
+
+async function computeSequentialNumberFallback(
+  ctx: SessionContext,
+  year: number,
+  symbol: string
+): Promise<string> {
+  const cleanSymbol = symbol.trim().toUpperCase() || 'CV-MNSM';
+  const suffix = `/${year}/${cleanSymbol}`;
+  const { data } = await executeWithContextFallback(ctx, async (sb) =>
+    await sb
+      .from('school_documents')
+      .select('document_number')
+      .not('document_number', 'is', null)
+  );
+
+  let maxSeq = 0;
+  if (Array.isArray(data)) {
+    data.forEach((row: any) => {
+      const raw = String(row.document_number || '').trim();
+      if (!raw.toUpperCase().endsWith(suffix)) return;
+      const prefix = raw.slice(0, raw.length - suffix.length);
+      if (/^\d+$/.test(prefix)) {
+        const parsed = Number(prefix);
+        if (Number.isFinite(parsed) && parsed > maxSeq) maxSeq = parsed;
+      }
+    });
+  }
+
+  return formatSequentialDocumentNumber(maxSeq + 1, year, cleanSymbol);
+}
+
+export async function peekNextDocumentNumber(
+  ctx: SessionContext,
+  params: { year?: number; symbol?: string | null; categoryId?: string | null }
+): Promise<string> {
+  const todayYear = Number(extractDocumentYear(getTodayVietnamDate()));
+  const year =
+    params.year && Number.isInteger(params.year) && params.year >= 2000 && params.year <= 2100
+      ? params.year
+      : todayYear;
+
+  let symbol = String(params.symbol || '').trim().toUpperCase();
+  if (!symbol && params.categoryId && isValidUuid(params.categoryId)) {
+    const cat = await fetchCategoryById(ctx, params.categoryId);
+    symbol = getDefaultDocumentSymbolForCategory(cat?.code);
+  }
+  if (!symbol) symbol = 'CV-MNSM';
+
+  try {
+    const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb.rpc('peek_next_document_number', {
+        p_year: year,
+        p_symbol: symbol,
+      })
+    );
+    if (!error && typeof data === 'string' && data.trim()) {
+      return data.trim();
+    }
+  } catch {
+    // Fallback below
+  }
+
+  return computeSequentialNumberFallback(ctx, year, symbol);
+}
+
+async function generateNextDocumentNumber(
+  ctx: SessionContext,
+  params: { year: number; symbol: string }
+): Promise<string> {
+  const cleanSymbol = params.symbol.trim().toUpperCase() || 'CV-MNSM';
+  try {
+    const { data, error } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb.rpc('generate_next_document_number', {
+        p_year: params.year,
+        p_symbol: cleanSymbol,
+      })
+    );
+    if (!error && typeof data === 'string' && data.trim()) {
+      return data.trim();
+    }
+  } catch {
+    // Fallback below
+  }
+
+  return computeSequentialNumberFallback(ctx, params.year, cleanSymbol);
+}
+
+/**
+ * Tự động chuyển các văn bản APPROVED có expiration_date < hôm nay (GMT+7) sang EXPIRED.
+ */
+async function autoExpireElapsedDocuments(
+  ctx: SessionContext,
+  specificDocumentId?: string
+): Promise<void> {
+  const today = getTodayVietnamDate();
+  const cfg = getSupabaseConfig();
+  const canMutateApproved =
+    cfg.isValidServiceRoleKey || ctx.activeRole === 'SUPER_ADMIN';
+
+  if (!canMutateApproved) return;
+
+  try {
+    const runWithClient = async (sb: SupabaseClient) => {
+      let query = sb
+        .from('school_documents')
+        .select('id, expiration_date')
+        .eq('status', 'APPROVED')
+        .not('expiration_date', 'is', null)
+        .lt('expiration_date', today);
+
+      if (specificDocumentId) {
+        query = query.eq('id', specificDocumentId);
+      }
+
+      const { data: candidates, error } = await query;
+      if (error || !Array.isArray(candidates) || candidates.length === 0) return;
+
+      const expiredIds = candidates.map((c: any) => c.id);
+      const { data: transitioned, error: updErr } = await sb
+        .from('school_documents')
+        .update({ status: 'EXPIRED' })
+        .in('id', expiredIds)
+        .eq('status', 'APPROVED')
+        .select('id, expiration_date');
+
+      if (updErr || !Array.isArray(transitioned)) return;
+
+      for (const row of transitioned) {
+        await appendDocumentAuditLog(ctx, {
+          documentId: row.id,
+          action: 'EXPIRE',
+          fromStatus: 'APPROVED',
+          toStatus: 'EXPIRED',
+          reason: `Tự động chuyển hết hiệu lực do đã qua ngày ${row.expiration_date}.`,
+          systemActorName: 'Hệ thống tự động',
+          metadata: { auto_expired: true, expiration_date: row.expiration_date },
+        });
+      }
+    };
+
+    if (cfg.isValidServiceRoleKey) {
+      await runWithClient(getSupabaseAdminClient(false));
+    } else {
+      await executeWithContextFallback(ctx, async (sb) => {
+        await runWithClient(sb);
+        return { data: null, error: null };
+      });
+    }
+  } catch {
+    // Non-fatal auto-expiry guard
+  }
 }
 
 export async function listCategories(
@@ -321,6 +625,8 @@ export async function listDocuments(
 > {
   const isSuperAdmin = ctx.activeRole === 'SUPER_ADMIN';
 
+  await autoExpireElapsedDocuments(ctx);
+
   const [catRes, docsRes] = await Promise.all([
     listCategories(ctx),
     executeWithContextFallback(ctx, async (sb) => {
@@ -346,7 +652,6 @@ export async function listDocuments(
     );
   }
 
-  // Defense-in-depth scope filter on server
   const scopedRows = ((docsRes.data || []) as any[]).filter((row) =>
     isSuperAdmin ? true : row.visibility_scope === 'ALL_ADMINS'
   );
@@ -354,7 +659,7 @@ export async function listDocuments(
   const categoriesMap = new Map<string, DocumentCategory>();
   const countMap = new Map<string, number>();
   scopedRows.forEach((r) => {
-    if (r.status === 'ACTIVE') {
+    if (r.status === 'APPROVED') {
       countMap.set(r.category_id, (countMap.get(r.category_id) || 0) + 1);
     }
   });
@@ -364,8 +669,15 @@ export async function listDocuments(
     return withCount;
   });
 
-  const uploaderMap = await fetchUploaderNamesMap(ctx, scopedRows);
-  const allHydrated = hydrateDocuments(scopedRows, categoriesMap, uploaderMap);
+  const [profileMap, supMap] = await Promise.all([
+    fetchProfileNamesMap(
+      ctx,
+      scopedRows.flatMap((r) => [r.uploaded_by, r.approved_by])
+    ),
+    fetchSupersededSummaryMap(ctx, scopedRows),
+  ]);
+
+  const allHydrated = hydrateDocuments(scopedRows, categoriesMap, profileMap, supMap);
 
   const yearSet = new Set<string>([extractDocumentYear(getTodayVietnamDate())]);
   allHydrated.forEach((doc) => {
@@ -425,7 +737,8 @@ export async function getDocumentById(
     return fail(400, 'INVALID_DOCUMENT_ID', 'Mã tài liệu không hợp lệ.');
   }
 
-  // Always check existence cleanly so SCHOOL_ADMIN accessing SUPER_ADMIN_ONLY gets explicit 403 Forbidden
+  await autoExpireElapsedDocuments(ctx, id);
+
   const adminCfg = getSupabaseConfig();
   let rawDoc: any = null;
   let fetchErr: any = null;
@@ -445,7 +758,6 @@ export async function getDocumentById(
     rawDoc = res.data;
     fetchErr = res.error;
 
-    // Nếu RLS chặn SELECT của SCHOOL_ADMIN trên tài liệu mật, kiểm tra qua scoped SUPER_ADMIN check hoặc trả 403
     if (!rawDoc && !fetchErr && ctx.activeRole !== 'SUPER_ADMIN') {
       return fail(
         403,
@@ -471,10 +783,7 @@ export async function getDocumentById(
   }
 
   const category = await fetchCategoryById(ctx, rawDoc.category_id);
-  const catMap = new Map<string, DocumentCategory>();
-  if (category) catMap.set(category.id, category);
-  const uploaderMap = await fetchUploaderNamesMap(ctx, [rawDoc]);
-  const [hydrated] = hydrateDocuments([rawDoc], catMap, uploaderMap);
+  const hydrated = await hydrateSingleDocument(ctx, rawDoc, category);
 
   return { ok: true, document: hydrated, category };
 }
@@ -557,6 +866,8 @@ export async function createDocumentRecord(
     document_number?: string | null;
     category_id: string;
     issued_date?: string | null;
+    effective_date?: string | null;
+    expiration_date?: string | null;
     description?: string | null;
     visibility_scope?: string | null;
     storage_type: DocumentStorageType;
@@ -566,6 +877,7 @@ export async function createDocumentRecord(
     file_size?: number | null;
     mime_type?: string | null;
     file?: File | null;
+    initial_action?: 'save_draft' | 'submit_for_approval' | string | null;
   }
 ): Promise<{ ok: true; document: SchoolDocument } | ServiceErrorResult> {
   const title = String(input.title || '').trim();
@@ -587,6 +899,19 @@ export async function createDocumentRecord(
     return fail(400, 'INVALID_ISSUED_DATE', 'Ngày ban hành không đúng định dạng YYYY-MM-DD.');
   }
 
+  const effRes = normalizeOptionalDate(input.effective_date);
+  if (!effRes.ok) return fail(400, 'INVALID_EFFECTIVE_DATE', `Ngày có hiệu lực: ${effRes.error}`);
+  const expRes = normalizeOptionalDate(input.expiration_date);
+  if (!expRes.ok) return fail(400, 'INVALID_EXPIRATION_DATE', `Ngày hết hiệu lực: ${expRes.error}`);
+
+  const datePairCheck = validateEffectiveAndExpirationDates(
+    effRes.date || issuedDate,
+    expRes.date
+  );
+  if (!datePairCheck.ok) {
+    return fail(400, 'INVALID_DATE_RANGE', datePairCheck.error);
+  }
+
   const requestedScope = (input.visibility_scope || 'ALL_ADMINS').trim().toUpperCase();
   if (requestedScope !== 'ALL_ADMINS' && requestedScope !== 'SUPER_ADMIN_ONLY') {
     return fail(400, 'INVALID_VISIBILITY_SCOPE', 'Phạm vi hiển thị không hợp lệ.');
@@ -601,14 +926,18 @@ export async function createDocumentRecord(
   const visibilityScope = requestedScope as DocumentVisibilityScope;
 
   const docNumber = normalizeDocumentNumber(input.document_number);
-  const dup = await checkDuplicateActiveDocumentNumber(ctx, docNumber);
+  const dup = await checkDuplicateApprovedDocumentNumber(ctx, docNumber);
   if (dup) {
     return fail(
       409,
       'DUPLICATE_DOCUMENT_NUMBER',
-      `Số hiệu văn bản "${docNumber}" đã tồn tại ở tài liệu đang hiệu lực ("${dup.title}").`
+      `Số hiệu văn bản "${docNumber}" đã tồn tại ở tài liệu đã phê duyệt ("${dup.title}").`
     );
   }
+
+  const submitImmediately =
+    String(input.initial_action || '').trim().toLowerCase() === 'submit_for_approval';
+  const targetStatus: DocumentStatus = submitImmediately ? 'SUBMITTED' : 'DRAFT';
 
   const description = String(input.description || '').trim() || null;
 
@@ -617,7 +946,6 @@ export async function createDocumentRecord(
   let fileName: string | null = null;
   let fileSize: number | null = null;
   let mimeType: string | null = null;
-  let fileBufferForDrive: Buffer | null = null;
 
   if (input.storage_type === 'EXTERNAL_LINK') {
     const urlCheck = validateExternalDocumentUrl(input.external_url || '');
@@ -665,7 +993,6 @@ export async function createDocumentRecord(
       fileName = input.file.name.trim();
       fileSize = input.file.size;
       mimeType = meta.normalizedMime;
-      fileBufferForDrive = buffer;
     } else if (input.storage_path) {
       const cleanPath = String(input.storage_path).trim().replace(/^\/+/, '');
       if (!cleanPath || cleanPath.includes('..')) {
@@ -697,6 +1024,8 @@ export async function createDocumentRecord(
     title,
     document_number: docNumber,
     issued_date: issuedDate,
+    effective_date: effRes.date,
+    expiration_date: expRes.date,
     category_id: category.id,
     storage_type: input.storage_type,
     storage_path: storagePath,
@@ -706,8 +1035,8 @@ export async function createDocumentRecord(
     mime_type: mimeType,
     description,
     visibility_scope: visibilityScope,
-    status: 'ACTIVE' as DocumentStatus,
-    uploaded_by: getSafeUploadedBy(ctx),
+    status: targetStatus,
+    uploaded_by: getSafeProfileUuid(ctx),
     drive_sync_status: 'PENDING',
   };
 
@@ -716,7 +1045,6 @@ export async function createDocumentRecord(
   );
 
   if (insertErr || !inserted) {
-    // Cleanup orphaned uploaded file if DB insert failed (e.g. race condition duplicate number)
     if (storagePath && input.file) {
       try {
         const sb = await getPreferredStorageClient(ctx);
@@ -735,30 +1063,25 @@ export async function createDocumentRecord(
     return fail(500, 'CREATE_DOCUMENT_FAILED', insertErr?.message || 'Không thể lưu tài liệu.');
   }
 
-  const catMap = new Map<string, DocumentCategory>([[category.id, category]]);
-  const uploaderMap = await fetchUploaderNamesMap(ctx, [inserted]);
-  let [hydrated] = hydrateDocuments([inserted], catMap, uploaderMap);
-
-  // Tự động xuất & sao lưu tài liệu ACTIVE sang Google Drive theo năm
-  const storageClient =
-    hydrated.storage_type === 'SUPABASE_STORAGE' && !fileBufferForDrive
-      ? await getPreferredStorageClient(ctx)
-      : null;
-
-  const driveOutcome = await syncDocumentToGoogleDrive({
-    document: hydrated,
-    category,
-    storageClient,
-    fileBuffer: fileBufferForDrive,
+  await appendDocumentAuditLog(ctx, {
+    documentId: inserted.id,
+    action: 'CREATE_DRAFT',
+    fromStatus: null,
+    toStatus: 'DRAFT',
+    metadata: { title: inserted.title },
   });
 
-  const updatedAfterDrive = await persistDriveOutcome(ctx, hydrated.id, driveOutcome);
-  if (updatedAfterDrive) {
-    [hydrated] = hydrateDocuments([updatedAfterDrive], catMap, uploaderMap);
-  } else {
-    hydrated = { ...hydrated, ...driveOutcome };
+  if (submitImmediately) {
+    await appendDocumentAuditLog(ctx, {
+      documentId: inserted.id,
+      action: 'SUBMIT',
+      fromStatus: 'DRAFT',
+      toStatus: 'SUBMITTED',
+      metadata: { submitted_on_create: true },
+    });
   }
 
+  const hydrated = await hydrateSingleDocument(ctx, inserted, category);
   return { ok: true, document: hydrated };
 }
 
@@ -770,15 +1093,45 @@ export async function updateDocumentRecord(
     document_number?: unknown;
     category_id?: unknown;
     issued_date?: unknown;
+    effective_date?: unknown;
+    expiration_date?: unknown;
     description?: unknown;
     visibility_scope?: unknown;
     status?: unknown;
     external_url?: unknown;
   }
 ): Promise<{ ok: true; document: SchoolDocument } | ServiceErrorResult> {
+  if (input.status !== undefined) {
+    return fail(
+      400,
+      'USE_WORKFLOW_TRANSITION_ENDPOINT',
+      'Không được thay đổi trạng thái trực tiếp qua PATCH. Vui lòng sử dụng quy trình chuyển trạng thái SRS (/transition).'
+    );
+  }
+
   const existingRes = await getDocumentById(ctx, id);
   if (!existingRes.ok) return existingRes;
   const existing = existingRes.document;
+
+  if (ctx.activeRole !== 'SUPER_ADMIN' && existing.status !== 'DRAFT') {
+    return fail(
+      403,
+      'FORBIDDEN_EDIT_NON_DRAFT',
+      'Quản trị trường chỉ được chỉnh sửa thông tin khi tài liệu đang ở trạng thái Soạn thảo (DRAFT).'
+    );
+  }
+
+  if (
+    existing.status === 'WITHDRAWN' ||
+    existing.status === 'SUPERSEDED' ||
+    existing.status === 'EXPIRED'
+  ) {
+    return fail(
+      409,
+      'DOCUMENT_LOCKED_TERMINAL_STATE',
+      'Văn bản đã thu hồi, bị thay thế hoặc hết hiệu lực không thể chỉnh sửa nội dung.'
+    );
+  }
 
   const updates: Record<string, any> = {};
 
@@ -797,6 +1150,7 @@ export async function updateDocumentRecord(
     targetCategory = cat;
   }
 
+  let nextIssuedDate = existing.issued_date;
   if (input.issued_date !== undefined) {
     const parsedDate = normalizeIssuedDate(
       String(input.issued_date || ''),
@@ -806,6 +1160,33 @@ export async function updateDocumentRecord(
       return fail(400, 'INVALID_ISSUED_DATE', 'Ngày ban hành không đúng định dạng YYYY-MM-DD.');
     }
     updates.issued_date = parsedDate;
+    nextIssuedDate = parsedDate;
+  }
+
+  let nextEffectiveDate = existing.effective_date ?? null;
+  if (input.effective_date !== undefined) {
+    const effRes = normalizeOptionalDate(String(input.effective_date || ''));
+    if (!effRes.ok) return fail(400, 'INVALID_EFFECTIVE_DATE', `Ngày có hiệu lực: ${effRes.error}`);
+    updates.effective_date = effRes.date;
+    nextEffectiveDate = effRes.date;
+  }
+
+  let nextExpirationDate = existing.expiration_date ?? null;
+  if (input.expiration_date !== undefined) {
+    const expRes = normalizeOptionalDate(String(input.expiration_date || ''));
+    if (!expRes.ok) {
+      return fail(400, 'INVALID_EXPIRATION_DATE', `Ngày hết hiệu lực: ${expRes.error}`);
+    }
+    updates.expiration_date = expRes.date;
+    nextExpirationDate = expRes.date;
+  }
+
+  const datePairCheck = validateEffectiveAndExpirationDates(
+    nextEffectiveDate || nextIssuedDate,
+    nextExpirationDate
+  );
+  if (!datePairCheck.ok) {
+    return fail(400, 'INVALID_DATE_RANGE', datePairCheck.error);
   }
 
   if (input.description !== undefined) {
@@ -827,16 +1208,6 @@ export async function updateDocumentRecord(
     updates.visibility_scope = scope;
   }
 
-  let nextStatus: DocumentStatus = existing.status;
-  if (input.status !== undefined) {
-    const st = String(input.status || '').trim().toUpperCase();
-    if (st !== 'ACTIVE' && st !== 'ARCHIVED') {
-      return fail(400, 'INVALID_STATUS', 'Trạng thái tài liệu chỉ nhận ACTIVE hoặc ARCHIVED.');
-    }
-    updates.status = st;
-    nextStatus = st as DocumentStatus;
-  }
-
   const nextDocNumber =
     input.document_number !== undefined
       ? normalizeDocumentNumber(String(input.document_number || ''))
@@ -846,13 +1217,13 @@ export async function updateDocumentRecord(
     updates.document_number = nextDocNumber;
   }
 
-  if (nextStatus === 'ACTIVE' && nextDocNumber) {
-    const dup = await checkDuplicateActiveDocumentNumber(ctx, nextDocNumber, existing.id);
+  if (nextDocNumber && (existing.status === 'APPROVED' || input.document_number !== undefined)) {
+    const dup = await checkDuplicateApprovedDocumentNumber(ctx, nextDocNumber, existing.id);
     if (dup) {
       return fail(
         409,
         'DUPLICATE_DOCUMENT_NUMBER',
-        `Số hiệu văn bản "${nextDocNumber}" đã tồn tại ở tài liệu đang hiệu lực ("${dup.title}").`
+        `Số hiệu văn bản "${nextDocNumber}" đã tồn tại ở tài liệu đã phê duyệt ("${dup.title}").`
       );
     }
   }
@@ -881,19 +1252,24 @@ export async function updateDocumentRecord(
       return fail(
         409,
         'DUPLICATE_DOCUMENT_NUMBER',
-        `Số hiệu văn bản "${nextDocNumber}" đã tồn tại ở tài liệu đang hiệu lực.`
+        `Số hiệu văn bản "${nextDocNumber}" đã tồn tại ở tài liệu đã phê duyệt.`
       );
     }
     return fail(500, 'UPDATE_DOCUMENT_FAILED', updErr?.message || 'Không thể cập nhật tài liệu.');
   }
 
-  const catMap = new Map<string, DocumentCategory>();
-  if (targetCategory) catMap.set(targetCategory.id, targetCategory);
-  const uploaderMap = await fetchUploaderNamesMap(ctx, [updatedRow]);
-  let [hydrated] = hydrateDocuments([updatedRow], catMap, uploaderMap);
+  await appendDocumentAuditLog(ctx, {
+    documentId: id,
+    action: 'UPDATE_METADATA',
+    fromStatus: existing.status,
+    toStatus: existing.status,
+    metadata: { updated_fields: Object.keys(updates) },
+  });
 
-  // Chỉ đồng bộ Drive khi tài liệu ở trạng thái ACTIVE; khi ARCHIVED tuyệt đối giữ nguyên bản trên Drive
-  if (hydrated.status === 'ACTIVE' && targetCategory) {
+  let hydrated = await hydrateSingleDocument(ctx, updatedRow, targetCategory);
+
+  // Chỉ đồng bộ Google Drive khi tài liệu ở trạng thái APPROVED
+  if (hydrated.status === 'APPROVED' && targetCategory) {
     const metadataChangedForDrive =
       input.title !== undefined ||
       input.document_number !== undefined ||
@@ -902,7 +1278,6 @@ export async function updateDocumentRecord(
       input.description !== undefined ||
       input.external_url !== undefined ||
       input.visibility_scope !== undefined ||
-      (existing.status === 'ARCHIVED' && hydrated.status === 'ACTIVE') ||
       hydrated.drive_sync_status !== 'SYNCED';
 
     if (metadataChangedForDrive) {
@@ -917,7 +1292,7 @@ export async function updateDocumentRecord(
       });
       const updatedAfterDrive = await persistDriveOutcome(ctx, hydrated.id, driveOutcome);
       if (updatedAfterDrive) {
-        [hydrated] = hydrateDocuments([updatedAfterDrive], catMap, uploaderMap);
+        hydrated = await hydrateSingleDocument(ctx, updatedAfterDrive, targetCategory);
       } else {
         hydrated = { ...hydrated, ...driveOutcome };
       }
@@ -925,6 +1300,264 @@ export async function updateDocumentRecord(
   }
 
   return { ok: true, document: hydrated };
+}
+
+export async function transitionDocumentWorkflow(
+  ctx: SessionContext,
+  id: string,
+  input: {
+    action?: unknown;
+    reason?: unknown;
+    document_number?: unknown;
+    number_symbol?: unknown;
+    auto_generate_number?: unknown;
+    effective_date?: unknown;
+    expiration_date?: unknown;
+    superseded_by_id?: unknown;
+  }
+): Promise<{ ok: true; document: SchoolDocument; audit_logs: DocumentAuditLog[] } | ServiceErrorResult> {
+  const existingRes = await getDocumentById(ctx, id);
+  if (!existingRes.ok) return existingRes;
+  const existing = existingRes.document;
+
+  const actionStr = String(input.action || '').trim();
+  const transitionCheck = validateWorkflowTransition({
+    fromStatus: existing.status,
+    action: actionStr,
+    activeRole: ctx.activeRole,
+  });
+  if (!transitionCheck.ok) {
+    return fail(transitionCheck.status, transitionCheck.code, transitionCheck.error);
+  }
+
+  const { rule } = transitionCheck;
+  const reason = String(input.reason || '').trim() || null;
+
+  if (rule.requiresReason && !reason) {
+    return fail(
+      400,
+      'MISSING_REJECTION_REASON',
+      rule.action === 'reject'
+        ? 'Vui lòng nhập lý do từ chối phê duyệt văn bản.'
+        : 'Vui lòng nhập lý do thu hồi khẩn cấp văn bản.'
+    );
+  }
+
+  const today = getTodayVietnamDate();
+  const updates: Record<string, any> = {
+    status: rule.toStatus,
+  };
+  const auditMetadata: Record<string, any> = {};
+
+  if (rule.action === 'submit_for_approval') {
+    const hasSource =
+      existing.storage_type === 'EXTERNAL_LINK'
+        ? Boolean(existing.external_url)
+        : Boolean(existing.storage_path);
+    if (!existing.title?.trim() || !existing.category_id || !hasSource) {
+      return fail(
+        400,
+        'INCOMPLETE_DRAFT_FOR_SUBMISSION',
+        'Tài liệu cần có đủ tiêu đề, danh mục và tệp/liên kết đính kèm trước khi trình duyệt.'
+      );
+    }
+  }
+
+  if (rule.action === 'approve') {
+    let effDate = existing.effective_date || existing.issued_date || today;
+    if (input.effective_date !== undefined && String(input.effective_date || '').trim()) {
+      const effRes = normalizeOptionalDate(String(input.effective_date || ''));
+      if (!effRes.ok || !effRes.date) {
+        return fail(400, 'INVALID_EFFECTIVE_DATE', 'Ngày có hiệu lực không đúng định dạng YYYY-MM-DD.');
+      }
+      effDate = effRes.date;
+    }
+
+    let expDate: string | null = existing.expiration_date ?? null;
+    if (input.expiration_date !== undefined) {
+      const expRes = normalizeOptionalDate(String(input.expiration_date || ''));
+      if (!expRes.ok) {
+        return fail(400, 'INVALID_EXPIRATION_DATE', `Ngày hết hiệu lực: ${expRes.error}`);
+      }
+      expDate = expRes.date;
+    }
+
+    const pairCheck = validateEffectiveAndExpirationDates(effDate, expDate);
+    if (!pairCheck.ok) {
+      return fail(400, 'INVALID_DATE_RANGE', pairCheck.error);
+    }
+
+    const category =
+      existingRes.category || (await fetchCategoryById(ctx, existing.category_id));
+    const requestedNumber = normalizeDocumentNumber(
+      input.document_number !== undefined
+        ? String(input.document_number || '')
+        : existing.document_number
+    );
+
+    const shouldAutoGenerate =
+      input.auto_generate_number === true || !requestedNumber;
+
+    let finalDocNumber = requestedNumber;
+    if (shouldAutoGenerate && !requestedNumber) {
+      const targetYear = Number(extractDocumentYear(effDate));
+      const requestedSymbol = String(input.number_symbol || '').trim().toUpperCase();
+      const symbol = requestedSymbol || getDefaultDocumentSymbolForCategory(category?.code);
+      finalDocNumber = await generateNextDocumentNumber(ctx, { year: targetYear, symbol });
+      auditMetadata.auto_numbered = true;
+    }
+
+    if (finalDocNumber) {
+      const dup = await checkDuplicateApprovedDocumentNumber(ctx, finalDocNumber, existing.id);
+      if (dup) {
+        return fail(
+          409,
+          'DUPLICATE_DOCUMENT_NUMBER',
+          `Số hiệu văn bản "${finalDocNumber}" đã tồn tại ở tài liệu đã phê duyệt ("${dup.title}").`
+        );
+      }
+    }
+
+    updates.document_number = finalDocNumber;
+    updates.effective_date = effDate;
+    updates.expiration_date = expDate;
+    updates.approved_by = getSafeProfileUuid(ctx);
+    updates.approved_at = new Date().toISOString();
+    updates.rejection_reason = null;
+
+    auditMetadata.document_number = finalDocNumber;
+    auditMetadata.effective_date = effDate;
+    auditMetadata.expiration_date = expDate;
+  }
+
+  if (rule.action === 'reject' || rule.action === 'withdraw') {
+    updates.rejection_reason = reason;
+  }
+
+  if (rule.action === 'supersede') {
+    const targetId = String(input.superseded_by_id || '').trim();
+    if (!isValidUuid(targetId)) {
+      return fail(
+        400,
+        'MISSING_SUPERSEDED_BY_ID',
+        'Vui lòng chọn văn bản mới thay thế (superseded_by_id).'
+      );
+    }
+    if (targetId === existing.id) {
+      return fail(
+        400,
+        'SELF_SUPERSEDE_NOT_ALLOWED',
+        'Không thể chọn chính văn bản hiện tại làm văn bản thay thế.'
+      );
+    }
+
+    const replacementRes = await getDocumentById(ctx, targetId);
+    if (!replacementRes.ok) {
+      return fail(
+        replacementRes.status === 403 ? 403 : 404,
+        'INVALID_REPLACEMENT_DOCUMENT',
+        'Không tìm thấy hoặc không có quyền truy cập văn bản thay thế được chọn.'
+      );
+    }
+    if (replacementRes.document.status !== 'APPROVED') {
+      return fail(
+        409,
+        'REPLACEMENT_MUST_BE_APPROVED',
+        'Văn bản thay thế bắt buộc phải đang ở trạng thái Đã phê duyệt (APPROVED).'
+      );
+    }
+
+    updates.superseded_by_id = targetId;
+    auditMetadata.superseded_by_id = targetId;
+    auditMetadata.superseded_by_number = replacementRes.document.document_number ?? null;
+    auditMetadata.superseded_by_title = replacementRes.document.title;
+  }
+
+  if (rule.action === 'expire') {
+    updates.expiration_date = existing.expiration_date || today;
+    auditMetadata.expiration_date = updates.expiration_date;
+  }
+
+  const { data: updatedRow, error: updErr } = await executeWithContextFallback(ctx, async (sb) =>
+    await sb.from('school_documents').update(updates).eq('id', id).select('*').single()
+  );
+
+  if (updErr || !updatedRow) {
+    if (updErr?.code === '23505') {
+      return fail(
+        409,
+        'DUPLICATE_DOCUMENT_NUMBER',
+        'Số hiệu văn bản đã trùng với một tài liệu đang phê duyệt khác.'
+      );
+    }
+    return fail(
+      500,
+      'WORKFLOW_TRANSITION_FAILED',
+      updErr?.message || 'Không thể chuyển trạng thái tài liệu.'
+    );
+  }
+
+  await appendDocumentAuditLog(ctx, {
+    documentId: id,
+    action: rule.auditAction,
+    fromStatus: existing.status,
+    toStatus: rule.toStatus,
+    reason,
+    metadata: auditMetadata,
+  });
+
+  const targetCategory =
+    existingRes.category ||
+    (await fetchCategoryById(ctx, updatedRow.category_id)) || {
+      id: updatedRow.category_id,
+      code: 'CHUNG',
+      name: 'Tài liệu chung',
+      sort_order: 0,
+    };
+
+  let hydrated = await hydrateSingleDocument(ctx, updatedRow, targetCategory);
+
+  // Kích hoạt tự động sao lưu Google Drive ngay tại bước APPROVED
+  if (rule.action === 'approve') {
+    const storageClient =
+      hydrated.storage_type === 'SUPABASE_STORAGE'
+        ? await getPreferredStorageClient(ctx)
+        : null;
+
+    const driveOutcome = await syncDocumentToGoogleDrive({
+      document: hydrated,
+      category: targetCategory,
+      storageClient,
+    });
+
+    const updatedAfterDrive = await persistDriveOutcome(ctx, hydrated.id, driveOutcome);
+    if (updatedAfterDrive) {
+      hydrated = await hydrateSingleDocument(ctx, updatedAfterDrive, targetCategory);
+    } else {
+      hydrated = { ...hydrated, ...driveOutcome };
+    }
+
+    if (driveOutcome.drive_sync_status === 'SYNCED' || driveOutcome.drive_sync_status === 'FAILED') {
+      await appendDocumentAuditLog(ctx, {
+        documentId: id,
+        action: 'DRIVE_SYNC',
+        fromStatus: 'APPROVED',
+        toStatus: 'APPROVED',
+        reason:
+          driveOutcome.drive_sync_status === 'SYNCED'
+            ? 'Tự động sao lưu Google Drive sau phê duyệt thành công.'
+            : driveOutcome.drive_sync_error || 'Lỗi sao lưu Google Drive sau phê duyệt.',
+        metadata: {
+          drive_sync_status: driveOutcome.drive_sync_status,
+          drive_file_id: driveOutcome.drive_file_id,
+          drive_web_view_link: driveOutcome.drive_web_view_link,
+        },
+      });
+    }
+  }
+
+  const auditLogs = await listDocumentAuditLogs(ctx, id);
+  return { ok: true, document: hydrated, audit_logs: auditLogs };
 }
 
 export async function createDocumentSignedDownloadUrl(
@@ -982,11 +1615,11 @@ export async function syncDocumentDriveManually(
   if (!docRes.ok) return docRes;
   const doc = docRes.document;
 
-  if (doc.status !== 'ACTIVE') {
+  if (doc.status !== 'APPROVED') {
     return fail(
       400,
-      'DOCUMENT_ARCHIVED',
-      'Chỉ hỗ trợ đồng bộ Google Drive cho tài liệu đang ở trạng thái hiệu lực (ACTIVE).'
+      'DOCUMENT_NOT_APPROVED',
+      'Chỉ hỗ trợ đồng bộ Google Drive cho tài liệu đã được phê duyệt (APPROVED).'
     );
   }
 
@@ -1009,11 +1642,24 @@ export async function syncDocumentDriveManually(
   });
 
   const updatedRow = await persistDriveOutcome(ctx, doc.id, driveOutcome);
-  const catMap = new Map<string, DocumentCategory>([[category.id, category]]);
-  const uploaderMap = await fetchUploaderNamesMap(ctx, [doc]);
   const hydrated = updatedRow
-    ? hydrateDocuments([updatedRow], catMap, uploaderMap)[0]
+    ? await hydrateSingleDocument(ctx, updatedRow, category)
     : { ...doc, ...driveOutcome };
+
+  await appendDocumentAuditLog(ctx, {
+    documentId: doc.id,
+    action: 'DRIVE_SYNC',
+    fromStatus: doc.status,
+    toStatus: doc.status,
+    reason:
+      driveOutcome.drive_sync_status === 'SYNCED'
+        ? 'Đồng bộ thủ công lên Google Drive thành công.'
+        : driveOutcome.drive_sync_error || 'Đồng bộ Google Drive không thành công.',
+    metadata: {
+      drive_sync_status: driveOutcome.drive_sync_status,
+      drive_file_id: driveOutcome.drive_file_id,
+    },
+  });
 
   return { ok: true, document: hydrated };
 }

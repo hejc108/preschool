@@ -66,6 +66,12 @@ export async function POST(request: Request) {
           : null,
         category_id: String(formData.get('category_id') || ''),
         issued_date: formData.get('issued_date') ? String(formData.get('issued_date')) : null,
+        effective_date: formData.get('effective_date')
+          ? String(formData.get('effective_date'))
+          : null,
+        expiration_date: formData.get('expiration_date')
+          ? String(formData.get('expiration_date'))
+          : null,
         description: formData.get('description') ? String(formData.get('description')) : null,
         visibility_scope: formData.get('visibility_scope')
           ? String(formData.get('visibility_scope'))
@@ -76,6 +82,9 @@ export async function POST(request: Request) {
         file_name: formData.get('file_name') ? String(formData.get('file_name')) : null,
         file_size: formData.get('file_size') ? Number(formData.get('file_size')) : null,
         mime_type: formData.get('mime_type') ? String(formData.get('mime_type')) : null,
+        initial_action: formData.get('initial_action')
+          ? String(formData.get('initial_action'))
+          : 'save_draft',
         file,
       });
 
@@ -101,6 +110,8 @@ export async function POST(request: Request) {
       document_number: body.document_number ?? null,
       category_id: String(body.category_id || ''),
       issued_date: body.issued_date ?? null,
+      effective_date: body.effective_date ?? null,
+      expiration_date: body.expiration_date ?? null,
       description: body.description ?? null,
       visibility_scope: body.visibility_scope ?? 'ALL_ADMINS',
       storage_type: storageType,
@@ -109,6 +120,7 @@ export async function POST(request: Request) {
       file_name: body.file_name ?? null,
       file_size: body.file_size !== undefined ? Number(body.file_size) : null,
       mime_type: body.mime_type ?? null,
+      initial_action: body.initial_action ?? 'save_draft',
     });
 
     if (!result.ok) return fromServiceError(result);

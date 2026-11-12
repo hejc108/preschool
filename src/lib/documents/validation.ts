@@ -1,5 +1,11 @@
 import { normalizeVietnameseSearch } from '@/lib/utils/textSearch';
-import { SchoolDocument } from '@/lib/types/schema';
+import {
+  DocumentAuditAction,
+  DocumentStatus,
+  DocumentWorkflowAction,
+  SchoolDocument,
+  UserRole,
+} from '@/lib/types/schema';
 
 export const DOCUMENT_BUCKET_NAME = 'school-documents';
 export const MAX_DOCUMENT_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -227,3 +233,244 @@ export function formatDocumentFileSize(bytes?: number | null): string {
   const mb = kb / 1024;
   return `${mb.toFixed(mb >= 10 ? 1 : 2)} MB`;
 }
+
+// --- PHẦN SRS WORKFLOW 6 TRẠNG THÁI & SỐ HIỆU TỰ ĐỘNG ---
+
+export const DOCUMENT_STATUS_ORDER: readonly DocumentStatus[] = [
+  'DRAFT',
+  'SUBMITTED',
+  'APPROVED',
+  'WITHDRAWN',
+  'SUPERSEDED',
+  'EXPIRED',
+] as const;
+
+export const DOCUMENT_STATUS_META: Record<
+  DocumentStatus,
+  {
+    label: string;
+    shortLabel: string;
+    description: string;
+    badgeClass: string;
+  }
+> = {
+  DRAFT: {
+    label: 'Đang soạn thảo',
+    shortLabel: 'Soạn thảo',
+    description: 'Văn bản nháp, chưa trình duyệt và chưa sao lưu Drive',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  SUBMITTED: {
+    label: 'Đã trình duyệt',
+    shortLabel: 'Chờ duyệt',
+    description: 'Đang chờ Hiệu trưởng (Super Admin) kiểm tra & phê duyệt',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  APPROVED: {
+    label: 'Đã phê duyệt',
+    shortLabel: 'Đã duyệt',
+    description: 'Có hiệu lực lưu hành chính thức & tự động sao lưu Google Drive',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  WITHDRAWN: {
+    label: 'Từ chối / Thu hồi',
+    shortLabel: 'Thu hồi',
+    description: 'Văn bản bị từ chối khi duyệt hoặc thu hồi khẩn cấp',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  SUPERSEDED: {
+    label: 'Đã bị thay thế',
+    shortLabel: 'Thay thế',
+    description: 'Đã được thay thế bởi một văn bản phê duyệt mới hơn',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+  },
+  EXPIRED: {
+    label: 'Hết hiệu lực',
+    shortLabel: 'Hết hạn',
+    description: 'Đã quá ngày hết hiệu lực (expiration_date < ngày hiện tại)',
+    badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+};
+
+export const DOCUMENT_AUDIT_ACTION_LABELS: Record<DocumentAuditAction, string> = {
+  CREATE_DRAFT: 'Tạo văn bản nháp',
+  UPDATE_METADATA: 'Cập nhật thông tin',
+  SUBMIT: 'Trình duyệt văn bản',
+  APPROVE: 'Phê duyệt ban hành',
+  REJECT: 'Từ chối phê duyệt',
+  SUPERSEDE: 'Thay thế bởi văn bản mới',
+  WITHDRAW: 'Thu hồi khẩn cấp',
+  EXPIRE: 'Chuyển hết hiệu lực',
+  DRIVE_SYNC: 'Đồng bộ Google Drive',
+};
+
+const CATEGORY_SYMBOL_MAP: Record<string, string> = {
+  CV_DEN_DI: 'CV-MNSM',
+  KE_HOACH: 'KH-MNSM',
+  KIEM_DINH: 'KD-MNSM',
+  QUY_CHE: 'QC-MNSM',
+  Y_TE_BEP: 'YT-MNSM',
+  BIEU_MAU: 'BM-MNSM',
+};
+
+export const COMMON_DOCUMENT_SYMBOLS = [
+  'CV-MNSM',
+  'QĐ-MNSM',
+  'KH-MNSM',
+  'KD-MNSM',
+  'QC-MNSM',
+  'YT-MNSM',
+  'BM-MNSM',
+  'TB-MNSM',
+  'BC-MNSM',
+] as const;
+
+export function getDefaultDocumentSymbolForCategory(categoryCode?: string | null): string {
+  const code = String(categoryCode || '').trim().toUpperCase();
+  if (code && CATEGORY_SYMBOL_MAP[code]) {
+    return CATEGORY_SYMBOL_MAP[code];
+  }
+  if (code) {
+    const letters = code.replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    if (letters) return `${letters}-MNSM`;
+  }
+  return 'CV-MNSM';
+}
+
+export function formatSequentialDocumentNumber(
+  seq: number,
+  year: string | number,
+  symbol: string
+): string {
+  const cleanSeq = Math.max(1, Math.floor(seq));
+  const padded = cleanSeq < 10 ? `0${cleanSeq}` : String(cleanSeq);
+  const cleanSymbol = (symbol || 'CV-MNSM').trim().toUpperCase() || 'CV-MNSM';
+  return `${padded}/${year}/${cleanSymbol}`;
+}
+
+export function normalizeOptionalDate(
+  raw: string | null | undefined
+): { ok: true; date: string | null } | { ok: false; error: string } {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { ok: true, date: null };
+  const parsed = normalizeIssuedDate(trimmed, '');
+  if (!parsed) {
+    return { ok: false, error: 'Ngày tháng phải đúng định dạng YYYY-MM-DD.' };
+  }
+  return { ok: true, date: parsed };
+}
+
+export function validateEffectiveAndExpirationDates(
+  effectiveDate: string | null | undefined,
+  expirationDate: string | null | undefined
+): { ok: true } | { ok: false; error: string } {
+  if (effectiveDate && expirationDate && expirationDate < effectiveDate) {
+    return {
+      ok: false,
+      error: 'Ngày hết hiệu lực (expiration_date) phải lớn hơn hoặc bằng ngày có hiệu lực.',
+    };
+  }
+  return { ok: true };
+}
+
+export type WorkflowTransitionRule = {
+  action: DocumentWorkflowAction;
+  auditAction: DocumentAuditAction;
+  allowedFrom: readonly DocumentStatus[];
+  toStatus: DocumentStatus;
+  allowedRoles: readonly UserRole[];
+  requiresReason?: boolean;
+  requiresSupersededBy?: boolean;
+};
+
+export const WORKFLOW_TRANSITION_RULES: Record<DocumentWorkflowAction, WorkflowTransitionRule> = {
+  submit_for_approval: {
+    action: 'submit_for_approval',
+    auditAction: 'SUBMIT',
+    allowedFrom: ['DRAFT'],
+    toStatus: 'SUBMITTED',
+    allowedRoles: ['SCHOOL_ADMIN', 'SUPER_ADMIN'],
+  },
+  approve: {
+    action: 'approve',
+    auditAction: 'APPROVE',
+    allowedFrom: ['SUBMITTED'],
+    toStatus: 'APPROVED',
+    allowedRoles: ['SUPER_ADMIN'],
+  },
+  reject: {
+    action: 'reject',
+    auditAction: 'REJECT',
+    allowedFrom: ['SUBMITTED'],
+    toStatus: 'WITHDRAWN',
+    allowedRoles: ['SUPER_ADMIN'],
+    requiresReason: true,
+  },
+  supersede: {
+    action: 'supersede',
+    auditAction: 'SUPERSEDE',
+    allowedFrom: ['APPROVED'],
+    toStatus: 'SUPERSEDED',
+    allowedRoles: ['SUPER_ADMIN'],
+    requiresSupersededBy: true,
+  },
+  withdraw: {
+    action: 'withdraw',
+    auditAction: 'WITHDRAW',
+    allowedFrom: ['APPROVED'],
+    toStatus: 'WITHDRAWN',
+    allowedRoles: ['SUPER_ADMIN'],
+    requiresReason: true,
+  },
+  expire: {
+    action: 'expire',
+    auditAction: 'EXPIRE',
+    allowedFrom: ['APPROVED'],
+    toStatus: 'EXPIRED',
+    allowedRoles: ['SUPER_ADMIN'],
+  },
+};
+
+export function validateWorkflowTransition(params: {
+  fromStatus: DocumentStatus;
+  action: string;
+  activeRole: UserRole;
+}):
+  | { ok: true; rule: WorkflowTransitionRule }
+  | { ok: false; status: number; code: string; error: string } {
+  const actionKey = String(params.action || '').trim() as DocumentWorkflowAction;
+  const rule = (WORKFLOW_TRANSITION_RULES as Record<string, WorkflowTransitionRule | undefined>)[
+    actionKey
+  ];
+
+  if (!rule) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'INVALID_WORKFLOW_ACTION',
+      error: 'Thao tác chuyển trạng thái văn bản không hợp lệ.',
+    };
+  }
+
+  if (!rule.allowedRoles.includes(params.activeRole)) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'FORBIDDEN_WORKFLOW_ROLE',
+      error: 'Chỉ Hiệu trưởng (Super Admin) mới có quyền thực hiện thao tác phê duyệt/thu hồi/thay thế văn bản.',
+    };
+  }
+
+  if (!rule.allowedFrom.includes(params.fromStatus)) {
+    const currentLabel = DOCUMENT_STATUS_META[params.fromStatus]?.label || params.fromStatus;
+    return {
+      ok: false,
+      status: 409,
+      code: 'INVALID_STATUS_TRANSITION',
+      error: `Không thể thực hiện thao tác "${actionKey}" khi tài liệu đang ở trạng thái "${currentLabel}" (${params.fromStatus}).`,
+    };
+  }
+
+  return { ok: true, rule };
+}
+

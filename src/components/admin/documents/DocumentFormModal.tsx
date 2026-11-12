@@ -5,9 +5,12 @@ import {
   AlertCircle,
   FileText,
   Globe,
+  Info,
   Link2,
   Loader2,
   Lock,
+  Save,
+  Send,
   Shield,
   Upload,
   X,
@@ -21,8 +24,10 @@ import {
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import {
   DOCUMENT_BUCKET_NAME,
+  DOCUMENT_STATUS_META,
   formatDocumentFileSize,
   validateDocumentFileMeta,
+  validateEffectiveAndExpirationDates,
   validateExternalDocumentUrl,
 } from '@/lib/documents/validation';
 
@@ -66,6 +71,8 @@ export function DocumentFormModal({
   const [issuedDate, setIssuedDate] = useState(
     editingDocument?.issued_date || getTodayVietnamClient()
   );
+  const [effectiveDate, setEffectiveDate] = useState(editingDocument?.effective_date || '');
+  const [expirationDate, setExpirationDate] = useState(editingDocument?.expiration_date || '');
   const [visibilityScope, setVisibilityScope] = useState<DocumentVisibilityScope>(
     editingDocument?.visibility_scope || 'ALL_ADMINS'
   );
@@ -76,6 +83,7 @@ export function DocumentFormModal({
   const [externalUrl, setExternalUrl] = useState(editingDocument?.external_url || '');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<'save_draft' | 'submit_for_approval' | null>(null);
   const [uploadProgressLabel, setUploadProgressLabel] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -104,8 +112,7 @@ export function DocumentFormModal({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitDocument = async (initialAction: 'save_draft' | 'submit_for_approval') => {
     setErrorMsg(null);
 
     const cleanTitle = title.trim();
@@ -115,6 +122,17 @@ export function DocumentFormModal({
     }
     if (!categoryId) {
       setErrorMsg('Vui lòng chọn danh mục văn bản.');
+      return;
+    }
+
+    const cleanEffectiveDate = effectiveDate.trim() || null;
+    const cleanExpirationDate = expirationDate.trim() || null;
+    const dateRangeCheck = validateEffectiveAndExpirationDates(
+      cleanEffectiveDate || issuedDate,
+      cleanExpirationDate
+    );
+    if (!dateRangeCheck.ok) {
+      setErrorMsg(dateRangeCheck.error);
       return;
     }
 
@@ -141,6 +159,7 @@ export function DocumentFormModal({
     }
 
     setSubmitting(true);
+    setSubmittingAction(initialAction);
     try {
       if (isEditing && editingDocument) {
         setUploadProgressLabel('Đang cập nhật thông tin tài liệu...');
@@ -149,6 +168,8 @@ export function DocumentFormModal({
           document_number: documentNumber.trim() || null,
           category_id: categoryId,
           issued_date: issuedDate,
+          effective_date: cleanEffectiveDate,
+          expiration_date: cleanExpirationDate,
           description: description.trim() || null,
           ...(isSuperAdmin ? { visibility_scope: visibilityScope } : {}),
           ...(editingDocument.storage_type === 'EXTERNAL_LINK'
@@ -170,9 +191,14 @@ export function DocumentFormModal({
         return;
       }
 
+      const successMsg =
+        initialAction === 'submit_for_approval'
+          ? 'Đã tạo tài liệu và gửi trình Hiệu trưởng phê duyệt.'
+          : 'Đã lưu tài liệu dưới dạng Bản nháp (DRAFT).';
+
       // Create mode
       if (storageType === 'EXTERNAL_LINK') {
-        setUploadProgressLabel('Đang lưu liên kết và đồng bộ Google Drive...');
+        setUploadProgressLabel('Đang lưu liên kết tài liệu...');
         const res = await fetch('/api/admin/documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -181,10 +207,13 @@ export function DocumentFormModal({
             document_number: documentNumber.trim() || null,
             category_id: categoryId,
             issued_date: issuedDate,
+            effective_date: cleanEffectiveDate,
+            expiration_date: cleanExpirationDate,
             description: description.trim() || null,
             visibility_scope: isSuperAdmin ? visibilityScope : 'ALL_ADMINS',
             storage_type: 'EXTERNAL_LINK',
             external_url: externalUrl.trim(),
+            initial_action: initialAction,
           }),
         });
         const json = await res.json().catch(() => ({}));
@@ -192,7 +221,7 @@ export function DocumentFormModal({
           setErrorMsg(json.message || json.error || `Không thể tạo tài liệu (${res.status}).`);
           return;
         }
-        onSaved(json.document as SchoolDocument, 'Đã lưu liên kết tài liệu thành công.');
+        onSaved(json.document as SchoolDocument, successMsg);
         return;
       }
 
@@ -241,7 +270,7 @@ export function DocumentFormModal({
         return;
       }
 
-      setUploadProgressLabel('Đang lưu hồ sơ & đồng bộ Google Drive...');
+      setUploadProgressLabel('Đang lưu hồ sơ tài liệu...');
       let createRes: Response;
       if (uploadedPath) {
         createRes = await fetch('/api/admin/documents', {
@@ -252,6 +281,8 @@ export function DocumentFormModal({
             document_number: documentNumber.trim() || null,
             category_id: categoryId,
             issued_date: issuedDate,
+            effective_date: cleanEffectiveDate,
+            expiration_date: cleanExpirationDate,
             description: description.trim() || null,
             visibility_scope: isSuperAdmin ? visibilityScope : 'ALL_ADMINS',
             storage_type: 'SUPABASE_STORAGE',
@@ -259,6 +290,7 @@ export function DocumentFormModal({
             file_name: selectedFile.name,
             file_size: selectedFile.size,
             mime_type: normalizedMime,
+            initial_action: initialAction,
           }),
         });
       } else {
@@ -267,9 +299,12 @@ export function DocumentFormModal({
         if (documentNumber.trim()) fd.append('document_number', documentNumber.trim());
         fd.append('category_id', categoryId);
         fd.append('issued_date', issuedDate);
+        if (cleanEffectiveDate) fd.append('effective_date', cleanEffectiveDate);
+        if (cleanExpirationDate) fd.append('expiration_date', cleanExpirationDate);
         if (description.trim()) fd.append('description', description.trim());
         fd.append('visibility_scope', isSuperAdmin ? visibilityScope : 'ALL_ADMINS');
         fd.append('storage_type', 'SUPABASE_STORAGE');
+        fd.append('initial_action', initialAction);
         fd.append('file', selectedFile);
         createRes = await fetch('/api/admin/documents', {
           method: 'POST',
@@ -285,13 +320,19 @@ export function DocumentFormModal({
         return;
       }
 
-      onSaved(createJson.document as SchoolDocument, 'Đã tải lên và lưu tài liệu thành công.');
+      onSaved(createJson.document as SchoolDocument, successMsg);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Lỗi kết nối khi lưu tài liệu.');
     } finally {
       setSubmitting(false);
+      setSubmittingAction(null);
       setUploadProgressLabel('');
     }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitDocument(isEditing ? 'save_draft' : 'submit_for_approval');
   };
 
   return (
@@ -299,18 +340,29 @@ export function DocumentFormModal({
       <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-primary-700">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-primary-700 shrink-0">
               <FileText className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                {isEditing ? 'Chỉnh sửa thông tin tài liệu' : 'Thêm tài liệu / văn bản mới'}
-              </h2>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">
+                  {isEditing ? 'Chỉnh sửa thông tin tài liệu' : 'Thêm tài liệu / văn bản mới'}
+                </h2>
+                {isEditing && editingDocument && (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                      DOCUMENT_STATUS_META[editingDocument.status].badgeClass
+                    }`}
+                  >
+                    {DOCUMENT_STATUS_META[editingDocument.status].label}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 {isEditing
-                  ? 'Cập nhật trích yếu, số hiệu, danh mục hoặc phạm vi hiển thị'
-                  : 'Hỗ trợ tải tệp nội bộ (tối đa 25MB) hoặc gắn liên kết Google Workspace'}
+                  ? 'Cập nhật trích yếu, số hiệu, hiệu lực, danh mục hoặc phạm vi hiển thị'
+                  : 'Tài liệu mới được tạo ở Bản nháp (DRAFT) hoặc Trình duyệt (SUBMITTED)'}
               </p>
             </div>
           </div>
@@ -326,11 +378,20 @@ export function DocumentFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+        <form onSubmit={handleFormSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span className="font-medium leading-relaxed">{errorMsg}</span>
+            </div>
+          )}
+
+          {!isEditing && (
+            <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
+              <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
+              <span>
+                Theo quy trình phê duyệt, tài liệu nháp chưa đồng bộ lên Google Drive. Sau khi Hiệu trưởng <strong>Phê duyệt (APPROVED)</strong>, hệ thống mới cấp số hiệu chính thức (nếu để trống) và tự động sao lưu Drive.
+              </span>
             </div>
           )}
 
@@ -470,18 +531,7 @@ export function DocumentFormModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5">Số hiệu văn bản</label>
-              <input
-                type="text"
-                value={documentNumber}
-                onChange={(e) => setDocumentNumber(e.target.value)}
-                placeholder="VD: 12/KH-MNSM"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
-              />
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">Danh mục (*)</label>
               <select
@@ -499,11 +549,50 @@ export function DocumentFormModal({
             </div>
 
             <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Số hiệu văn bản <span className="font-normal text-slate-400">(tùy chọn khi tạo)</span>
+              </label>
+              <input
+                type="text"
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+                placeholder="Để trống nếu cấp số tự động khi duyệt"
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
               <label className="block font-bold text-slate-700 mb-1.5">Ngày ban hành</label>
               <input
                 type="date"
                 value={issuedDate}
                 onChange={(e) => setIssuedDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Ngày có hiệu lực <span className="font-normal text-slate-400">(tùy chọn)</span>
+              </label>
+              <input
+                type="date"
+                value={effectiveDate}
+                onChange={(e) => setEffectiveDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Ngày hết hiệu lực <span className="font-normal text-slate-400">(tùy chọn)</span>
+              </label>
+              <input
+                type="date"
+                value={expirationDate}
+                onChange={(e) => setExpirationDate(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
               />
             </div>
@@ -569,7 +658,7 @@ export function DocumentFormModal({
           </div>
 
           {/* Modal Footer */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+          <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
@@ -578,20 +667,60 @@ export function DocumentFormModal({
             >
               Hủy bỏ
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-5 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 disabled:opacity-60 text-white font-bold shadow-sm transition-all inline-flex items-center gap-2 cursor-pointer"
-            >
-              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>
-                {submitting
-                  ? uploadProgressLabel || 'Đang xử lý...'
-                  : isEditing
-                  ? 'Lưu thay đổi'
-                  : 'Lưu tài liệu'}
-              </span>
-            </button>
+
+            {isEditing ? (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 disabled:opacity-60 text-white font-bold shadow-sm transition-all inline-flex items-center gap-2 cursor-pointer"
+              >
+                {submitting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {submitting ? uploadProgressLabel || 'Đang xử lý...' : 'Lưu thay đổi'}
+                </span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void submitDocument('save_draft')}
+                  disabled={submitting}
+                  className="px-4 py-2 rounded-pill border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-60 text-slate-800 font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  {submitting && submittingAction === 'save_draft' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {submitting && submittingAction === 'save_draft'
+                      ? uploadProgressLabel || 'Đang lưu...'
+                      : 'Lưu bản nháp'}
+                  </span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 disabled:opacity-60 text-white font-bold shadow-sm transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  {submitting && submittingAction === 'submit_for_approval' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {submitting && submittingAction === 'submit_for_approval'
+                      ? uploadProgressLabel || 'Đang xử lý...'
+                      : 'Lưu & Trình duyệt'}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>
