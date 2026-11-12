@@ -176,12 +176,7 @@ export default function AdminMenuPage() {
           <Link href="/admin/dashboard" className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 shadow-sm shrink-0 transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý thực đơn tuần</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Cập nhật bộ 4 tuần thực đơn & cấu hình chu kỳ áp dụng theo tháng sang Phụ huynh và Giáo viên
-            </p>
-          </div>
+          <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý thực đơn tuần</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
