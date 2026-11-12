@@ -560,6 +560,7 @@ export type DocumentAuditAction =
   | 'SUPERSEDE'
   | 'WITHDRAW'
   | 'EXPIRE'
+  | 'AUTO_EXPIRE'
   | 'DRIVE_SYNC';
 export type DocumentDriveSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED' | 'SKIPPED';
 

@@ -1037,17 +1037,21 @@ export default function AdminDocumentsPage() {
                             <div className="text-xs text-slate-600 mt-1.5 font-medium">
                               Ban hành: {formatIssuedDateVi(doc.issued_date)}
                             </div>
-                            {(doc.effective_date || doc.expiration_date) && (
-                              <div className="text-[11px] text-slate-500 mt-0.5">
-                                {doc.effective_date
-                                  ? `Hiệu lực: ${formatIssuedDateVi(doc.effective_date)}`
-                                  : ''}
-                                {doc.effective_date && doc.expiration_date ? ' · ' : ''}
-                                {doc.expiration_date
-                                  ? `Hết hạn: ${formatIssuedDateVi(doc.expiration_date)}`
-                                  : ''}
-                              </div>
-                            )}
+                            <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                              {doc.effective_date && (
+                                <span>Hiệu lực: {formatIssuedDateVi(doc.effective_date)} ·</span>
+                              )}
+                              <span>
+                                Hết hạn:{' '}
+                                {doc.expiration_date ? (
+                                  formatIssuedDateVi(doc.expiration_date)
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+                                    Dài hạn
+                                  </span>
+                                )}
+                              </span>
+                            </div>
                             <div className="text-[11px] text-slate-400 mt-0.5">
                               {doc.uploader_name ? `Tạo: ${doc.uploader_name}` : ''}
                               {doc.uploader_name && doc.approver_name ? ' · ' : ''}

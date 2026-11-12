@@ -301,6 +301,7 @@ export const DOCUMENT_AUDIT_ACTION_LABELS: Record<DocumentAuditAction, string> =
   SUPERSEDE: 'Thay thế bởi văn bản mới',
   WITHDRAW: 'Thu hồi khẩn cấp',
   EXPIRE: 'Chuyển hết hiệu lực',
+  AUTO_EXPIRE: 'Tự động hết hiệu lực theo hạn',
   DRIVE_SYNC: 'Đồng bộ Google Drive',
 };
 

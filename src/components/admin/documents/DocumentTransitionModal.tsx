@@ -558,6 +558,9 @@ export function DocumentTransitionModal({
                     onChange={(e) => setExpirationDate(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Để trống nếu văn bản có hiệu lực dài hạn
+                  </p>
                 </div>
               </div>
 

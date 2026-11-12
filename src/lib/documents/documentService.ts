@@ -264,6 +264,24 @@ async function hydrateSingleDocument(
   return hydrateDocuments([row], catMap, profileMap, supMap)[0];
 }
 
+async function insertAuditRowWithFallback(
+  sb: SupabaseClient,
+  payload: Record<string, any>
+): Promise<{ data: any; error: any }> {
+  const res = await sb.from('document_audit_logs').insert(payload);
+  if (res.error && res.error.code === '23514' && payload.action === 'AUTO_EXPIRE') {
+    return await sb.from('document_audit_logs').insert({
+      ...payload,
+      action: 'EXPIRE',
+      metadata: {
+        ...(payload.metadata || {}),
+        intended_action: 'AUTO_EXPIRE',
+      },
+    });
+  }
+  return res;
+}
+
 async function appendDocumentAuditLog(
   ctx: SessionContext,
   params: {
@@ -290,12 +308,12 @@ async function appendDocumentAuditLog(
 
     const cfg = getSupabaseConfig();
     if (params.systemActorName && cfg.isValidServiceRoleKey) {
-      await getSupabaseAdminClient(false).from('document_audit_logs').insert(payload);
+      await insertAuditRowWithFallback(getSupabaseAdminClient(false), payload);
       return;
     }
 
     await executeWithContextFallback(ctx, async (sb) =>
-      await sb.from('document_audit_logs').insert(payload)
+      await insertAuditRowWithFallback(sb, payload)
     );
   } catch (err) {
     console.warn('[DocumentAuditLog] Non-fatal insert error:', err);
@@ -422,14 +440,138 @@ async function generateNextDocumentNumber(
   return computeSequentialNumberFallback(ctx, params.year, cleanSymbol);
 }
 
+export interface AutoExpireSweepResult {
+  ok: true;
+  today: string;
+  scannedCount: number;
+  expiredCount: number;
+  expiredDocuments: Array<{
+    id: string;
+    title: string;
+    document_number: string | null;
+    expiration_date: string;
+  }>;
+}
+
 /**
- * Tự động chuyển các văn bản APPROVED có expiration_date < hôm nay (GMT+7) sang EXPIRED.
+ * Quét các văn bản APPROVED có expiration_date < hôm nay (GMT+7),
+ * chuyển sang EXPIRED và ghi audit log ('AUTO_EXPIRE').
+ * Tuyệt đối KHÔNG xóa hoặc chỉnh sửa bản sao lưu trên Google Drive.
+ */
+export async function runAutoExpireDocumentsSweep(options?: {
+  specificDocumentId?: string;
+  systemActorName?: string;
+  reason?: string;
+  client?: SupabaseClient;
+}): Promise<AutoExpireSweepResult | ServiceErrorResult> {
+  const today = getTodayVietnamDate();
+  let sb = options?.client;
+
+  if (!sb) {
+    const cfg = getSupabaseConfig();
+    if (!cfg.isValidServiceRoleKey) {
+      return fail(
+        500,
+        'MISSING_SERVICE_ROLE_KEY',
+        'Thiếu SUPABASE_SERVICE_ROLE_KEY để chạy tác vụ tự động chuyển văn bản hết hiệu lực.'
+      );
+    }
+    sb = getSupabaseAdminClient(false);
+  }
+
+  let query = sb
+    .from('school_documents')
+    .select('id, title, document_number, expiration_date')
+    .eq('status', 'APPROVED')
+    .not('expiration_date', 'is', null)
+    .lt('expiration_date', today);
+
+  if (options?.specificDocumentId) {
+    query = query.eq('id', options.specificDocumentId);
+  }
+
+  const { data: candidates, error: scanErr } = await query;
+  if (scanErr) {
+    return fail(
+      500,
+      'AUTO_EXPIRE_SCAN_FAILED',
+      scanErr.message || 'Không thể quét danh sách văn bản hết hiệu lực.'
+    );
+  }
+
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return {
+      ok: true,
+      today,
+      scannedCount: 0,
+      expiredCount: 0,
+      expiredDocuments: [],
+    };
+  }
+
+  const expiredIds = candidates.map((c: any) => c.id);
+  const { data: transitioned, error: updErr } = await sb
+    .from('school_documents')
+    .update({ status: 'EXPIRED' })
+    .in('id', expiredIds)
+    .eq('status', 'APPROVED')
+    .select('id, title, document_number, expiration_date');
+
+  if (updErr || !Array.isArray(transitioned)) {
+    return fail(
+      500,
+      'AUTO_EXPIRE_UPDATE_FAILED',
+      updErr?.message || 'Không thể cập nhật trạng thái EXPIRED cho văn bản quá hạn.'
+    );
+  }
+
+  const auditReason =
+    options?.reason?.trim() || 'Tự động hết hiệu lực theo ngày kết thúc';
+  const actorName = options?.systemActorName?.trim() || 'Vercel Cron Auto-Expire';
+
+  for (const row of transitioned) {
+    try {
+      await insertAuditRowWithFallback(sb, {
+        document_id: row.id,
+        action: 'AUTO_EXPIRE',
+        from_status: 'APPROVED',
+        to_status: 'EXPIRED',
+        reason: auditReason,
+        actor_id: null,
+        actor_name: actorName,
+        metadata: {
+          auto_expired: true,
+          evaluated_date: today,
+          expiration_date: row.expiration_date,
+          drive_preserved: true,
+        },
+      });
+    } catch (logErr) {
+      console.warn('[AutoExpireAuditLog] Non-fatal insert error:', logErr);
+    }
+  }
+
+  return {
+    ok: true,
+    today,
+    scannedCount: candidates.length,
+    expiredCount: transitioned.length,
+    expiredDocuments: transitioned.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      document_number: row.document_number ?? null,
+      expiration_date: row.expiration_date,
+    })),
+  };
+}
+
+/**
+ * Tự động chuyển các văn bản APPROVED có expiration_date < hôm nay (GMT+7) sang EXPIRED khi truy vấn đọc.
  */
 async function autoExpireElapsedDocuments(
   ctx: SessionContext,
   specificDocumentId?: string
 ): Promise<void> {
-  const today = getTodayVietnamDate();
   const cfg = getSupabaseConfig();
   const canMutateApproved =
     cfg.isValidServiceRoleKey || ctx.activeRole === 'SUPER_ADMIN';
@@ -437,49 +579,18 @@ async function autoExpireElapsedDocuments(
   if (!canMutateApproved) return;
 
   try {
-    const runWithClient = async (sb: SupabaseClient) => {
-      let query = sb
-        .from('school_documents')
-        .select('id, expiration_date')
-        .eq('status', 'APPROVED')
-        .not('expiration_date', 'is', null)
-        .lt('expiration_date', today);
-
-      if (specificDocumentId) {
-        query = query.eq('id', specificDocumentId);
-      }
-
-      const { data: candidates, error } = await query;
-      if (error || !Array.isArray(candidates) || candidates.length === 0) return;
-
-      const expiredIds = candidates.map((c: any) => c.id);
-      const { data: transitioned, error: updErr } = await sb
-        .from('school_documents')
-        .update({ status: 'EXPIRED' })
-        .in('id', expiredIds)
-        .eq('status', 'APPROVED')
-        .select('id, expiration_date');
-
-      if (updErr || !Array.isArray(transitioned)) return;
-
-      for (const row of transitioned) {
-        await appendDocumentAuditLog(ctx, {
-          documentId: row.id,
-          action: 'EXPIRE',
-          fromStatus: 'APPROVED',
-          toStatus: 'EXPIRED',
-          reason: `Tự động chuyển hết hiệu lực do đã qua ngày ${row.expiration_date}.`,
-          systemActorName: 'Hệ thống tự động',
-          metadata: { auto_expired: true, expiration_date: row.expiration_date },
-        });
-      }
-    };
-
     if (cfg.isValidServiceRoleKey) {
-      await runWithClient(getSupabaseAdminClient(false));
+      await runAutoExpireDocumentsSweep({
+        specificDocumentId,
+        systemActorName: 'Hệ thống tự động',
+      });
     } else {
       await executeWithContextFallback(ctx, async (sb) => {
-        await runWithClient(sb);
+        await runAutoExpireDocumentsSweep({
+          specificDocumentId,
+          systemActorName: 'Hệ thống tự động',
+          client: sb,
+        });
         return { data: null, error: null };
       });
     }

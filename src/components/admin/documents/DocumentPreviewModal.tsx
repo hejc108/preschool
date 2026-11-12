@@ -415,13 +415,23 @@ export function DocumentPreviewModal({
                 </div>
 
                 <div>
-                  <span className="text-slate-400 block mb-0.5">Hiệu lực áp dụng</span>
+                  <span className="text-slate-400 block mb-0.5">Ngày có hiệu lực</span>
                   <span className="font-semibold text-slate-800">
                     {detailDoc.effective_date ? formatDateVi(detailDoc.effective_date) : '—'}
-                    {detailDoc.expiration_date
-                      ? ` → hết hạn ${formatDateVi(detailDoc.expiration_date)}`
-                      : ''}
                   </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Ngày hết hạn</span>
+                  {detailDoc.expiration_date ? (
+                    <span className="font-semibold text-slate-800">
+                      {formatDateVi(detailDoc.expiration_date)}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Dài hạn
+                    </span>
+                  )}
                 </div>
 
                 <div>
