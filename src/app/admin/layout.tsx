@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, UtensilsCrossed, HeartPulse, UserPlus, Users, Sparkles, 
   Clock, Bell, LogOut, Smartphone, ChefHat, Mail, UserCheck, KeyRound, ShieldCheck, QrCode,
-  Menu, X
+  Menu, X, SlidersHorizontal
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -72,10 +72,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const mainNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = isStaff ? [
     { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
+    { label: 'Chu kỳ thực đơn', href: '/admin/menu/settings', icon: SlidersHorizontal, badge: 'Tháng' },
     { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: HeartPulse, badge: 'WHO' },
   ] : [
     { label: t('admin.sidebar.dashboard'), href: '/admin/dashboard', icon: LayoutDashboard },
     { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
+    { label: 'Chu kỳ thực đơn', href: '/admin/menu/settings', icon: SlidersHorizontal, badge: 'Tháng' },
     { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: HeartPulse, badge: 'WHO' },
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },

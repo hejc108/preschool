@@ -264,6 +264,75 @@ export interface WeeklyMenu {
   created_at?: string;
 }
 
+export type MenuCycleMode = 'AUTO_ROTATE_4' | 'MANUAL_CALENDAR';
+export type MenuWeek5Fallback = 1 | 2 | 3 | 4;
+
+export interface MenuCycleConfig {
+  id: string;
+  cycle_mode: MenuCycleMode;
+  week_5_fallback: MenuWeek5Fallback;
+  updated_by?: string | null;
+  updated_at?: string;
+}
+
+export interface MenuCalendarAssignment {
+  id?: string;
+  year: number;
+  month: number; // 1..12
+  week_of_month: number; // 1..5
+  assigned_menu_week: number; // 1..4
+  week_start_date: string; // YYYY-MM-DD (first school day Mon..Fri in that week)
+  week_end_date: string; // YYYY-MM-DD (last school day Mon..Fri in that week)
+  notes?: string | null;
+  updated_by?: string | null;
+  updated_at?: string;
+}
+
+export interface MonthSchoolDayInfo {
+  date: string; // YYYY-MM-DD
+  day: number;
+  day_of_week: DayOfWeek;
+  weekday_number: number; // 1..5
+  short_label: string; // e.g. "T2 (09/11)"
+  date_short: string; // e.g. "09/11"
+}
+
+export interface MonthWeekInfo {
+  week_of_month: number; // 1..5
+  year: number;
+  month: number;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD
+  date_range_label: string; // e.g. "02/11 - 06/11" or "30/11"
+  school_days_label: string; // e.g. "Thứ 2 - Thứ 6 (02/11 - 06/11)"
+  assigned_menu_week: number; // 1..4
+  is_current: boolean;
+  days: MonthSchoolDayInfo[];
+}
+
+export interface MenuCycleResolution {
+  target_date: string; // YYYY-MM-DD (actual today/requested date in Asia/Ho_Chi_Minh)
+  effective_date: string; // YYYY-MM-DD (same as target_date on Mon-Fri; next Monday on Sat/Sun)
+  is_weekend: boolean;
+  weekend_notice: string | null; // "Trường nghỉ cuối tuần"
+  preview_label: string | null; // "Xem trước: Thứ Hai, ngày DD/MM"
+  year: number; // Effective month/year for menu display
+  month: number; // 1..12
+  day: number; // 1..31
+  day_of_week: DayOfWeek;
+  weekday_vi: string; // "Thứ Hai" | "Thứ Ba" | "Thứ Tư" | "Thứ Năm" | "Thứ Sáu"
+  effective_date_formatted: string; // "DD/MM/YYYY"
+  week_of_month: number; // 1..5 (School Week of Month)
+  menu_week_number: number; // 1..4 (Resolved template week in weekly_menus)
+  cycle_mode: MenuCycleMode;
+  week_5_fallback: MenuWeek5Fallback;
+  display_label: string; // "Tuần X (Tháng M/YYYY)"
+  short_display_label: string; // "Tuần X (Tháng M)"
+  full_date_label: string; // "Thứ [X], ngày [DD/MM/YYYY] • Tuần [N] (Tháng [M])"
+  today_card_title: string; // Week 5: "Thực đơn hôm nay • Thứ [X], DD/MM • Tuần 5 (Áp dụng theo Thực đơn Tuần [N])"; Week 1-4: "Thực đơn hôm nay • Tuần [N] (Tháng [M])"
+  month_weeks: MonthWeekInfo[];
+}
+
 // --- PHẦN 3: SỔ THEO DÕI SỨC KHỎE THEO QUÝ ---
 export type HealthTerm = 'Q1' | 'Q2' | 'Q3' | 'Q4';
 export type GrowthStatus = 'UNDERWEIGHT' | 'NORMAL' | 'OVERWEIGHT_RISK' | 'OBESE';

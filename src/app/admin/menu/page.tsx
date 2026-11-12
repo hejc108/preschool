@@ -1,22 +1,67 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Utensils, Save, CheckCircle2, ChevronLeft, Edit3, Sparkles, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Utensils,
+  Save,
+  CheckCircle2,
+  ChevronLeft,
+  Edit3,
+  Loader2,
+  AlertCircle,
+  SlidersHorizontal,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import Link from 'next/link';
 import defaultWeeklyMenu from '@/lib/data/weekly_menu.json';
-import { INITIAL_4WEEK_MENU } from '@/lib/utils/menuHelper';
-import { WeeklyMenu, DayOfWeek, MealCategory } from '@/lib/types/schema';
-import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { INITIAL_4WEEK_MENU, resolveMenuCycleContext } from '@/lib/utils/menuHelper';
+import {
+  WeeklyMenu,
+  DayOfWeek,
+  MealCategory,
+  MenuCycleResolution,
+} from '@/lib/types/schema';
+import { MenuCycleSettingsPanel } from '@/components/admin/MenuCycleSettingsPanel';
 
 const LOCAL_STORAGE_KEY = 'suongmai_weekly_menu';
 
 export default function AdminMenuPage() {
   const [menuList, setMenuList] = useState<WeeklyMenu[]>((defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU);
   const [selectedWeek, setSelectedWeek] = useState<number>(2); // Default to Week 2 for TC-MENU-04 testing
+  const [cycleResolution, setCycleResolution] = useState<MenuCycleResolution>(() =>
+    resolveMenuCycleContext()
+  );
+  const [showCycleSettings, setShowCycleSettings] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchMenuFromServer = useCallback(async (hasLocal: boolean) => {
+    try {
+      const res = await fetch('/api/admin/menu', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.cycle) {
+          setCycleResolution(json.cycle);
+        }
+        if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
+          if (json.has_db || !hasLocal) {
+            setMenuList(json.menu);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.menu));
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching menu from server:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Load menu on mount from LocalStorage & Server API
   useEffect(() => {
@@ -34,29 +79,8 @@ export default function AdminMenuPage() {
       } catch (e) {}
     }
 
-    async function fetchMenuFromServer() {
-      try {
-        const res = await fetch('/api/admin/menu');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
-            if (json.has_db || !hasLocal) {
-              setMenuList(json.menu);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.menu));
-              }
-            }
-          }
-        }
-      } catch (err: any) {
-        console.error('Error fetching menu from server:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchMenuFromServer();
-  }, []);
+    void fetchMenuFromServer(hasLocal);
+  }, [fetchMenuFromServer]);
 
   // Filter items for selected week
   const weekMeals = menuList.filter((m) => m.week_number === selectedWeek);
@@ -154,11 +178,21 @@ export default function AdminMenuPage() {
           </Link>
           <div>
             <h1 className="font-bold text-slate-800 text-lg sm:text-xl leading-tight">Quản lý thực đơn tuần</h1>
-            <p className="text-slate-500 text-sm mt-1">Cập nhật món ăn các bữa trong tuần và tự động đồng bộ sang ứng dụng Phụ huynh</p>
+            <p className="text-slate-500 text-sm mt-1">
+              Cập nhật bộ 4 tuần thực đơn & cấu hình chu kỳ áp dụng theo tháng sang Phụ huynh và Giáo viên
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+          <Link
+            href="/admin/menu/settings"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full font-semibold text-sm border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-primary-700" />
+            <span>Cấu hình chu kỳ tháng</span>
+          </Link>
+
           <button
             onClick={handleSaveMenu}
             disabled={saving}
@@ -196,27 +230,91 @@ export default function AdminMenuPage() {
           </div>
         )}
 
+        {/* Live Monthly Cycle Summary Strip & Collapsible Settings */}
+        <div className="space-y-4">
+          <div className="bg-sky-50/90 border border-sky-200 rounded-2xl p-4 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-bold text-sky-900">
+                <CalendarDays className="w-4 h-4 text-sky-600 shrink-0" />
+                <span>{cycleResolution.full_date_label}</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-sky-800 text-[11px] font-bold">
+                  {cycleResolution.cycle_mode === 'MANUAL_CALENDAR'
+                    ? 'Chế độ: Chỉ định thủ công'
+                    : `Chế độ: Tự động 4 tuần (Tuần 5 → Tuần ${cycleResolution.week_5_fallback})`}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                {cycleResolution.is_weekend && cycleResolution.weekend_notice
+                  ? `${cycleResolution.weekend_notice} (${cycleResolution.preview_label}) • `
+                  : ''}
+                Hôm nay đang lấy dữ liệu từ{' '}
+                <strong className="text-primary-800">
+                  Bộ thực đơn Tuần {cycleResolution.menu_week_number}
+                </strong>
+                .
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowCycleSettings((prev) => !prev)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-sky-100 border border-sky-200 text-sky-900 text-xs font-bold shadow-2xs transition-colors cursor-pointer self-start lg:self-center shrink-0"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-sky-700" />
+              <span>{showCycleSettings ? 'Ẩn cấu hình chu kỳ' : 'Thiết lập chu kỳ tại đây'}</span>
+              {showCycleSettings ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          {showCycleSettings && (
+            <MenuCycleSettingsPanel
+              compact
+              onSaved={({ resolution }) => {
+                setCycleResolution(resolution);
+              }}
+            />
+          )}
+        </div>
+
         {/* Week Selector Tabs */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Utensils className="w-5 h-5 text-primary-700" />
-            <span className="font-bold text-slate-800 text-sm">Chọn tuần:</span>
+            <span className="font-bold text-slate-800 text-sm">Chọn bộ thực đơn mẫu:</span>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4].map((w) => (
-              <button
-                key={w}
-                onClick={() => setSelectedWeek(w)}
-                className={`min-w-[84px] h-[36px] rounded-full text-sm font-medium inline-flex items-center justify-center whitespace-nowrap transition-all cursor-pointer ${
-                  selectedWeek === w
-                    ? 'bg-primary-700 text-white shadow-sm font-bold'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                Tuần {w}
-              </button>
-            ))}
+            {[1, 2, 3, 4].map((w) => {
+              const isLiveWeek = cycleResolution.menu_week_number === w;
+              return (
+                <button
+                  key={w}
+                  onClick={() => setSelectedWeek(w)}
+                  className={`min-w-[96px] h-[36px] px-3.5 rounded-full text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                    selectedWeek === w
+                      ? 'bg-primary-700 text-white shadow-sm font-bold'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  <span>Tuần {w}</span>
+                  {isLiveWeek && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                        selectedWeek === w
+                          ? 'bg-white/20 text-white'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      Hôm nay
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 

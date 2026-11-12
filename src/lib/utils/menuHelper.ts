@@ -1,36 +1,399 @@
-import { WeeklyMenu, DayOfWeek, MealCategory } from '../types/schema';
+import {
+  WeeklyMenu,
+  DayOfWeek,
+  MealCategory,
+  MenuCycleConfig,
+  MenuCalendarAssignment,
+  MonthWeekInfo,
+  MonthSchoolDayInfo,
+  MenuCycleResolution,
+  MenuWeek5Fallback,
+} from '../types/schema';
 
-// Reference epoch: 2026-09-01 is Week 1
-const EPOCH_START = new Date('2026-09-01T00:00:00Z');
+export const MEAL_TYPE_ORDER: Record<MealCategory, number> = {
+  BREAKFAST: 1,
+  LUNCH_MAIN: 2,
+  LUNCH_SOUP: 3,
+  DESSERT: 4,
+  AFTERNOON_SNACK: 5,
+};
 
-/**
- * Calculates current menu week (1 to 4) based on modulo 4 arithmetic
- */
-export function getCurrentMenuWeek(currentDate: Date = new Date()): number {
-  const target = new Date(currentDate);
-  target.setHours(0, 0, 0, 0);
-  
-  const diffTime = Math.max(0, target.getTime() - EPOCH_START.getTime());
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  const diffWeeks = Math.floor(diffDays / 7);
-  
-  return (diffWeeks % 4) + 1;
+export function normalizeWeek5Fallback(val: unknown): MenuWeek5Fallback {
+  const n = Number(val);
+  if (n === 2 || n === 3 || n === 4) return n;
+  return 1;
+}
+
+export const DEFAULT_MENU_CYCLE_CONFIG: MenuCycleConfig = {
+  id: 'default',
+  cycle_mode: 'AUTO_ROTATE_4',
+  week_5_fallback: 1,
+};
+
+const WEEKDAY_TO_ENUM: Record<number, DayOfWeek> = {
+  1: 'MONDAY',
+  2: 'TUESDAY',
+  3: 'WEDNESDAY',
+  4: 'THURSDAY',
+  5: 'FRIDAY',
+};
+
+const WEEKDAY_VI_FULL: Record<number, string> = {
+  1: 'Thứ Hai',
+  2: 'Thứ Ba',
+  3: 'Thứ Tư',
+  4: 'Thứ Năm',
+  5: 'Thứ Sáu',
+};
+
+const WEEKDAY_VI_NUMERIC: Record<number, string> = {
+  1: 'Thứ 2',
+  2: 'Thứ 3',
+  3: 'Thứ 4',
+  4: 'Thứ 5',
+  5: 'Thứ 6',
+};
+
+const WEEKDAY_VI_SHORT: Record<number, string> = {
+  1: 'T2',
+  2: 'T3',
+  3: 'T4',
+  4: 'T5',
+  5: 'T6',
+};
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+export interface VietnamDateParts {
+  year: number;
+  month: number; // 1..12
+  day: number; // 1..31
+  weekday: number; // 0=Sun..6=Sat
+  dateString: string; // YYYY-MM-DD
 }
 
 /**
- * Converts JavaScript Date.getDay() (0=Sun, 1=Mon...6=Sat) to DayOfWeek enum
+ * Extracts calendar parts in Asia/Ho_Chi_Minh timezone (or parses an explicit YYYY-MM-DD string cleanly).
  */
-export function getDayOfWeekEnum(date: Date = new Date()): DayOfWeek {
-  const day = date.getDay();
-  switch (day) {
-    case 1: return 'MONDAY';
-    case 2: return 'TUESDAY';
-    case 3: return 'WEDNESDAY';
-    case 4: return 'THURSDAY';
-    case 5: return 'FRIDAY';
-    default: return 'MONDAY'; // Weekend defaults to Monday view
+export function getVietnamDateParts(dateInput?: Date | string | null): VietnamDateParts {
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10);
+      const day = parseInt(match[3], 10);
+      const utcDate = new Date(Date.UTC(year, month - 1, day));
+      return {
+        year,
+        month,
+        day,
+        weekday: utcDate.getUTCDay(),
+        dateString: `${year}-${pad2(month)}-${pad2(day)}`,
+      };
+    }
+  }
+
+  const dateObj =
+    dateInput instanceof Date
+      ? dateInput
+      : typeof dateInput === 'string' && dateInput.trim()
+      ? new Date(dateInput)
+      : new Date();
+
+  const safeDate = Number.isNaN(dateObj.getTime()) ? new Date() : dateObj;
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    });
+    const parts = formatter.formatToParts(safeDate);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value || '';
+    const year = parseInt(get('year'), 10);
+    const month = parseInt(get('month'), 10);
+    const day = parseInt(get('day'), 10);
+    const weekdayMap: Record<string, number> = {
+      Sun: 0,
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+    };
+    const weekday = weekdayMap[get('weekday')] ?? safeDate.getDay();
+    return {
+      year,
+      month,
+      day,
+      weekday,
+      dateString: `${year}-${pad2(month)}-${pad2(day)}`,
+    };
+  } catch {
+    const year = safeDate.getFullYear();
+    const month = safeDate.getMonth() + 1;
+    const day = safeDate.getDate();
+    return {
+      year,
+      month,
+      day,
+      weekday: safeDate.getDay(),
+      dateString: `${year}-${pad2(month)}-${pad2(day)}`,
+    };
   }
 }
+
+/**
+ * Adds N calendar days to a VietnamDateParts cleanly in UTC calendar space.
+ */
+function addCalendarDays(parts: VietnamDateParts, offsetDays: number): VietnamDateParts {
+  const nextUtc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offsetDays));
+  const year = nextUtc.getUTCFullYear();
+  const month = nextUtc.getUTCMonth() + 1;
+  const day = nextUtc.getUTCDate();
+  return {
+    year,
+    month,
+    day,
+    weekday: nextUtc.getUTCDay(),
+    dateString: `${year}-${pad2(month)}-${pad2(day)}`,
+  };
+}
+
+/**
+ * Resolves a single school week_of_month (1..5) to a template menu week (1..4).
+ */
+export function resolveMenuWeekForMonthWeek(params: {
+  year: number;
+  month: number;
+  weekOfMonth: number;
+  config?: Partial<MenuCycleConfig> | null;
+  assignments?: MenuCalendarAssignment[] | null;
+}): number {
+  const { year, month, weekOfMonth, config, assignments } = params;
+  const cycleMode = config?.cycle_mode === 'MANUAL_CALENDAR' ? 'MANUAL_CALENDAR' : 'AUTO_ROTATE_4';
+  const week5Fallback = normalizeWeek5Fallback(
+    config?.week_5_fallback ?? (config as any)?.week5_fallback
+  );
+
+  if (cycleMode === 'MANUAL_CALENDAR' && Array.isArray(assignments)) {
+    const found = assignments.find(
+      (a) =>
+        Number(a.year) === year &&
+        Number(a.month) === month &&
+        Number(a.week_of_month) === weekOfMonth
+    );
+    if (found && found.assigned_menu_week >= 1 && found.assigned_menu_week <= 4) {
+      return Number(found.assigned_menu_week);
+    }
+  }
+
+  if (weekOfMonth >= 1 && weekOfMonth <= 4) {
+    return weekOfMonth;
+  }
+  return week5Fallback;
+}
+
+/**
+ * Computes actual school weeks (Monday-Friday only) of a given month.
+ * - Weekends (Sat/Sun) are excluded; if day 1 is Sat or Sun, Week 1 starts on the first Monday.
+ * - Every month always yields 4 or 5 school weeks.
+ */
+export function getSchoolWeeksOfMonth(params: {
+  year: number;
+  month: number;
+  config?: Partial<MenuCycleConfig> | null;
+  assignments?: MenuCalendarAssignment[] | null;
+  currentWeekOfMonth?: number | null;
+}): MonthWeekInfo[] {
+  const { year, month, config, assignments, currentWeekOfMonth } = params;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  const weekBuckets: MonthSchoolDayInfo[][] = [];
+  let currentBucket: MonthSchoolDayInfo[] = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(Date.UTC(year, month - 1, d)).getUTCDay();
+    if (dow === 0 || dow === 6) continue; // Skip Saturday & Sunday
+
+    if (currentBucket.length > 0 && dow === 1) {
+      weekBuckets.push(currentBucket);
+      currentBucket = [];
+    }
+
+    const dateShort = `${pad2(d)}/${pad2(month)}`;
+    currentBucket.push({
+      date: `${year}-${pad2(month)}-${pad2(d)}`,
+      day: d,
+      day_of_week: WEEKDAY_TO_ENUM[dow],
+      weekday_number: dow,
+      short_label: `${WEEKDAY_VI_SHORT[dow]} (${dateShort})`,
+      date_short: dateShort,
+    });
+  }
+
+  if (currentBucket.length > 0) {
+    weekBuckets.push(currentBucket);
+  }
+
+  return weekBuckets.map((days, index) => {
+    const weekOfMonth = index + 1;
+    const first = days[0];
+    const last = days[days.length - 1];
+    const dateRangeLabel =
+      first.date === last.date ? first.date_short : `${first.date_short} - ${last.date_short}`;
+    const firstWeekdayLabel = WEEKDAY_VI_NUMERIC[first.weekday_number];
+    const lastWeekdayLabel = WEEKDAY_VI_NUMERIC[last.weekday_number];
+    const schoolDaysLabel =
+      first.date === last.date
+        ? `${firstWeekdayLabel} (${first.date_short})`
+        : `${firstWeekdayLabel} - ${lastWeekdayLabel} (${dateRangeLabel})`;
+
+    return {
+      week_of_month: weekOfMonth,
+      year,
+      month,
+      start_date: first.date,
+      end_date: last.date,
+      date_range_label: dateRangeLabel,
+      school_days_label: schoolDaysLabel,
+      assigned_menu_week: resolveMenuWeekForMonthWeek({
+        year,
+        month,
+        weekOfMonth,
+        config,
+        assignments,
+      }),
+      is_current: currentWeekOfMonth === weekOfMonth,
+      days,
+    };
+  });
+}
+
+/**
+ * Resolves full menu cycle context for a date (defaulting to today in Vietnam timezone).
+ * On Saturday/Sunday, automatically shifts effective date to next Monday and returns preview metadata.
+ */
+export function resolveMenuCycleContext(params?: {
+  dateInput?: Date | string | null;
+  config?: Partial<MenuCycleConfig> | null;
+  assignments?: MenuCalendarAssignment[] | null;
+  displayYear?: number;
+  displayMonth?: number;
+}): MenuCycleResolution {
+  const targetParts = getVietnamDateParts(params?.dateInput);
+  const isWeekend = targetParts.weekday === 0 || targetParts.weekday === 6;
+
+  // On Saturday (+2) or Sunday (+1), preview next Monday's menu
+  const effectiveParts = isWeekend
+    ? addCalendarDays(targetParts, targetParts.weekday === 6 ? 2 : 1)
+    : targetParts;
+
+  const config: MenuCycleConfig = {
+    id: params?.config?.id || 'default',
+    cycle_mode:
+      params?.config?.cycle_mode === 'MANUAL_CALENDAR' ? 'MANUAL_CALENDAR' : 'AUTO_ROTATE_4',
+    week_5_fallback: normalizeWeek5Fallback(
+      params?.config?.week_5_fallback ?? (params?.config as any)?.week5_fallback
+    ),
+    updated_by: params?.config?.updated_by ?? null,
+    updated_at: params?.config?.updated_at,
+  };
+
+  const effectiveMonthWeeks = getSchoolWeeksOfMonth({
+    year: effectiveParts.year,
+    month: effectiveParts.month,
+    config,
+    assignments: params?.assignments,
+  });
+
+  const matchedWeek =
+    effectiveMonthWeeks.find((w) =>
+      w.days.some((d) => d.date === effectiveParts.dateString)
+    ) || effectiveMonthWeeks[0];
+
+  const weekOfMonth = matchedWeek ? matchedWeek.week_of_month : 1;
+  const menuWeekNumber = matchedWeek
+    ? matchedWeek.assigned_menu_week
+    : resolveMenuWeekForMonthWeek({
+        year: effectiveParts.year,
+        month: effectiveParts.month,
+        weekOfMonth,
+        config,
+        assignments: params?.assignments,
+      });
+
+  const targetDisplayYear = params?.displayYear || effectiveParts.year;
+  const targetDisplayMonth = params?.displayMonth || effectiveParts.month;
+  const isSameEffectiveMonth =
+    targetDisplayYear === effectiveParts.year && targetDisplayMonth === effectiveParts.month;
+
+  const monthWeeks = getSchoolWeeksOfMonth({
+    year: targetDisplayYear,
+    month: targetDisplayMonth,
+    config,
+    assignments: params?.assignments,
+    currentWeekOfMonth: isSameEffectiveMonth ? weekOfMonth : null,
+  });
+
+  const dayOfWeek = WEEKDAY_TO_ENUM[effectiveParts.weekday] || 'MONDAY';
+  const weekdayVi = WEEKDAY_VI_FULL[effectiveParts.weekday] || 'Thứ Hai';
+  const effectiveDateShort = `${pad2(effectiveParts.day)}/${pad2(effectiveParts.month)}`;
+  const effectiveDateFormatted = `${effectiveDateShort}/${effectiveParts.year}`;
+  const shortDisplayLabel = `Tuần ${weekOfMonth} (Tháng ${effectiveParts.month})`;
+  const todayCardTitle =
+    weekOfMonth === 5
+      ? `Thực đơn hôm nay • ${weekdayVi}, ${effectiveDateShort} • Tuần 5 (Áp dụng theo Thực đơn Tuần ${menuWeekNumber})`
+      : `Thực đơn hôm nay • ${shortDisplayLabel}`;
+
+  return {
+    target_date: targetParts.dateString,
+    effective_date: effectiveParts.dateString,
+    is_weekend: isWeekend,
+    weekend_notice: isWeekend ? 'Trường nghỉ cuối tuần' : null,
+    preview_label: isWeekend
+      ? `Xem trước: ${weekdayVi}, ngày ${effectiveDateShort}`
+      : null,
+    year: effectiveParts.year,
+    month: effectiveParts.month,
+    day: effectiveParts.day,
+    day_of_week: dayOfWeek,
+    weekday_vi: weekdayVi,
+    effective_date_formatted: effectiveDateFormatted,
+    week_of_month: weekOfMonth,
+    menu_week_number: menuWeekNumber,
+    cycle_mode: config.cycle_mode,
+    week_5_fallback: config.week_5_fallback,
+    display_label: `Tuần ${weekOfMonth} (Tháng ${effectiveParts.month}/${effectiveParts.year})`,
+    short_display_label: shortDisplayLabel,
+    full_date_label: `${weekdayVi}, ngày ${effectiveDateFormatted} • ${shortDisplayLabel}`,
+    today_card_title: todayCardTitle,
+    month_weeks: monthWeeks,
+  };
+}
+
+/**
+ * Backward-compatible helper: returns resolved menu week (1 to 4) for current Vietnam school week.
+ */
+export function getCurrentMenuWeek(currentDate: Date = new Date()): number {
+  return resolveMenuCycleContext({ dateInput: currentDate }).menu_week_number;
+}
+
+/**
+ * Converts JavaScript Date weekday (in Vietnam timezone) to DayOfWeek enum.
+ * Saturday/Sunday preview Monday.
+ */
+export function getDayOfWeekEnum(date: Date = new Date()): DayOfWeek {
+  const parts = getVietnamDateParts(date);
+  return WEEKDAY_TO_ENUM[parts.weekday] || 'MONDAY';
+}
+
 
 /**
  * Helper to check if a dish contains an allergen matching student allergies string

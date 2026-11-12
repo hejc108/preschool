@@ -23,16 +23,15 @@ import {
   ShieldAlert,
   Trash2,
   UserCheck,
-  Utensils,
 } from 'lucide-react';
-import { AbsenceRequest, AuthorizedPickup, WeeklyMenu } from '@/lib/types/schema';
+import { AbsenceRequest, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { checkDishAllergen, getCurrentMenuWeek, getDayOfWeekEnum } from '@/lib/utils/menuHelper';
 import { getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
+import { MenuTodayCard } from '@/components/pwa/MenuTodayCard';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 
 export interface ParentChild {
@@ -179,8 +178,6 @@ export function ParentPortalView() {
       Array.isArray(activitiesPayload?.meal_exceptions) ? activitiesPayload.meal_exceptions : [],
     [activitiesPayload]
   );
-  const liveMenuList: WeeklyMenu[] =
-    menuPayload?.has_db && Array.isArray(menuPayload.menu) ? menuPayload.menu : [];
 
   const parentChildren: ParentChild[] = useMemo(() => {
     return linkedStudents.map((rel) => {
@@ -350,6 +347,18 @@ export function ParentPortalView() {
       },
       {
         table: 'weekly_menus',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
+      {
+        table: 'menu_cycle_configs',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
+      {
+        table: 'menu_calendar_assignments',
         onEvent: () => {
           void mutateMenu();
         },
@@ -607,20 +616,6 @@ export function ParentPortalView() {
       alert(err?.message || 'Lỗi khi xóa người đón.');
     }
   };
-
-  // Menu today
-  const currentWeekNum = getCurrentMenuWeek();
-  const currentDayOfWeek = getDayOfWeekEnum();
-  const mealOrder: Record<string, number> = {
-    BREAKFAST: 1,
-    LUNCH_MAIN: 2,
-    LUNCH_SOUP: 3,
-    DESSERT: 4,
-    AFTERNOON_SNACK: 5,
-  };
-  const todayMeals = liveMenuList
-    .filter((m) => m.week_number === currentWeekNum && m.day_of_week === currentDayOfWeek)
-    .sort((a, b) => (mealOrder[a.meal_type] || 99) - (mealOrder[b.meal_type] || 99));
 
   // Timeline events
   const selectedChildTimelineEvents = useMemo(() => {
@@ -1046,66 +1041,11 @@ export function ParentPortalView() {
           </div>
 
           {/* Menu Today */}
-          <div className="bg-white border border-slate-200 rounded-convent p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2 text-sky-900 font-bold text-xs">
-                <Utensils className="w-4 h-4 text-sky-600" />
-                <span>Thực đơn hôm nay (Tuần {currentWeekNum})</span>
-              </div>
-              <Link
-                href="/parent/menu"
-                className="text-[11px] text-sky-700 hover:text-sky-900 font-bold flex items-center gap-0.5"
-              >
-                Xem toàn bộ 4 tuần <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            {todayMeals.length === 0 ? (
-              <div className="py-6 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
-                <p className="text-xs font-semibold text-slate-500">
-                  Nhà trường đang cập nhật thực đơn
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 text-xs">
-                {todayMeals.map((meal) => {
-                  const allergenCheck = checkDishAllergen(
-                    meal.dish_name,
-                    meal.allergens,
-                    selectedChild.allergies
-                  );
-                  return (
-                    <div
-                      key={meal.id}
-                      className="flex items-center justify-between p-2 bg-slate-50 rounded-xl"
-                    >
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">
-                          {meal.meal_type === 'BREAKFAST'
-                            ? 'Bữa sáng'
-                            : meal.meal_type === 'LUNCH_MAIN'
-                            ? 'Trưa - Món mặn'
-                            : meal.meal_type === 'LUNCH_SOUP'
-                            ? 'Trưa - Món canh'
-                            : meal.meal_type === 'DESSERT'
-                            ? 'Tráng miệng'
-                            : 'Bữa xế'}
-                        </span>
-                        <span className="font-bold text-slate-800 text-xs">{meal.dish_name}</span>
-                      </div>
-
-                      {allergenCheck.hasAllergen && (
-                        <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
-                          <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <MenuTodayCard
+            menuPayload={menuPayload}
+            fullViewHref="/parent/menu"
+            studentAllergies={selectedChild.allergies}
+          />
 
           {/* Growth Tracker */}
           <Link

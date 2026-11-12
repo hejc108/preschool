@@ -33,6 +33,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
+import { MenuTodayCard } from '@/components/pwa/MenuTodayCard';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 import {
   readCachedClassAttendance,
@@ -469,6 +470,17 @@ export function TeacherPortalView() {
     ? absencesPayload.absences
     : [];
 
+  // 5. Daily & Monthly Cycle Menu via /api/admin/menu
+  const { data: menuPayload, mutate: mutateMenu } = useSWR(
+    isTeacherReady ? ['role', 'TEACHER', 'menu'] : null,
+    () => fetchAsTeacher('/api/admin/menu'),
+    {
+      revalidateOnMount: true,
+      keepPreviousData: true,
+      refreshInterval: 120000,
+    }
+  );
+
   const activeClassIdRef = useRef<string | null>(activeClass?.id || null);
   useEffect(() => {
     activeClassIdRef.current = activeClass?.id || null;
@@ -555,6 +567,24 @@ export function TeacherPortalView() {
           if (activeClassIdRef.current) void mutateKitchenReport();
         },
       },
+      {
+        table: 'weekly_menus',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
+      {
+        table: 'menu_cycle_configs',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
+      {
+        table: 'menu_calendar_assignments',
+        onEvent: () => {
+          void mutateMenu();
+        },
+      },
     ],
   });
 
@@ -571,7 +601,7 @@ export function TeacherPortalView() {
   const handleRefreshClassAssignment = async () => {
     setRefreshingClass(true);
     try {
-      await Promise.all([refreshSession(), mutateClasses()]);
+      await Promise.all([refreshSession(), mutateClasses(), mutateMenu()]);
     } finally {
       setTimeout(() => setRefreshingClass(false), 400);
     }
@@ -1222,6 +1252,13 @@ export function TeacherPortalView() {
             </button>
           </div>
 
+          {/* Thực đơn hôm nay cho Giáo viên */}
+          <MenuTodayCard
+            menuPayload={menuPayload}
+            fullViewHref="/teacher/menu"
+            collapsible
+          />
+
           {/* Class Absence Notices from Postgres (/api/absences) — NEVER disabled for Teacher's own child */}
           {absences.map((abs) => {
             const isApproved = abs.status === 'APPROVED';
@@ -1680,6 +1717,12 @@ export function TeacherPortalView() {
       {/* --- TAB 3: MEAL EXCEPTIONS TAGGING --- */}
       {activeTab === 'MEALS' && (
         <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+          <MenuTodayCard
+            menuPayload={menuPayload}
+            fullViewHref="/teacher/menu"
+            collapsible
+          />
+
           <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-convent text-xs space-y-1 text-slate-800">
             <span className="font-bold text-sky-900 block">{t('teacher.meal_rules_title')}</span>
             <p className="text-slate-700">
