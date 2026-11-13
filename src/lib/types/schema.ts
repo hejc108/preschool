@@ -536,6 +536,14 @@ export interface PreschoolAISchemaResponse {
 
 // --- PHẦN 6: QUẢN LÝ TÀI LIỆU / VĂN BẢN (ADMIN WEB - SRS 6 TRẠNG THÁI) ---
 export type DocumentStorageType = 'SUPABASE_STORAGE' | 'EXTERNAL_LINK';
+export type DocumentCreationMode = 'FILE_UPLOAD' | 'ONLINE_EDITOR';
+export type DocumentTemplateCode =
+  | 'CONG_VAN'
+  | 'QUYET_DINH'
+  | 'KE_HOACH'
+  | 'TO_TRINH'
+  | 'BIEN_BAN'
+  | 'BLANK';
 export type DocumentVisibilityScope = 'ALL_ADMINS' | 'SUPER_ADMIN_ONLY';
 export type DocumentStatus =
   | 'DRAFT'
@@ -604,6 +612,10 @@ export interface SchoolDocument {
   description?: string | null;
   visibility_scope: DocumentVisibilityScope;
   status: DocumentStatus;
+  creation_mode: DocumentCreationMode;
+  editor_content_html?: string | null;
+  editor_template_code?: DocumentTemplateCode | string | null;
+  generated_docx_path?: string | null;
   rejection_reason?: string | null;
   superseded_by_id?: string | null;
   superseded_by_title?: string | null;

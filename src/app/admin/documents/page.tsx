@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Eye,
   FileCheck2,
+  FileEdit,
   FileSpreadsheet,
   FileText,
   FolderOpen,
@@ -95,6 +96,13 @@ function getExternalHost(url?: string | null): string {
 }
 
 function getDocumentKindVisual(doc: SchoolDocument) {
+  if (doc.creation_mode === 'ONLINE_EDITOR') {
+    return {
+      icon: FileEdit,
+      badgeBg: 'bg-blue-50 text-blue-700 border-blue-200',
+      label: 'Soạn trên Web',
+    };
+  }
   const kind = getDocumentPreviewKind(doc);
   if (kind === 'external') {
     return {
@@ -356,6 +364,10 @@ export default function AdminDocumentsPage() {
   };
 
   const handleDownloadDocument = async (doc: SchoolDocument) => {
+    if (doc.creation_mode === 'ONLINE_EDITOR') {
+      window.open(`/api/admin/documents/${doc.id}/docx`, '_blank');
+      return;
+    }
     if (doc.storage_type === 'EXTERNAL_LINK') {
       if (doc.external_url) {
         window.open(doc.external_url, '_blank', 'noopener,noreferrer');
@@ -946,7 +958,11 @@ export default function AdminDocumentsPage() {
                                         '_blank',
                                         'noopener,noreferrer'
                                       );
-                                    } else if (previewKind === 'pdf' || previewKind === 'image') {
+                                    } else if (
+                                      previewKind === 'pdf' ||
+                                      previewKind === 'image' ||
+                                      previewKind === 'editor'
+                                    ) {
                                       setPreviewModal({ document: doc, initialTab: 'preview' });
                                     } else {
                                       void handleDownloadDocument(doc);
@@ -958,6 +974,12 @@ export default function AdminDocumentsPage() {
                                 </button>
 
                                 <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-slate-500">
+                                  {doc.creation_mode === 'ONLINE_EDITOR' && (
+                                    <span className="inline-flex items-center gap-1 font-semibold text-[11px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+                                      <FileEdit className="w-3 h-3" />
+                                      Soạn trên Web
+                                    </span>
+                                  )}
                                   {doc.document_number ? (
                                     <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
                                       Số: {doc.document_number}
@@ -1180,7 +1202,30 @@ export default function AdminDocumentsPage() {
                           <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1.5 max-w-[340px]">
                               {/* Preview / Download / Link */}
-                              {previewKind === 'external' && doc.external_url ? (
+                              {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPreviewModal({ document: doc, initialTab: 'preview' })
+                                    }
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                    title="Xem trước văn bản trực tuyến"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Xem</span>
+                                  </button>
+                                  <a
+                                    href={`/api/admin/documents/${doc.id}/docx`}
+                                    download
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors"
+                                    title="Tải tệp Word (.docx) chuẩn Nghị định 30"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>{doc.status === 'APPROVED' ? '.docx' : 'Nháp .docx'}</span>
+                                  </a>
+                                </>
+                              ) : previewKind === 'external' && doc.external_url ? (
                                 <a
                                   href={doc.external_url}
                                   target="_blank"

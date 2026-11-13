@@ -82,6 +82,15 @@ export async function POST(request: Request) {
         file_name: formData.get('file_name') ? String(formData.get('file_name')) : null,
         file_size: formData.get('file_size') ? Number(formData.get('file_size')) : null,
         mime_type: formData.get('mime_type') ? String(formData.get('mime_type')) : null,
+        creation_mode: formData.get('creation_mode')
+          ? String(formData.get('creation_mode'))
+          : 'FILE_UPLOAD',
+        editor_content_html: formData.get('editor_content_html')
+          ? String(formData.get('editor_content_html'))
+          : null,
+        editor_template_code: formData.get('editor_template_code')
+          ? String(formData.get('editor_template_code'))
+          : null,
         initial_action: formData.get('initial_action')
           ? String(formData.get('initial_action'))
           : 'save_draft',
@@ -120,6 +129,9 @@ export async function POST(request: Request) {
       file_name: body.file_name ?? null,
       file_size: body.file_size !== undefined ? Number(body.file_size) : null,
       mime_type: body.mime_type ?? null,
+      creation_mode: body.creation_mode ?? 'FILE_UPLOAD',
+      editor_content_html: body.editor_content_html ?? null,
+      editor_template_code: body.editor_template_code ?? null,
       initial_action: body.initial_action ?? 'save_draft',
     });
 

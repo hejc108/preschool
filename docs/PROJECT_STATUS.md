@@ -143,6 +143,52 @@ Module đã được nâng cấp hoàn chỉnh **100% khớp đặc tả `SRS_FR
 
 ---
 
+### 3.5. CR-02: Soạn Thảo Trực Tiếp Trên Web & Xuất Tệp Word (.docx) Chuẩn Nghị Định 30/2020/NĐ-CP
+
+Bổ sung phân hệ soạn thảo trực tiếp không cần tải tệp ban đầu, đáp ứng đầy đủ yêu cầu thể thức văn bản quản lý nhà nước theo **Nghị định 30/2020/NĐ-CP**:
+
+#### A. Database Migration (`00019_document_rich_text_editor.sql`)
+* Mở rộng bảng `public.school_documents`:
+  * `creation_mode TEXT NOT NULL DEFAULT 'FILE_UPLOAD' CHECK (creation_mode IN ('FILE_UPLOAD', 'ONLINE_EDITOR'))`
+  * `editor_content_html TEXT NULL`: Lưu nội dung HTML do người dùng soạn thảo từ Web Editor.
+  * `editor_template_code TEXT NULL`: Mã phôi mẫu hành chính đã chọn (`CONG_VAN`, `QUYET_DINH`, `KE_HOACH`, `TO_TRINH`, `BIEN_BAN`, `BLANK`).
+  * `generated_docx_path TEXT NULL`: Đường dẫn tệp `.docx` được sinh tự động lưu trữ trong bucket private `school-documents`.
+* Cập nhật RLS & CHECK constraint: Cho phép tạo `DRAFT` và gửi `SUBMITTED` đối với văn bản `ONLINE_EDITOR` mà không bắt buộc có tệp vật lý ban đầu.
+
+#### B. Thư viện & Công Nghệ Triển Khai
+* **Rich Text Editor:** `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-underline`, `@tiptap/extension-text-align`, `@tiptap/extension-table` (kèm TableRow, TableHeader, TableCell) — gọn nhẹ, bảo mật, render client mượt mà, hỗ trợ định dạng Heading, Bold, Italic, Underline, Căn lề trái/giữa/phải/đều, Danh sách chấm/số, và Chèn bảng biểu đa cột.
+* **Bộ Sinh Word (.docx):** `docx` v9.15 + `node-html-parser` v9.0.
+* **Service Sinh File Chuẩn Nghị Định 30/2020/NĐ-CP ([`src/lib/documents/docxGeneratorService.ts`](file:///Users/thiemvv/Projects/Preschool/src/lib/documents/docxGeneratorService.ts)):**
+  1. **Khổ giấy & Căn lề chuẩn:** Khổ A4 (210mm × 297mm); Lề trên 20mm (1134 twips), Lề dưới 20mm (1134 twips), Lề trái 30mm (1701 twips), Lề phải 15mm (850 twips).
+  2. **Font chữ & Cỡ chữ:** Font `Times New Roman`. Tiêu đề/Trích yếu: 13-14pt; Nội dung thân văn bản: 13pt (size 26 half-points); Bảng biểu/Chú thích: 12pt; Nơi nhận: 11pt nghiêng.
+  3. **Header 2 cột không viền (Borderless Table):**
+     * Cột trái (40%): Đơn vị chủ quản (`ỦY BAN NHÂN DÂN HUYỆN ĐAN PHƯỢNG`), Cơ quan ban hành (`TRƯỜNG MẦM NON SƯƠNG MAI` in đậm gạch chân), Số hiệu (`Số: .../2026/CV-MNSM`).
+     * Cột phải (60%): Quốc hiệu (`CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM` in hoa đậm), Tiêu ngữ (`Độc lập - Tự do - Hạnh phúc` in đậm gạch chân), Địa danh & Ngày ban hành (`Hà Nội, ngày ... tháng ... năm ...` in nghiêng).
+  4. **Thân văn bản:** Parse cây HTML từ `editor_content_html`, giữ nguyên in đậm, nghiêng, gạch chân, căn lề và bảng biểu lưới kẻ chuẩn công văn.
+  5. **Footer Chữ Ký 2 cột không viền:**
+     * Cột trái: *Nơi nhận* (11pt nghiêng; - Như trên; - Ban Giám hiệu; - Lưu: VT, HS).
+     * Cột phải: Chức danh người ký (`HIỆU TRƯỞNG` in hoa đậm), ghi chú ký tên đóng dấu, và họ tên Hiệu trưởng phê duyệt.
+
+#### C. Thư Viện Phôi Mẫu Hành Chính ([`src/lib/documents/templates.ts`](file:///Users/thiemvv/Projects/Preschool/src/lib/documents/templates.ts))
+* 6 mẫu phôi chuẩn hóa sẵn khung thể thức:
+  1. `CONG_VAN` — Công văn hành chính chỉ đạo, hướng dẫn chuyên môn.
+  2. `QUYET_DINH` — Quyết định thành lập hội đồng, ban hành quy chế, nhân sự.
+  3. `KE_HOACH` — Kế hoạch tổ chức chuyên đề, hoạt động trải nghiệm, lễ hội.
+  4. `TO_TRINH` — Tờ trình đề nghị phê duyệt kinh phí, bổ sung thiết bị dạy học.
+  5. `BIEN_BAN` — Biên bản họp Ban Giám hiệu, giao ban, thanh tra nội bộ.
+  6. `BLANK` — Trang trắng tự soạn thảo theo nhu cầu riêng.
+
+#### D. Tích Hợp Luồng Phê Duyệt & Xuất Bản
+* **Lưu nháp (DRAFT) & Trình duyệt (SUBMITTED):** Quản trị viên/Văn thư có thể tải ngay bản nháp Word có tiền tố `[Bản nháp]` qua endpoint `GET /api/admin/documents/[id]/docx`.
+* **Phê duyệt (APPROVED):** Khi Hiệu trưởng duyệt văn bản `ONLINE_EDITOR`, hệ thống tự động:
+  1. Tạo buffer `.docx` chính thức chuẩn Nghị định 30.
+  2. Tải tệp lên Supabase Storage bucket `school-documents` dưới tên chuẩn hóa (VD: `2026/CV_DEN_DI/01_2026_CV_MNSM_...docx`).
+  3. Lưu đường dẫn vào `storage_path` và `generated_docx_path`.
+  4. Tự động đồng bộ tệp `.docx` này lên Google Drive thư mục `Năm <YYYY> / <Danh mục>`.
+* **Xem trước (Preview):** Modal xem trước render trang giấy A4 trực quan kèm khung thể thức Quốc hiệu, Tiêu ngữ và hỗ trợ nút tải nhanh bản Word `.docx`.
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
@@ -155,6 +201,7 @@ Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
 7. `00016_admin_documents.sql`: Khởi tạo module tài liệu, bucket `school-documents`, 6 danh mục seed.
 8. `00017_documents_srs_workflow.sql`: Máy trạng thái SRS 6 trạng thái, số hiệu tự động & audit logs.
 9. `00018_document_audit_auto_expire.sql`: Cho phép audit action `AUTO_EXPIRE` & index quét cron hết hạn.
+10. `00019_document_rich_text_editor.sql`: Mở rộng `creation_mode`, `editor_content_html`, `editor_template_code`, `generated_docx_path` hỗ trợ Web Rich Text Editor & xuất Word chuẩn Nghị định 30.
 
 ---
 

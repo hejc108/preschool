@@ -9,6 +9,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  FileEdit,
   FileText,
   GitBranch,
   History,
@@ -25,6 +26,8 @@ import {
   formatDocumentFileSize,
   getDocumentPreviewKind,
 } from '@/lib/documents/validation';
+import { formatVietnameseAdminDate } from '@/lib/documents/docxGeneratorService';
+import { getDocumentTemplate } from '@/lib/documents/templates';
 
 export interface DocumentPreviewModalProps {
   document: SchoolDocument;
@@ -64,14 +67,17 @@ export function DocumentPreviewModal({
 }: DocumentPreviewModalProps) {
   const [detailDoc, setDetailDoc] = useState<SchoolDocument>(initialDoc);
   const previewKind = getDocumentPreviewKind(detailDoc);
-  const canInlinePreview = previewKind === 'pdf' || previewKind === 'image';
+  const canInlinePreview =
+    previewKind === 'pdf' || previewKind === 'image' || previewKind === 'editor';
 
   const [activeTab, setActiveTab] = useState<'preview' | 'details'>(
     initialTab === 'details' || !canInlinePreview ? 'details' : 'preview'
   );
 
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState<boolean>(canInlinePreview);
+  const [loadingPreview, setLoadingPreview] = useState<boolean>(
+    previewKind === 'pdf' || previewKind === 'image'
+  );
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   const [auditLogs, setAuditLogs] = useState<DocumentAuditLog[]>([]);
@@ -82,7 +88,7 @@ export function DocumentPreviewModal({
   useEffect(() => {
     setDetailDoc(initialDoc);
     const kind = getDocumentPreviewKind(initialDoc);
-    const supportsInline = kind === 'pdf' || kind === 'image';
+    const supportsInline = kind === 'pdf' || kind === 'image' || kind === 'editor';
     setActiveTab(initialTab === 'details' || !supportsInline ? 'details' : 'preview');
   }, [initialDoc, initialTab]);
 
@@ -212,7 +218,18 @@ export function DocumentPreviewModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {detailDoc.storage_type === 'EXTERNAL_LINK' && detailDoc.external_url ? (
+            {detailDoc.creation_mode === 'ONLINE_EDITOR' ? (
+              <a
+                href={`/api/admin/documents/${detailDoc.id}/docx`}
+                download
+                className="px-3.5 py-1.5 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>
+                  {detailDoc.status === 'APPROVED' ? 'Tải tệp Word (.docx)' : 'Tải bản nháp (.docx)'}
+                </span>
+              </a>
+            ) : detailDoc.storage_type === 'EXTERNAL_LINK' && detailDoc.external_url ? (
               <a
                 href={detailDoc.external_url}
                 target="_blank"
@@ -297,8 +314,87 @@ export function DocumentPreviewModal({
 
         {/* Body */}
         {activeTab === 'preview' && canInlinePreview ? (
-          <div className="p-4 bg-slate-100/70 flex-1 overflow-auto flex items-center justify-center min-h-[55vh]">
-            {loadingPreview ? (
+          <div className="p-4 bg-slate-100/70 flex-1 overflow-auto flex items-start justify-center min-h-[55vh]">
+            {previewKind === 'editor' ? (
+              <div className="w-full max-w-3xl my-4 bg-white shadow-lg border border-slate-300 rounded-lg p-6 sm:p-10 text-slate-800">
+                {/* Status banner */}
+                <div className="mb-6 p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <FileEdit className="w-4 h-4 text-blue-700 shrink-0" />
+                    <span>
+                      {detailDoc.status === 'APPROVED'
+                        ? 'Văn bản đã được Hiệu trưởng phê duyệt chính thức theo thể thức Nghị định 30/2020/NĐ-CP.'
+                        : 'Văn bản soạn thảo trực tiếp trên Web. Bạn có thể tải bản nháp Word (.docx) để kiểm tra thể thức.'}
+                    </span>
+                  </div>
+                  <a
+                    href={`/api/admin/documents/${detailDoc.id}/docx`}
+                    className="font-bold underline text-blue-900 hover:text-blue-950 inline-flex items-center gap-1 shrink-0 ml-2"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>{detailDoc.status === 'APPROVED' ? 'Tải tệp .docx' : 'Tải bản nháp .docx'}</span>
+                  </a>
+                </div>
+
+                {/* Decree 30 Letterhead Header */}
+                <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-300 text-[13px] leading-snug">
+                  <div className="text-center font-serif">
+                    <p className="uppercase text-[11px] font-medium text-slate-600">ỦY BAN NHÂN DÂN HUYỆN ĐAN PHƯỢNG</p>
+                    <p className="font-bold uppercase text-xs text-slate-900">TRƯỜNG MẦM NON SƯƠNG MAI</p>
+                    <div className="w-24 h-[1px] bg-slate-400 mx-auto my-1" />
+                    <p className="italic text-xs text-slate-700 mt-1">
+                      Số: {detailDoc.document_number || '.../2026/CV-MNSM'}
+                    </p>
+                  </div>
+                  <div className="text-center font-serif">
+                    <p className="font-bold uppercase text-xs text-slate-900 tracking-wide">
+                      CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+                    </p>
+                    <p className="font-bold text-xs text-slate-900 underline decoration-slate-400 underline-offset-4">
+                      Độc lập - Tự do - Hạnh phúc
+                    </p>
+                    <p className="italic text-xs text-slate-700 mt-2">
+                      {formatVietnameseAdminDate(detailDoc.issued_date)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Editor Content */}
+                <div
+                  className="prose prose-sm max-w-none font-serif text-slate-900 py-6 leading-relaxed border-b border-slate-300 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-slate-300 [&_th]:p-2 [&_th]:bg-slate-50 [&_td]:border [&_td]:border-slate-300 [&_td]:p-2"
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      detailDoc.editor_content_html ||
+                      '<p class="italic text-slate-400">Văn bản chưa có nội dung.</p>',
+                  }}
+                />
+
+                {/* Decree 30 Footer Signatures */}
+                <div className="grid grid-cols-2 gap-4 pt-6 text-[13px] leading-snug font-serif">
+                  <div className="text-left text-xs">
+                    <p className="font-bold italic">Nơi nhận:</p>
+                    <p className="text-slate-600">- Như trên;</p>
+                    <p className="text-slate-600">- Ban Giám hiệu;</p>
+                    <p className="text-slate-600">- Lưu: VT, HS.</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold uppercase text-xs text-slate-900">
+                      {detailDoc.approved_by ? 'HIỆU TRƯỞNG' : 'NGƯỜI KÝ DUYỆT'}
+                    </p>
+                    <p className="italic text-[11px] text-slate-500 mt-1">
+                      {detailDoc.approved_by ? '(Đã ký & đóng dấu)' : '(Ký, ghi rõ họ tên và đóng dấu)'}
+                    </p>
+                    <div className="h-16 flex items-center justify-center">
+                      {detailDoc.approved_by ? (
+                        <span className="font-serif italic font-bold text-rose-800 text-sm">
+                          {detailDoc.approver_name || 'Hiệu trưởng'}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : loadingPreview ? (
               <div className="text-center space-y-2.5 py-12">
                 <Loader2 className="w-7 h-7 animate-spin text-primary-700 mx-auto" />
                 <p className="text-xs text-slate-500 font-medium">
@@ -377,6 +473,24 @@ export function DocumentPreviewModal({
                   >
                     {statusMeta.label}
                   </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Hình thức tạo</span>
+                  {detailDoc.creation_mode === 'ONLINE_EDITOR' ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-blue-700">
+                      <FileEdit className="w-3.5 h-3.5" /> Soạn thảo trên Web
+                      {detailDoc.editor_template_code && (
+                        <span className="text-[11px] font-normal text-slate-500">
+                          ({getDocumentTemplate(detailDoc.editor_template_code).label})
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+                      <FileText className="w-3.5 h-3.5" /> Tải tệp / Đường dẫn
+                    </span>
+                  )}
                 </div>
 
                 <div>

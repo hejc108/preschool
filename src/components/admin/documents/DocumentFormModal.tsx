@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
+  FileEdit,
   FileText,
   Globe,
   Info,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import {
   DocumentCategory,
+  DocumentCreationMode,
   DocumentStorageType,
   DocumentVisibilityScope,
   SchoolDocument,
@@ -30,6 +32,12 @@ import {
   validateEffectiveAndExpirationDates,
   validateExternalDocumentUrl,
 } from '@/lib/documents/validation';
+import {
+  DOCUMENT_TEMPLATES,
+  getDocumentTemplate,
+} from '@/lib/documents/templates';
+import { formatVietnameseAdminDate } from '@/lib/documents/docxGeneratorService';
+import { DocumentRichTextEditor } from '@/components/admin/documents/DocumentRichTextEditor';
 
 export interface DocumentFormModalProps {
   categories: DocumentCategory[];
@@ -81,7 +89,27 @@ export function DocumentFormModal({
     editingDocument?.storage_type || 'SUPABASE_STORAGE'
   );
   const [externalUrl, setExternalUrl] = useState(editingDocument?.external_url || '');
+  const [creationMode, setCreationMode] = useState<DocumentCreationMode>(
+    editingDocument?.creation_mode || 'FILE_UPLOAD'
+  );
+  const [editorTemplateCode, setEditorTemplateCode] = useState<string>(
+    editingDocument?.editor_template_code || 'CONG_VAN'
+  );
+  const [editorContentHtml, setEditorContentHtml] = useState<string>(
+    editingDocument?.editor_content_html || getDocumentTemplate('CONG_VAN').initialHtml
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleSelectTemplate = (code: string) => {
+    setEditorTemplateCode(code);
+    const tmpl = getDocumentTemplate(code);
+    setEditorContentHtml(tmpl.initialHtml);
+    // Gợi ý danh mục phù hợp nếu đang ở danh mục mặc định
+    const matchedCategory = categories.find((c) => c.code === tmpl.categoryCodeFallback);
+    if (matchedCategory) {
+      setCategoryId(matchedCategory.id);
+    }
+  };
   const [submitting, setSubmitting] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<'save_draft' | 'submit_for_approval' | null>(null);
   const [uploadProgressLabel, setUploadProgressLabel] = useState<string>('');
@@ -136,7 +164,12 @@ export function DocumentFormModal({
       return;
     }
 
-    if (storageType === 'EXTERNAL_LINK') {
+    if (creationMode === 'ONLINE_EDITOR') {
+      if (!editorContentHtml.trim()) {
+        setErrorMsg('Vui lòng nhập nội dung văn bản trước khi lưu.');
+        return;
+      }
+    } else if (storageType === 'EXTERNAL_LINK') {
       const urlCheck = validateExternalDocumentUrl(externalUrl);
       if (!urlCheck.ok) {
         setErrorMsg(urlCheck.error);
@@ -175,6 +208,12 @@ export function DocumentFormModal({
           ...(editingDocument.storage_type === 'EXTERNAL_LINK'
             ? { external_url: externalUrl.trim() }
             : {}),
+          ...(editingDocument.creation_mode === 'ONLINE_EDITOR'
+            ? {
+                editor_content_html: editorContentHtml,
+                editor_template_code: editorTemplateCode,
+              }
+            : {}),
         };
 
         const res = await fetch(`/api/admin/documents/${editingDocument.id}`, {
@@ -196,7 +235,38 @@ export function DocumentFormModal({
           ? 'Đã tạo tài liệu và gửi trình Hiệu trưởng phê duyệt.'
           : 'Đã lưu tài liệu dưới dạng Bản nháp (DRAFT).';
 
-      // Create mode
+      // Create mode: ONLINE_EDITOR
+      if (creationMode === 'ONLINE_EDITOR') {
+        setUploadProgressLabel('Đang lưu văn bản soạn thảo...');
+        const res = await fetch('/api/admin/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: cleanTitle,
+            document_number: documentNumber.trim() || null,
+            category_id: categoryId,
+            issued_date: issuedDate,
+            effective_date: cleanEffectiveDate,
+            expiration_date: cleanExpirationDate,
+            description: description.trim() || null,
+            visibility_scope: isSuperAdmin ? visibilityScope : 'ALL_ADMINS',
+            storage_type: 'SUPABASE_STORAGE',
+            creation_mode: 'ONLINE_EDITOR',
+            editor_content_html: editorContentHtml,
+            editor_template_code: editorTemplateCode,
+            initial_action: initialAction,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
+          setErrorMsg(json.message || json.error || `Không thể tạo tài liệu (${res.status}).`);
+          return;
+        }
+        onSaved(json.document as SchoolDocument, successMsg);
+        return;
+      }
+
+      // Create mode: EXTERNAL_LINK
       if (storageType === 'EXTERNAL_LINK') {
         setUploadProgressLabel('Đang lưu liên kết tài liệu...');
         const res = await fetch('/api/admin/documents', {
@@ -337,7 +407,7 @@ export function DocumentFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -361,7 +431,7 @@ export function DocumentFormModal({
               </div>
               <p className="text-xs text-slate-500">
                 {isEditing
-                  ? 'Cập nhật trích yếu, số hiệu, hiệu lực, danh mục hoặc phạm vi hiển thị'
+                  ? 'Cập nhật trích yếu, nội dung soạn thảo, hiệu lực, danh mục hoặc bảo mật'
                   : 'Tài liệu mới được tạo ở Bản nháp (DRAFT) hoặc Trình duyệt (SUBMITTED)'}
               </p>
             </div>
@@ -390,130 +460,252 @@ export function DocumentFormModal({
             <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
               <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
               <span>
-                Theo quy trình phê duyệt, tài liệu nháp chưa đồng bộ lên Google Drive. Sau khi Hiệu trưởng <strong>Phê duyệt (APPROVED)</strong>, hệ thống mới cấp số hiệu chính thức (nếu để trống) và tự động sao lưu Drive.
+                Theo quy trình phê duyệt, tài liệu nháp chưa đồng bộ lên Google Drive. Sau khi Hiệu trưởng <strong>Phê duyệt (APPROVED)</strong>, hệ thống tự động sinh tệp Word (.docx) chuẩn Nghị định 30 (nếu soạn trực tuyến) và sao lưu lên Drive.
               </span>
             </div>
           )}
 
-          {/* Storage Type Selector (Create only) */}
+          {/* Creation Mode Selector (Tải tệp vs Soạn thảo trực tiếp) */}
           {!isEditing ? (
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">
-                Hình thức lưu trữ (*)
+                Phương thức tạo văn bản (*)
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
-                    setStorageType('SUPABASE_STORAGE');
+                    setCreationMode('FILE_UPLOAD');
                     setErrorMsg(null);
                   }}
                   className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    storageType === 'SUPABASE_STORAGE'
+                    creationMode === 'FILE_UPLOAD'
                       ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
                       : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <Upload className="w-4 h-4 shrink-0" />
                   <div>
-                    <div className="font-bold">Tải tệp lên hệ thống</div>
-                    <div className="text-[11px] opacity-80">PDF, Word, Excel, Ảnh (≤ 25MB)</div>
+                    <div className="font-bold">Tải tệp / Liên kết có sẵn</div>
+                    <div className="text-[11px] opacity-80">Tải tệp PDF, Word, Excel hoặc URL Google Drive</div>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => {
-                    setStorageType('EXTERNAL_LINK');
+                    setCreationMode('ONLINE_EDITOR');
                     setErrorMsg(null);
                   }}
                   className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    storageType === 'EXTERNAL_LINK'
+                    creationMode === 'ONLINE_EDITOR'
                       ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
                       : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <Link2 className="w-4 h-4 shrink-0" />
+                  <FileEdit className="w-4 h-4 shrink-0 text-primary-700" />
                   <div>
-                    <div className="font-bold">Gắn liên kết ngoài</div>
-                    <div className="text-[11px] opacity-80">Google Drive / Docs / mamnonsuongmai.edu.vn</div>
+                    <div className="font-bold">Soạn thảo trực tiếp trên Web</div>
+                    <div className="text-[11px] opacity-80">Trình soạn thảo chuẩn Nghị định 30, tự xuất file Word (.docx)</div>
                   </div>
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-700">
-                {editingDocument?.storage_type === 'EXTERNAL_LINK' ? (
-                  <>
-                    <Link2 className="w-4 h-4 text-sky-600 shrink-0" />
-                    <span className="font-semibold">Nguồn: Liên kết Google Workspace / Ngoài</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-4 h-4 text-primary-700 shrink-0" />
-                    <div>
-                      <span className="font-semibold">{editingDocument?.file_name || 'Tệp đính kèm'}</span>
-                      <span className="text-slate-400 ml-2">
-                        ({formatDocumentFileSize(editingDocument?.file_size)})
-                      </span>
-                    </div>
-                  </>
-                )}
+          ) : editingDocument?.creation_mode === 'ONLINE_EDITOR' ? (
+            <div className="p-3 rounded-xl bg-primary-50/70 border border-primary-200 flex items-center justify-between gap-3 text-primary-950">
+              <div className="flex items-center gap-2">
+                <FileEdit className="w-4 h-4 text-primary-700 shrink-0" />
+                <span className="font-semibold text-xs">
+                  Hình thức: Soạn thảo trực tiếp trên Web (Chuẩn Nghị định 30/2020/NĐ-CP)
+                </span>
+              </div>
+              <span className="text-[11px] bg-white px-2 py-0.5 rounded-full border border-primary-200 font-medium text-primary-800">
+                Mẫu: {getDocumentTemplate(editorTemplateCode).label}
+              </span>
+            </div>
+          ) : null}
+
+          {/* ONLINE_EDITOR UI */}
+          {creationMode === 'ONLINE_EDITOR' && (
+            <div className="space-y-3">
+              {!isEditing && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Chọn mẫu phôi hành chính (Nghị định 30/2020/NĐ-CP)
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                    {DOCUMENT_TEMPLATES.map((tmpl) => (
+                      <button
+                        key={tmpl.code}
+                        type="button"
+                        onClick={() => {
+                          if (
+                            editorContentHtml &&
+                            editorContentHtml !== getDocumentTemplate(editorTemplateCode).initialHtml
+                          ) {
+                            if (
+                              !window.confirm(
+                                'Đổi mẫu sẽ thay thế nội dung đang soạn thảo bằng phôi mẫu mới. Bạn có chắc chắn muốn đổi?'
+                              )
+                            ) {
+                              return;
+                            }
+                          }
+                          handleSelectTemplate(tmpl.code);
+                        }}
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                          editorTemplateCode === tmpl.code
+                            ? 'bg-rose-50 border-primary-600 text-primary-900 font-bold shadow-2xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
+                        }`}
+                      >
+                        <div className="text-xs truncate">{tmpl.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tiptap Rich Text Editor */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  Nội dung văn bản (*)
+                </label>
+                <DocumentRichTextEditor
+                  content={editorContentHtml}
+                  onChange={setEditorContentHtml}
+                  documentNumber={documentNumber || '.../2026/CV-MNSM'}
+                  dateLabel={formatVietnameseAdminDate(issuedDate)}
+                  isReadOnly={isEditing && editingDocument?.status === 'APPROVED'}
+                />
               </div>
             </div>
           )}
 
-          {/* File Picker or External URL */}
-          {!isEditing && storageType === 'SUPABASE_STORAGE' && (
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
-                Chọn tệp đính kèm (*)
-              </label>
-              <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-slate-50/70 hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
-                <Upload className="w-6 h-6 text-primary-700 mb-1.5" />
-                {selectedFile ? (
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-slate-800">{selectedFile.name}</p>
-                    <p className="text-[11px] text-emerald-700 font-semibold">
-                      {formatDocumentFileSize(selectedFile.size)} • Sẵn sàng tải lên
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-slate-700">Nhấn để chọn tệp từ máy tính</p>
-                    <p className="text-[11px] text-slate-400">
-                      Chấp nhận: .pdf, .doc, .docx, .xls, .xlsx, .png, .jpg (Tối đa 25MB)
-                    </p>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          )}
+          {/* FILE_UPLOAD UI */}
+          {creationMode === 'FILE_UPLOAD' && (
+            <>
+              {/* Storage Type Selector (Create only) */}
+              {!isEditing ? (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Hình thức lưu trữ (*)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStorageType('SUPABASE_STORAGE');
+                        setErrorMsg(null);
+                      }}
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        storageType === 'SUPABASE_STORAGE'
+                          ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Upload className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-bold">Tải tệp lên hệ thống</div>
+                        <div className="text-[11px] opacity-80">PDF, Word, Excel, Ảnh (≤ 25MB)</div>
+                      </div>
+                    </button>
 
-          {storageType === 'EXTERNAL_LINK' && (
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
-                Đường dẫn liên kết ngoài (*)
-              </label>
-              <input
-                type="url"
-                value={externalUrl}
-                onChange={(e) => setExternalUrl(e.target.value)}
-                placeholder="https://drive.google.com/file/d/... hoặc https://docs.google.com/..."
-                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
-                required
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Chỉ chấp nhận HTTPS thuộc Google Workspace (Drive, Docs, Sheets, Slides, Forms, Sites) hoặc mamnonsuongmai.edu.vn.
-              </p>
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStorageType('EXTERNAL_LINK');
+                        setErrorMsg(null);
+                      }}
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        storageType === 'EXTERNAL_LINK'
+                          ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Link2 className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-bold">Gắn liên kết ngoài</div>
+                        <div className="text-[11px] opacity-80">Google Drive / Docs / mamnonsuongmai.edu.vn</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-slate-700">
+                    {editingDocument?.storage_type === 'EXTERNAL_LINK' ? (
+                      <>
+                        <Link2 className="w-4 h-4 text-sky-600 shrink-0" />
+                        <span className="font-semibold">Nguồn: Liên kết Google Workspace / Ngoài</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4 text-primary-700 shrink-0" />
+                        <div>
+                          <span className="font-semibold">{editingDocument?.file_name || 'Tệp đính kèm'}</span>
+                          <span className="text-slate-400 ml-2">
+                            ({formatDocumentFileSize(editingDocument?.file_size)})
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* File Picker or External URL */}
+              {!isEditing && storageType === 'SUPABASE_STORAGE' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Chọn tệp đính kèm (*)
+                  </label>
+                  <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-slate-50/70 hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
+                    <Upload className="w-6 h-6 text-primary-700 mb-1.5" />
+                    {selectedFile ? (
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-slate-800">{selectedFile.name}</p>
+                        <p className="text-[11px] text-emerald-700 font-semibold">
+                          {formatDocumentFileSize(selectedFile.size)} • Sẵn sàng tải lên
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-slate-700">Nhấn để chọn tệp từ máy tính</p>
+                        <p className="text-[11px] text-slate-400">
+                          Chấp nhận: .pdf, .doc, .docx, .xls, .xlsx, .png, .jpg (Tối đa 25MB)
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {storageType === 'EXTERNAL_LINK' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">
+                    Đường dẫn liên kết ngoài (*)
+                  </label>
+                  <input
+                    type="url"
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/... hoặc https://docs.google.com/..."
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Chỉ chấp nhận HTTPS thuộc Google Workspace (Drive, Docs, Sheets, Slides, Forms, Sites) hoặc mamnonsuongmai.edu.vn.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Metadata Fields */}

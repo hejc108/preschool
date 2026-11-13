@@ -15,6 +15,7 @@ import {
   DocumentAuditAction,
   DocumentAuditLog,
   DocumentCategory,
+  DocumentCreationMode,
   DocumentStatus,
   DocumentStorageType,
   DocumentVisibilityScope,
@@ -40,6 +41,7 @@ import {
   validateWorkflowTransition,
 } from '@/lib/documents/validation';
 import { syncDocumentToGoogleDrive } from '@/lib/documents/googleDriveService';
+import { generateDocumentDocxBuffer } from '@/lib/documents/docxGeneratorService';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -227,6 +229,10 @@ function hydrateDocuments(
       description: r.description ?? null,
       visibility_scope: r.visibility_scope as DocumentVisibilityScope,
       status: r.status as DocumentStatus,
+      creation_mode: (r.creation_mode || 'FILE_UPLOAD') as DocumentCreationMode,
+      editor_content_html: r.editor_content_html ?? null,
+      editor_template_code: r.editor_template_code ?? null,
+      generated_docx_path: r.generated_docx_path ?? null,
       rejection_reason: r.rejection_reason ?? null,
       superseded_by_id: r.superseded_by_id ?? null,
       superseded_by_title: supInfo?.title ?? null,
@@ -989,6 +995,9 @@ export async function createDocumentRecord(
     mime_type?: string | null;
     file?: File | null;
     initial_action?: 'save_draft' | 'submit_for_approval' | string | null;
+    creation_mode?: DocumentCreationMode | string | null;
+    editor_content_html?: string | null;
+    editor_template_code?: string | null;
   }
 ): Promise<{ ok: true; document: SchoolDocument } | ServiceErrorResult> {
   const title = String(input.title || '').trim();
@@ -1052,13 +1061,33 @@ export async function createDocumentRecord(
 
   const description = String(input.description || '').trim() || null;
 
+  const rawCreationMode = String(input.creation_mode || '').trim().toUpperCase();
+  const creationMode: DocumentCreationMode =
+    rawCreationMode === 'ONLINE_EDITOR' ? 'ONLINE_EDITOR' : 'FILE_UPLOAD';
+
+  const editorContentHtml =
+    input.editor_content_html !== undefined && input.editor_content_html !== null
+      ? String(input.editor_content_html).trim()
+      : null;
+  const editorTemplateCode =
+    input.editor_template_code !== undefined && input.editor_template_code !== null
+      ? String(input.editor_template_code).trim()
+      : null;
+
   let storagePath: string | null = null;
   let externalUrl: string | null = null;
   let fileName: string | null = null;
   let fileSize: number | null = null;
   let mimeType: string | null = null;
 
-  if (input.storage_type === 'EXTERNAL_LINK') {
+  if (creationMode === 'ONLINE_EDITOR') {
+    if (!editorContentHtml) {
+      return fail(400, 'MISSING_EDITOR_CONTENT', 'Vui lòng nhập nội dung văn bản trước khi lưu.');
+    }
+    const safeBase = buildSafeStorageFileName(title).replace(/\.[^.]+$/, '');
+    fileName = `${safeBase || 'van_ban'}.docx`;
+    mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  } else if (input.storage_type === 'EXTERNAL_LINK') {
     const urlCheck = validateExternalDocumentUrl(input.external_url || '');
     if (!urlCheck.ok) {
       return fail(400, urlCheck.code, urlCheck.error);
@@ -1138,7 +1167,7 @@ export async function createDocumentRecord(
     effective_date: effRes.date,
     expiration_date: expRes.date,
     category_id: category.id,
-    storage_type: input.storage_type,
+    storage_type: creationMode === 'ONLINE_EDITOR' ? 'SUPABASE_STORAGE' : input.storage_type,
     storage_path: storagePath,
     external_url: externalUrl,
     file_name: fileName,
@@ -1149,6 +1178,10 @@ export async function createDocumentRecord(
     status: targetStatus,
     uploaded_by: getSafeProfileUuid(ctx),
     drive_sync_status: 'PENDING',
+    creation_mode: creationMode,
+    editor_content_html: editorContentHtml,
+    editor_template_code: editorTemplateCode,
+    generated_docx_path: null,
   };
 
   const { data: inserted, error: insertErr } = await executeWithContextFallback(ctx, async (sb) =>
@@ -1210,6 +1243,8 @@ export async function updateDocumentRecord(
     visibility_scope?: unknown;
     status?: unknown;
     external_url?: unknown;
+    editor_content_html?: unknown;
+    editor_template_code?: unknown;
   }
 ): Promise<{ ok: true; document: SchoolDocument } | ServiceErrorResult> {
   if (input.status !== undefined) {
@@ -1350,6 +1385,18 @@ export async function updateDocumentRecord(
     updates.external_url = urlCheck.url;
   }
 
+  if (input.editor_content_html !== undefined) {
+    const rawHtml = String(input.editor_content_html || '').trim();
+    if (!rawHtml && existing.creation_mode === 'ONLINE_EDITOR') {
+      return fail(400, 'MISSING_EDITOR_CONTENT', 'Nội dung văn bản không được để trống.');
+    }
+    updates.editor_content_html = rawHtml || null;
+  }
+
+  if (input.editor_template_code !== undefined) {
+    updates.editor_template_code = String(input.editor_template_code || '').trim() || null;
+  }
+
   if (Object.keys(updates).length === 0) {
     return { ok: true, document: existing };
   }
@@ -1462,14 +1509,18 @@ export async function transitionDocumentWorkflow(
 
   if (rule.action === 'submit_for_approval') {
     const hasSource =
-      existing.storage_type === 'EXTERNAL_LINK'
-        ? Boolean(existing.external_url)
-        : Boolean(existing.storage_path);
+      existing.creation_mode === 'ONLINE_EDITOR'
+        ? Boolean(existing.editor_content_html && existing.editor_content_html.trim())
+        : existing.storage_type === 'EXTERNAL_LINK'
+          ? Boolean(existing.external_url)
+          : Boolean(existing.storage_path);
     if (!existing.title?.trim() || !existing.category_id || !hasSource) {
       return fail(
         400,
         'INCOMPLETE_DRAFT_FOR_SUBMISSION',
-        'Tài liệu cần có đủ tiêu đề, danh mục và tệp/liên kết đính kèm trước khi trình duyệt.'
+        existing.creation_mode === 'ONLINE_EDITOR'
+          ? 'Vui lòng nhập nội dung văn bản trước khi trình duyệt.'
+          : 'Tài liệu cần có đủ tiêu đề, danh mục và tệp/liên kết đính kèm trước khi trình duyệt.'
       );
     }
   }
@@ -1539,6 +1590,54 @@ export async function transitionDocumentWorkflow(
     auditMetadata.document_number = finalDocNumber;
     auditMetadata.effective_date = effDate;
     auditMetadata.expiration_date = expDate;
+
+    if (existing.creation_mode === 'ONLINE_EDITOR') {
+      try {
+        const docxBuffer = await generateDocumentDocxBuffer({
+          title: existing.title,
+          documentNumber: finalDocNumber,
+          issuedDate: existing.issued_date,
+          effectiveDate: effDate,
+          categoryName: category?.name,
+          editorContentHtml: existing.editor_content_html,
+          status: 'APPROVED',
+          approverName: getActorDisplayName(ctx),
+          approvedAt: updates.approved_at,
+          isDraft: false,
+        });
+
+        const [year, month] = (effDate || today).split('-');
+        const safeBase = buildSafeStorageFileName(existing.title).replace(/\.[^.]+$/, '');
+        const targetPath = `${year}/${month}/${crypto.randomUUID()}_${safeBase || 'van_ban'}.docx`;
+        const fileName = `${safeBase || 'van_ban'}.docx`;
+        const mimeType =
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+        const sb = await getPreferredStorageClient(ctx);
+        await ensurePrivateDocumentBucketIfPossible(sb);
+
+        const { data: upData, error: upErr } = await sb.storage
+          .from(DOCUMENT_BUCKET_NAME)
+          .upload(targetPath, docxBuffer, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (!upErr && upData?.path) {
+          updates.generated_docx_path = upData.path;
+          updates.storage_path = upData.path;
+          updates.storage_type = 'SUPABASE_STORAGE';
+          updates.file_name = fileName;
+          updates.file_size = docxBuffer.length;
+          updates.mime_type = mimeType;
+          auditMetadata.docx_generated = true;
+        } else {
+          console.warn('[DocxGeneration] Storage upload failed:', upErr);
+        }
+      } catch (docxErr) {
+        console.warn('[DocxGeneration] Error generating docx during approve:', docxErr);
+      }
+    }
   }
 
   if (rule.action === 'reject' || rule.action === 'withdraw') {
@@ -1819,4 +1918,68 @@ export async function deleteDocumentPermanently(
   }
 
   return { ok: true, deleted_id: id };
+}
+
+export async function generateDraftDocxForDocument(
+  ctx: SessionContext,
+  id: string
+): Promise<
+  | { ok: true; buffer: Buffer; fileName: string; isApproved: boolean }
+  | ServiceErrorResult
+> {
+  const docRes = await getDocumentById(ctx, id);
+  if (!docRes.ok) return docRes;
+  const doc = docRes.document;
+
+  if (doc.creation_mode !== 'ONLINE_EDITOR') {
+    return fail(
+      400,
+      'NOT_AN_ONLINE_EDITOR_DOCUMENT',
+      'Tài liệu này không được tạo từ trình soạn thảo trực tuyến.'
+    );
+  }
+
+  const isApproved = doc.status === 'APPROVED';
+
+  // Nếu đã phê duyệt và có tệp trên Storage, tải tệp từ Storage để bảo đảm tính chuẩn xác
+  if (isApproved && doc.storage_path) {
+    try {
+      const sb = await getPreferredStorageClient(ctx);
+      const { data, error } = await sb.storage
+        .from(DOCUMENT_BUCKET_NAME)
+        .download(doc.storage_path);
+      if (!error && data) {
+        const arrayBuf = await data.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        const safeBase = buildSafeStorageFileName(doc.title).replace(/\.[^.]+$/, '');
+        return {
+          ok: true,
+          buffer,
+          fileName: `${safeBase || 'van_ban'}.docx`,
+          isApproved: true,
+        };
+      }
+    } catch {
+      // Fallback sang tự sinh lại bên dưới nếu storage download tạm thời lỗi
+    }
+  }
+
+  const buffer = await generateDocumentDocxBuffer({
+    title: doc.title,
+    documentNumber: doc.document_number,
+    issuedDate: doc.issued_date,
+    effectiveDate: doc.effective_date,
+    categoryName: doc.category?.name,
+    editorContentHtml: doc.editor_content_html,
+    status: doc.status,
+    approverName: doc.approver_name,
+    approvedAt: doc.approved_at,
+    isDraft: !isApproved,
+  });
+
+  const safeBase = buildSafeStorageFileName(doc.title).replace(/\.[^.]+$/, '');
+  const prefix = isApproved ? '' : '[Bản nháp] ';
+  const fileName = `${prefix}${safeBase || 'van_ban'}.docx`;
+
+  return { ok: true, buffer, fileName, isApproved };
 }

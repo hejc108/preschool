@@ -213,8 +213,11 @@ export function buildCategoryCodeFromName(name: string): string {
 }
 
 export function getDocumentPreviewKind(
-  doc: Pick<SchoolDocument, 'storage_type' | 'file_name' | 'mime_type'>
-): 'pdf' | 'image' | 'download' | 'external' {
+  doc: Pick<SchoolDocument, 'storage_type' | 'file_name' | 'mime_type'> & {
+    creation_mode?: string | null;
+  }
+): 'pdf' | 'image' | 'download' | 'external' | 'editor' {
+  if (doc.creation_mode === 'ONLINE_EDITOR') return 'editor';
   if (doc.storage_type === 'EXTERNAL_LINK') return 'external';
   const ext = getFileExtension(doc.file_name || '');
   const mime = (doc.mime_type || '').toLowerCase();
