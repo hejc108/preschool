@@ -68,3 +68,9 @@ Mọi AI Agent khi tiếp nhận tác vụ **BẮT BUỘC** tuân thủ tuyệt 
 - **Tích hợp ngữ cảnh:** Các cấu hình chuyên biệt của phân hệ nào phải đặt gọn dưới dạng Tab con hoặc nút Cấu hình ngay bên trong phân hệ đó.
 - **Dự phòng liên kết cũ (Graceful Redirection):** Luôn duy trì redirect chuyển tiếp mượt mà cho các route cũ sang route tích hợp (kèm query param mở sẵn tab/modal tương ứng) để không bao giờ phát sinh lỗi 404 cho người dùng.
 
+### 9. Luật Chống Lặp Chữ, Trùng Nút & Đồng Bộ Màu Thương Hiệu (UI/UX Guardrails)
+- **Zero Repetition Rule:** Không lặp lại cùng một từ khóa/badge (như "4 tuần") quá 2 lần trong cùng vùng nhìn Header + Sidebar; không gắn badge lặp lại đúng nội dung tên menu.
+- **Single Entry Point & Single Icon Rule:** Mỗi chức năng chỉ có **1 nút mở duy nhất** trên một màn hình; mỗi nút chỉ dùng **1 icon chuẩn `lucide-react`**, cấm trộn lẫn icon vector với ký tự emoji.
+- **Brand Color Consistency:** Nút hành động chính (`Lưu`, `Phê duyệt`, `Tạo mới`) phải thống nhất theo bảng màu chủ đạo của hệ thống (`bg-red-600 hover:bg-red-700 text-white` hoặc tông đỏ ngọn đuốc Sương Mai), tuyệt đối không tự ý đổi sang màu vàng/xanh lệch tông.
+
+

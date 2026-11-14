@@ -71,11 +71,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isStaff = userRole === 'STAFF';
 
   const mainNavItems: { label: string; href: string; icon: React.ElementType; badge?: string }[] = isStaff ? [
-    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
+    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed },
     { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: HeartPulse, badge: 'WHO' },
   ] : [
     { label: t('admin.sidebar.dashboard'), href: '/admin/dashboard', icon: LayoutDashboard },
-    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed, badge: '4 Tuần' },
+    { label: t('admin.sidebar.menu_matrix'), href: '/admin/menu', icon: UtensilsCrossed },
     { label: t('admin.sidebar.health_tracker'), href: '/admin/health', icon: HeartPulse, badge: 'WHO' },
     { label: t('admin.sidebar.kitchen'), href: '/admin/kitchen', icon: ChefHat },
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },

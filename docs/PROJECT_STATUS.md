@@ -24,7 +24,7 @@
 * Các phân hệ chính:
   * `/admin/dashboard` — Bảng điều khiển tổng quan Ban Giám Hiệu.
   * `/admin/documents` — **FR-01 Quản lý Văn bản & Hồ sơ Nhà trường** (6 trạng thái SRS + Drive Archive).
-  * `/admin/menu` — **Thực đơn 4 tuần & Cấu hình chu kỳ** (Tích hợp 2 tab: Bảng thực đơn 4 tuần & Cấu hình chu kỳ tháng; tự động chuyển hướng từ `/admin/menu/settings`).
+  * `/admin/menu` — **Quản lý thực đơn** (Lên thực đơn tuần & Modal cấu hình chu kỳ xoay vòng; tự động chuyển hướng từ `/admin/menu/settings`).
   * `/admin/health` — Sổ theo dõi sức khỏe & biểu đồ tăng trưởng WHO.
   * `/admin/kitchen` — Báo cáo suất ăn nhà bếp hằng ngày.
   * `/admin/students` & `/admin/students/[id]` — Hồ sơ học sinh & liên kết phụ huynh.
@@ -292,6 +292,25 @@ Nhằm tinh gọn thanh điều hướng bên trái và tuân thủ quy chuẩn 
 
 3. **Quy chuẩn UI/UX bổ sung:**
    * *Không tách các màn hình cấu hình phụ của một nghiệp vụ thành menu cấp 1 trên Sidebar; các cấu hình chuyên biệt của phân hệ nào phải đặt gọn dưới dạng Tab con hoặc nút Cấu hình ngay bên trong phân hệ đó.*
+
+---
+
+### 3.10. CR-06: Chuẩn Hóa UI/UX Quản Lý Thực Đơn & Bộ Quy Tắc Chống Lặp Chữ, Trùng Nút
+
+1. **Thanh Sidebar Quản trị:** Đổi tên mục điều hướng thành **`Quản lý thực đơn`** và loại bỏ hoàn toàn badge `4 Tuần` gây lặp từ.
+2. **Header Trang Quản Lý Thực Đơn:**
+   - Tiêu đề chính ngắn gọn: **`Quản lý thực đơn`** (`text-xl font-bold text-slate-900`), loại bỏ badge tròn `4 Tuần` bị méo và cụm `& Chu kỳ`.
+   - Dòng mô tả: *"Lên thực đơn dinh dưỡng theo tuần và lịch xoay vòng tự động."*
+   - Bên phải chỉ giữ **đúng 2 nút chuẩn mực**:
+     - Nút phụ: `[Cấu hình chu kỳ]` (icon `SlidersHorizontal` viền xám `border-slate-300 bg-white text-slate-700`, mở Modal hộp thoại cấu hình chu kỳ).
+     - Nút chính: `[Lưu thay đổi]` (`bg-red-600 hover:bg-red-700 text-white` đồng bộ màu đỏ thương hiệu hệ thống).
+3. **Khung Thông Báo Trạng Thái:**
+   - 1 dòng thông tin rõ ràng: `Thứ Hai, 16/11/2026 • Đang áp dụng: Bộ thực đơn Tuần 3 (Chu kỳ xoay vòng 4 tuần)`.
+   - Xóa bỏ hoàn toàn nút `Cấu hình chu kỳ` bị đặt lặp lại tại đây.
+4. **Bộ Quy Tắc Kiểm Tra UI/UX Bắt Buộc (Mục 9 - AGENTS.md):**
+   - **Zero Repetition Rule:** Cấm lặp lại từ khóa/badge quá 2 lần trong cùng viewport Header + Sidebar; cấm badge lặp lại tên menu.
+   - **Single Entry Point & Single Icon Rule:** Mỗi chức năng chỉ có 1 nút mở duy nhất; cấm chèn emoji vào icon vector `lucide-react`.
+   - **Brand Color Consistency:** Nút hành động chính bắt buộc dùng màu đỏ thương hiệu Sương Mai (`bg-red-600`), không tự ý đổi sang vàng/cam/xanh lệch tông.
 
 ---
 
