@@ -255,6 +255,26 @@ Nhằm nâng cấp trải nghiệm biên tập trực tiếp và khắc phục t
 
 ---
 
+### 3.8. CR-04: Full-Screen Document Studio (2 Cột) & Khắc Phục Lặp Quốc Hiệu Khi Đọc File Word (.docx)
+
+Nhằm tối ưu hóa trải nghiệm soạn thảo chuyên nghiệp như Google Docs / Word Online và loại bỏ hoàn toàn cảm giác chật chội trong Popup:
+
+1. **Full-Screen Document Studio (`fixed inset-0 z-50 bg-slate-100 flex flex-col`):**
+   * **Thanh điều hướng trên cùng (Top Header Bar — `h-14 bg-white border-b`):**
+     * Bên trái: Nút `← Quay lại` (có xác nhận cảnh báo an toàn nếu có thay đổi chưa lưu `isDirty`), Input chỉnh sửa trực tiếp **Tiêu đề văn bản** (`title`) ngay trên thanh công cụ, và Badge trạng thái (`Đang soạn thảo` / `Chờ duyệt`...).
+     * Bên phải: Dropdown chọn **Phôi mẫu** (hiển thị khi tạo mới), nút `[Tải nháp .docx]` (khi văn bản đã lưu), nút `[Lưu nháp]`, và nút hành động chính `[Trình duyệt]` (tạo mới) hoặc `[Lưu thay đổi]` (chỉnh sửa).
+   * **Khu vực làm việc chính chia 2 cột (`flex-1 overflow-hidden flex`):**
+     * **Cột trái (70% — Vùng soạn thảo trang A4):** Thanh công cụ Tiptap Toolbar gắn cố định phía trên (`sticky top-0 bg-white border-b z-10`), bên dưới là vùng cuộn độc lập chứa trang giấy trắng chuẩn khổ A4 (`max-w-[820px] min-h-[1050px] mx-auto bg-white shadow-sm border border-slate-300 p-10 md:p-14 font-serif`) giúp soạn thảo thoải mái không bị giới hạn chiều cao.
+     * **Cột phải (30% — Cài đặt & Thuộc tính văn bản, `w-[360px] bg-white border-l overflow-y-auto p-5`):** Đặt toàn bộ các trường metadata (*Danh mục văn bản, Số hiệu văn bản, Ngày ban hành, Ngày hiệu lực, Ngày hết hạn / Dài hạn, Phạm vi bảo mật, Ghi chú tóm tắt*) để người dùng thiết lập song song mà không chiếm dụng không gian của trang giấy.
+   * **Chế độ Tải tệp lên / Liên kết ngoài (`FILE_UPLOAD`):** Giữ nguyên Modal Popup tiêu chuẩn gọn gàng, hỗ trợ chuyển đổi mượt mà sang Trình soạn thảo toàn màn hình.
+
+2. **Khắc Phục Lỗi Lặp Quốc Hiệu – Tiêu Ngữ Khi Đọc File Word (.docx):**
+   * Khi nạp hoặc trích xuất nội dung từ tệp `.docx` (`DOCX_EXTRACTED`), hệ thống kiểm tra nếu nội dung đã chứa chuỗi Quốc hiệu `"CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"` hoặc `"TRƯỜNG MẦM NON SƯƠNG MAI"` thì:
+     * Cả giao diện soạn thảo (`DocumentRichTextEditor`) và bộ sinh file Word (`docxGeneratorService`) đều tự động ẩn phần Header thể thức chèn sẵn, nạp trực tiếp nội dung trích xuất của tệp Word lên trang giấy, chấm dứt triệt để lỗi hiển thị 2 lần Quốc hiệu – Tiêu ngữ.
+     * Tương tự đối với khối Chữ ký Hiệu trưởng & Nơi nhận (nếu tài liệu gốc đã có sẵn).
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):

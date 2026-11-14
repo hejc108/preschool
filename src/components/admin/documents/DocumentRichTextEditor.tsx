@@ -35,6 +35,7 @@ interface DocumentRichTextEditorProps {
   isReadOnly?: boolean;
   documentNumber?: string | null;
   dateLabel?: string | null;
+  layoutMode?: 'embedded' | 'fullscreen';
 }
 
 export function DocumentRichTextEditor({
@@ -44,8 +45,22 @@ export function DocumentRichTextEditor({
   isReadOnly,
   documentNumber,
   dateLabel,
+  layoutMode = 'embedded',
 }: DocumentRichTextEditorProps) {
   const isEditable = isReadOnly !== undefined ? !isReadOnly : editable;
+
+  const contentNormalized = (content || '').toUpperCase();
+  const hasEmbeddedHeader =
+    contentNormalized.includes('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM') ||
+    contentNormalized.includes('CONG HOA XA HOI CHU NGHIA VIET NAM') ||
+    contentNormalized.includes('TRƯỜNG MẦM NON SƯƠNG MAI') ||
+    contentNormalized.includes('TRUONG MAM NON SUONG MAI');
+
+  const hasEmbeddedFooter =
+    contentNormalized.includes('HIỆU TRƯỞNG') ||
+    contentNormalized.includes('HIEU TRUONG') ||
+    contentNormalized.includes('NƠI NHẬN:') ||
+    contentNormalized.includes('NOI NHAN:');
 
   const editor = useEditor({
     extensions: [
@@ -103,270 +118,302 @@ export function DocumentRichTextEditor({
 
   const isTableActive = editor.isActive('table');
 
-  return (
-    <div className="border border-slate-300 rounded-2xl overflow-hidden bg-white shadow-sm flex flex-col">
-      {/* 1. THANH CÔNG CỤ (TOOLBAR) */}
-      {editable && (
-        <div className="bg-slate-100/90 border-b border-slate-200 px-3 py-2 flex flex-wrap items-center gap-1 text-slate-700 select-none">
-          {/* Lịch sử */}
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().undo().run()}
-            disabled={!editor.can().undo()}
-            className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent"
-            title="Hoàn tác (Ctrl+Z)"
-          >
-            <Undo2 className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().redo().run()}
-            disabled={!editor.can().redo()}
-            className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent"
-            title="Làm lại (Ctrl+Y)"
-          >
-            <Redo2 className="w-4 h-4" />
-          </button>
+  const toolbarNode = editable && (
+    <div className={`${
+      layoutMode === 'fullscreen'
+        ? 'bg-white border-b border-slate-200 px-4 py-2 shadow-2xs shrink-0 z-10 sticky top-0'
+        : 'bg-slate-100/90 border-b border-slate-200 px-3 py-2'
+    } flex flex-wrap items-center gap-1 text-slate-700 select-none`}>
+      {/* Lịch sử */}
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().undo().run()}
+        disabled={!editor.can().undo()}
+        className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+        title="Hoàn tác (Ctrl+Z)"
+      >
+        <Undo2 className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().redo().run()}
+        disabled={!editor.can().redo()}
+        className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+        title="Làm lại (Ctrl+Y)"
+      >
+        <Redo2 className="w-4 h-4" />
+      </button>
 
-          <span className="w-px h-5 bg-slate-300 mx-1" />
+      <span className="w-px h-5 bg-slate-300 mx-1" />
 
-          {/* Định dạng chữ */}
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive('bold')
-                ? 'bg-primary-100 text-primary-800 font-bold'
-                : 'hover:bg-slate-200'
-            }`}
-            title="In đậm (Ctrl+B)"
-          >
-            <Bold className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive('italic')
-                ? 'bg-primary-100 text-primary-800 font-bold'
-                : 'hover:bg-slate-200'
-            }`}
-            title="In nghiêng (Ctrl+I)"
-          >
-            <Italic className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive('underline')
-                ? 'bg-primary-100 text-primary-800 font-bold'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Gạch chân (Ctrl+U)"
-          >
-            <UnderlineIcon className="w-4 h-4" />
-          </button>
+      {/* Định dạng chữ */}
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive('bold')
+            ? 'bg-primary-100 text-primary-800 font-bold'
+            : 'hover:bg-slate-200'
+        }`}
+        title="In đậm (Ctrl+B)"
+      >
+        <Bold className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive('italic')
+            ? 'bg-primary-100 text-primary-800 font-bold'
+            : 'hover:bg-slate-200'
+        }`}
+        title="In nghiêng (Ctrl+I)"
+      >
+        <Italic className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive('underline')
+            ? 'bg-primary-100 text-primary-800 font-bold'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Gạch chân (Ctrl+U)"
+      >
+        <UnderlineIcon className="w-4 h-4" />
+      </button>
 
-          <span className="w-px h-5 bg-slate-300 mx-1" />
+      <span className="w-px h-5 bg-slate-300 mx-1" />
 
-          {/* Căn lề */}
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive({ textAlign: 'left' })
-                ? 'bg-primary-100 text-primary-800'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Căn trái"
-          >
-            <AlignLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive({ textAlign: 'center' })
-                ? 'bg-primary-100 text-primary-800'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Căn giữa"
-          >
-            <AlignCenter className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive({ textAlign: 'right' })
-                ? 'bg-primary-100 text-primary-800'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Căn phải"
-          >
-            <AlignRight className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive({ textAlign: 'justify' })
-                ? 'bg-primary-100 text-primary-800'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Căn đều hai bên"
-          >
-            <AlignJustify className="w-4 h-4" />
-          </button>
+      {/* Căn lề */}
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive({ textAlign: 'left' })
+            ? 'bg-primary-100 text-primary-800'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Căn trái"
+      >
+        <AlignLeft className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive({ textAlign: 'center' })
+            ? 'bg-primary-100 text-primary-800'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Căn giữa"
+      >
+        <AlignCenter className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive({ textAlign: 'right' })
+            ? 'bg-primary-100 text-primary-800'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Căn phải"
+      >
+        <AlignRight className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive({ textAlign: 'justify' })
+            ? 'bg-primary-100 text-primary-800'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Căn đều hai bên"
+      >
+        <AlignJustify className="w-4 h-4" />
+      </button>
 
-          <span className="w-px h-5 bg-slate-300 mx-1" />
+      <span className="w-px h-5 bg-slate-300 mx-1" />
 
-          {/* Danh sách */}
+      {/* Danh sách */}
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive('bulletList')
+            ? 'bg-primary-100 text-primary-800 font-bold'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Danh sách dấu chấm"
+      >
+        <List className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          editor.isActive('orderedList')
+            ? 'bg-primary-100 text-primary-800 font-bold'
+            : 'hover:bg-slate-200'
+        }`}
+        title="Danh sách số"
+      >
+        <ListOrdered className="w-4 h-4" />
+      </button>
+
+      <span className="w-px h-5 bg-slate-300 mx-1" />
+
+      {/* Bảng biểu */}
+      <button
+        type="button"
+        onClick={() =>
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run()
+        }
+        className="p-1.5 rounded hover:bg-slate-200 flex items-center gap-1 text-xs font-semibold cursor-pointer"
+        title="Chèn bảng biểu (3x3)"
+      >
+        <TableIcon className="w-4 h-4" />
+        <span className="hidden sm:inline">Chèn bảng</span>
+      </button>
+
+      {isTableActive && (
+        <div className="flex items-center gap-1 ml-1 bg-white px-2 py-0.5 rounded border border-slate-300 text-xs">
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive('bulletList')
-                ? 'bg-primary-100 text-primary-800 font-bold'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Danh sách dấu chấm"
+            onClick={() => editor.chain().focus().addColumnAfter().run()}
+            className="p-1 hover:bg-slate-100 rounded text-slate-700 cursor-pointer"
+            title="Thêm cột sau"
           >
-            <List className="w-4 h-4" />
+            <Columns className="w-3.5 h-3.5 text-emerald-700" />
           </button>
           <button
             type="button"
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className={`p-1.5 rounded transition-colors ${
-              editor.isActive('orderedList')
-                ? 'bg-primary-100 text-primary-800 font-bold'
-                : 'hover:bg-slate-200'
-            }`}
-            title="Danh sách số"
+            onClick={() => editor.chain().focus().deleteColumn().run()}
+            className="p-1 hover:bg-slate-100 rounded text-rose-700 cursor-pointer"
+            title="Xóa cột"
           >
-            <ListOrdered className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
-
-          <span className="w-px h-5 bg-slate-300 mx-1" />
-
-          {/* Bảng biểu */}
+          <span className="w-px h-3.5 bg-slate-200" />
           <button
             type="button"
-            onClick={() =>
-              editor
-                .chain()
-                .focus()
-                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                .run()
-            }
-            className="p-1.5 rounded hover:bg-slate-200 flex items-center gap-1 text-xs font-semibold"
-            title="Chèn bảng biểu (3x3)"
+            onClick={() => editor.chain().focus().addRowAfter().run()}
+            className="p-1 hover:bg-slate-100 rounded text-slate-700 cursor-pointer"
+            title="Thêm dòng sau"
           >
-            <TableIcon className="w-4 h-4" />
-            <span className="hidden sm:inline">Chèn bảng</span>
+            <Rows className="w-3.5 h-3.5 text-emerald-700" />
           </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().deleteRow().run()}
+            className="p-1 hover:bg-slate-100 rounded text-rose-700 cursor-pointer"
+            title="Xóa dòng"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+          <span className="w-px h-3.5 bg-slate-200" />
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            className="px-1.5 py-0.5 hover:bg-rose-50 text-rose-700 rounded font-semibold text-[11px] cursor-pointer"
+            title="Xóa toàn bộ bảng"
+          >
+            Xóa bảng
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
-          {isTableActive && (
-            <div className="flex items-center gap-1 ml-1 bg-white px-2 py-0.5 rounded border border-slate-300 text-xs">
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().addColumnAfter().run()}
-                className="p-1 hover:bg-slate-100 rounded text-slate-700"
-                title="Thêm cột sau"
-              >
-                <Columns className="w-3.5 h-3.5 text-emerald-700" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().deleteColumn().run()}
-                className="p-1 hover:bg-slate-100 rounded text-rose-700"
-                title="Xóa cột"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-              <span className="w-px h-3.5 bg-slate-200" />
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().addRowAfter().run()}
-                className="p-1 hover:bg-slate-100 rounded text-slate-700"
-                title="Thêm dòng sau"
-              >
-                <Rows className="w-3.5 h-3.5 text-emerald-700" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().deleteRow().run()}
-                className="p-1 hover:bg-slate-100 rounded text-rose-700"
-                title="Xóa dòng"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-              <span className="w-px h-3.5 bg-slate-200" />
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().deleteTable().run()}
-                className="px-1.5 py-0.5 hover:bg-rose-50 text-rose-700 rounded font-semibold text-[11px]"
-                title="Xóa toàn bộ bảng"
-              >
-                Xóa bảng
-              </button>
-            </div>
-          )}
+  const paperNode = (
+    <div
+      className={`w-full ${
+        layoutMode === 'fullscreen'
+          ? 'max-w-[820px] min-h-[1050px] bg-white border border-slate-300 shadow-sm rounded-sm p-10 md:p-14 space-y-6 font-serif my-4'
+          : 'max-w-[760px] bg-white border border-slate-300 rounded-xl shadow-md p-8 md:p-12 space-y-6 font-serif'
+      }`}
+    >
+      {/* Header Quốc hiệu - Tiêu ngữ & Đơn vị ban hành (chỉ hiện khi CHƯA có header sẵn trong nội dung trích xuất) */}
+      {!hasEmbeddedHeader && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-dashed border-slate-300 text-xs text-slate-800 leading-normal">
+          {/* Cột trái: Đơn vị */}
+          <div className="text-center sm:text-center space-y-0.5">
+            <p className="uppercase tracking-wide font-normal">PHÒNG GIÁO DỤC VÀ ĐÀO TẠO</p>
+            <p className="uppercase font-bold tracking-wide">TRƯỜNG MẦM NON SƯƠNG MAI</p>
+            <div className="w-16 h-0.5 bg-slate-700 mx-auto my-1" />
+            <p className="font-sans font-semibold text-slate-700 text-[11px] pt-0.5">
+              {documentNumber ? `Số: ${documentNumber}` : 'Số: .../2026/CV-MNSM'}
+            </p>
+          </div>
+
+          {/* Cột phải: Quốc hiệu */}
+          <div className="text-center sm:text-center space-y-0.5">
+            <p className="uppercase font-bold tracking-wide">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+            <p className="font-bold">Độc lập - Tự do - Hạnh phúc</p>
+            <div className="w-24 h-0.5 bg-slate-700 mx-auto my-1" />
+            <p className="italic text-slate-600 text-[11px] pt-0.5">
+              {dateLabel || 'Hà Nội, ngày ... tháng ... năm 2026'}
+            </p>
+          </div>
         </div>
       )}
 
-      {/* 2. KHUNG HIỂN THỊ TRANG VĂN BẢN (A4 ADMINISTRATIVE PREVIEW) */}
-      <div className="p-6 md:p-8 bg-slate-100/50 flex justify-center">
-        <div className="w-full max-w-[760px] bg-white border border-slate-300 rounded-xl shadow-md p-8 md:p-12 space-y-6 font-serif">
-          {/* Header Quốc hiệu - Tiêu ngữ & Đơn vị ban hành */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-dashed border-slate-300 text-xs text-slate-800 leading-normal">
-            {/* Cột trái: Đơn vị */}
-            <div className="text-center sm:text-center space-y-0.5">
-              <p className="uppercase tracking-wide font-normal">PHÒNG GIÁO DỤC VÀ ĐÀO TẠO</p>
-              <p className="uppercase font-bold tracking-wide">TRƯỜNG MẦM NON SƯƠNG MAI</p>
-              <div className="w-16 h-0.5 bg-slate-700 mx-auto my-1" />
-              <p className="font-sans font-semibold text-slate-700 text-[11px] pt-0.5">
-                {documentNumber ? `Số: ${documentNumber}` : 'Số: .../2026/CV-MNSM'}
-              </p>
-            </div>
+      {/* Vùng soạn thảo chính của Tiptap */}
+      <div className={`prose prose-slate max-w-none prose-p:my-2 prose-headings:my-3 ${layoutMode === 'fullscreen' ? 'min-h-[600px]' : ''}`}>
+        <EditorContent editor={editor} />
+      </div>
 
-            {/* Cột phải: Quốc hiệu */}
-            <div className="text-center sm:text-center space-y-0.5">
-              <p className="uppercase font-bold tracking-wide">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
-              <p className="font-bold">Độc lập - Tự do - Hạnh phúc</p>
-              <div className="w-24 h-0.5 bg-slate-700 mx-auto my-1" />
-              <p className="italic text-slate-600 text-[11px] pt-0.5">
-                {dateLabel || 'Hà Nội, ngày ... tháng ... năm 2026'}
-              </p>
-            </div>
+      {/* Footer chữ ký Hiệu trưởng & Nơi nhận (chỉ hiện khi CHƯA có footer sẵn trong nội dung trích xuất) */}
+      {!hasEmbeddedFooter && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-dashed border-slate-300 text-xs text-slate-800">
+          {/* Cột trái: Nơi nhận */}
+          <div className="text-left space-y-1">
+            <p className="font-bold italic">Nơi nhận:</p>
+            <p className="text-[11px] leading-tight">- Như trên;</p>
+            <p className="text-[11px] leading-tight">- Phòng GD&ĐT (để b/c);</p>
+            <p className="text-[11px] leading-tight">- Lưu: VT, BGH.</p>
           </div>
 
-          {/* Vùng soạn thảo chính của Tiptap */}
-          <div className="prose prose-slate max-w-none prose-p:my-2 prose-headings:my-3">
-            <EditorContent editor={editor} />
-          </div>
-
-          {/* Footer chữ ký Hiệu trưởng & Nơi nhận */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-dashed border-slate-300 text-xs text-slate-800">
-            {/* Cột trái: Nơi nhận */}
-            <div className="text-left space-y-1">
-              <p className="font-bold italic">Nơi nhận:</p>
-              <p className="text-[11px] leading-tight">- Như trên;</p>
-              <p className="text-[11px] leading-tight">- Phòng GD&ĐT (để b/c);</p>
-              <p className="text-[11px] leading-tight">- Lưu: VT, BGH.</p>
+          {/* Cột phải: Hiệu trưởng */}
+          <div className="text-center space-y-1">
+            <p className="uppercase font-bold tracking-wider">HIỆU TRƯỞNG</p>
+            <div className="h-16 flex items-center justify-center text-slate-400 italic text-[11px]">
+              (Khoảng trống ký tên & đóng dấu)
             </div>
-
-            {/* Cột phải: Hiệu trưởng */}
-            <div className="text-center space-y-1">
-              <p className="uppercase font-bold tracking-wider">HIỆU TRƯỞNG</p>
-              <div className="h-16 flex items-center justify-center text-slate-400 italic text-[11px]">
-                (Khoảng trống ký tên & đóng dấu)
-              </div>
-              <p className="font-semibold text-slate-700 text-xs">TRƯỜNG MẦM NON SƯƠNG MAI</p>
-            </div>
+            <p className="font-semibold text-slate-700 text-xs">TRƯỜNG MẦM NON SƯƠNG MAI</p>
           </div>
         </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className={
+        layoutMode === 'fullscreen'
+          ? 'h-full flex flex-col overflow-hidden bg-slate-100'
+          : 'border border-slate-300 rounded-2xl overflow-hidden bg-white shadow-sm flex flex-col'
+      }
+    >
+      {/* 1. THANH CÔNG CỤ (TOOLBAR) */}
+      {toolbarNode}
+
+      {/* 2. KHUNG HIỂN THỊ TRANG VĂN BẢN (A4 ADMINISTRATIVE CANVAS) */}
+      <div
+        className={
+          layoutMode === 'fullscreen'
+            ? 'flex-1 overflow-y-auto p-6 md:p-8 flex justify-center bg-slate-100'
+            : 'p-6 md:p-8 bg-slate-100/50 flex justify-center'
+        }
+      >
+        {paperNode}
       </div>
 
       <style jsx global>{`

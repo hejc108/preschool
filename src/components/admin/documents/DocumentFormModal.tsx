@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
+  Check,
+  Download,
   FileEdit,
   FileText,
   Globe,
@@ -189,6 +192,71 @@ export function DocumentFormModal({
   const [submittingAction, setSubmittingAction] = useState<'save_draft' | 'submit_for_approval' | null>(null);
   const [uploadProgressLabel, setUploadProgressLabel] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const isDirty = useMemo(() => {
+    if (!editingDocument) {
+      return Boolean(
+        title.trim() ||
+        selectedFile ||
+        externalUrl.trim() ||
+        (editorContentHtml &&
+          editorContentHtml !== getDocumentTemplate(editorTemplateCode).initialHtml)
+      );
+    }
+    return (
+      title !== (editingDocument.title || '') ||
+      documentNumber !== (editingDocument.document_number || '') ||
+      categoryId !== (editingDocument.category_id || defaultCategoryId) ||
+      issuedDate !== (editingDocument.issued_date || '') ||
+      effectiveDate !== (editingDocument.effective_date || '') ||
+      expirationDate !== (editingDocument.expiration_date || '') ||
+      description !== (editingDocument.description || '') ||
+      (editingDocument.creation_mode === 'ONLINE_EDITOR' &&
+        editorContentHtml !== (editingDocument.editor_content_html || ''))
+    );
+  }, [
+    title,
+    documentNumber,
+    categoryId,
+    issuedDate,
+    effectiveDate,
+    expirationDate,
+    description,
+    editorContentHtml,
+    editingDocument,
+    defaultCategoryId,
+    selectedFile,
+    externalUrl,
+    editorTemplateCode,
+  ]);
+
+  const handleBack = () => {
+    if (isDirty) {
+      if (
+        !window.confirm(
+          'Bạn có thay đổi chưa lưu trong văn bản. Bạn có chắc chắn muốn thoát về danh sách không?'
+        )
+      ) {
+        return;
+      }
+    }
+    onClose();
+  };
+
+  const isLongTerm = !expirationDate;
+  const toggleLongTerm = (checked: boolean) => {
+    if (checked) {
+      setExpirationDate('');
+    } else {
+      const parts = issuedDate.split('-');
+      if (parts.length === 3) {
+        const nextYear = parseInt(parts[0], 10) + 1;
+        setExpirationDate(`${nextYear}-${parts[1]}-${parts[2]}`);
+      } else {
+        setExpirationDate(getTodayVietnamClient());
+      }
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg(null);
@@ -483,19 +551,375 @@ export function DocumentFormModal({
     await submitDocument(isEditing ? 'save_draft' : 'submit_for_approval');
   };
 
+  if (creationMode === 'ONLINE_EDITOR') {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-hidden text-slate-800">
+        {/* 1. Top Header Bar (h-14 bg-white border-b px-4 flex items-center justify-between gap-4 shrink-0 shadow-2xs z-20) */}
+        <div className="h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-4 shrink-0 shadow-2xs z-20">
+          {/* Bên trái: Nút ← Quay lại + Input chỉnh sửa Tiêu đề + Badge trạng thái */}
+          <div className="flex items-center gap-3 min-w-0 flex-1 max-w-[62%]">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-xs font-semibold cursor-pointer shrink-0"
+              title="Quay lại danh sách văn bản"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Quay lại</span>
+            </button>
+
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+
+            <div className="min-w-0 flex-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Nhập tên văn bản / trích yếu nội dung..."
+                className="w-full font-bold text-sm text-slate-900 placeholder-slate-400 bg-transparent hover:bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 rounded-lg px-2.5 py-1.5 transition-all"
+                required
+              />
+            </div>
+
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 whitespace-nowrap ${
+                editingDocument
+                  ? DOCUMENT_STATUS_META[editingDocument.status].badgeClass
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+            >
+              {editingDocument
+                ? DOCUMENT_STATUS_META[editingDocument.status].label
+                : 'Đang soạn thảo'}
+            </span>
+          </div>
+
+          {/* Bên phải: Dropdown chọn Phôi mẫu (nếu tạo mới), Tải nháp .docx, Lưu nháp và Nút chính */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!isEditing && (
+              <div className="flex items-center gap-1.5 text-xs mr-1">
+                <span className="text-slate-500 font-medium hidden lg:inline">Phôi mẫu:</span>
+                <select
+                  value={editorTemplateCode}
+                  onChange={(e) => {
+                    const nextCode = e.target.value;
+                    if (
+                      editorContentHtml &&
+                      editorContentHtml !== getDocumentTemplate(editorTemplateCode).initialHtml
+                    ) {
+                      if (
+                        !window.confirm(
+                          'Đổi mẫu sẽ thay thế nội dung đang soạn thảo bằng phôi mẫu mới. Bạn có chắc chắn muốn đổi?'
+                        )
+                      ) {
+                        return;
+                      }
+                    }
+                    handleSelectTemplate(nextCode);
+                  }}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-primary-600 cursor-pointer"
+                >
+                  {DOCUMENT_TEMPLATES.map((tmpl) => (
+                    <option key={tmpl.code} value={tmpl.code}>
+                      {tmpl.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {editingDocument?.id && (
+              <a
+                href={`/api/admin/documents/${editingDocument.id}/docx`}
+                download
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors shadow-2xs"
+                title="Tải tệp Word (.docx) bản thảo"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Tải nháp .docx</span>
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void submitDocument('save_draft')}
+              disabled={submitting}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-60 text-slate-800 text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              {submitting && submittingAction === 'save_draft' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Save className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {submitting && submittingAction === 'save_draft'
+                  ? uploadProgressLabel || 'Đang lưu...'
+                  : isEditing
+                  ? 'Lưu thay đổi'
+                  : 'Lưu bản nháp'}
+              </span>
+            </button>
+
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => void submitDocument('submit_for_approval')}
+                disabled={submitting}
+                className="px-4 py-1.5 rounded-lg bg-primary-700 hover:bg-primary-800 disabled:opacity-60 text-white text-xs font-bold shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                {submitting && submittingAction === 'submit_for_approval' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {submitting && submittingAction === 'submit_for_approval'
+                    ? uploadProgressLabel || 'Đang xử lý...'
+                    : 'Trình duyệt'}
+                </span>
+              </button>
+            ) : editingDocument?.status === 'DRAFT' ? (
+              <button
+                type="button"
+                onClick={() => void submitDocument('submit_for_approval')}
+                disabled={submitting}
+                className="px-4 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-800 disabled:opacity-60 text-white text-xs font-bold shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                {submitting && submittingAction === 'submit_for_approval' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {submitting && submittingAction === 'submit_for_approval'
+                    ? uploadProgressLabel || 'Đang trình...'
+                    : 'Lưu & Trình duyệt'}
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {/* 2. Main Workspace chia 2 cột (flex-1 overflow-hidden flex) */}
+        <div className="flex-1 overflow-hidden flex">
+          {/* Cột trái (70% - flex-1): Vùng soạn thảo trang A4 */}
+          <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100">
+            {extractingDocx && (
+              <div className="p-2.5 bg-blue-50 border-b border-blue-200 text-blue-800 flex items-center justify-center gap-2 text-xs font-semibold animate-pulse shrink-0">
+                <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+                <span>Đang tự động đọc và trích xuất nội dung từ tệp Word (.docx) vào trình soạn thảo...</span>
+              </div>
+            )}
+            {extractError && (
+              <div className="p-2.5 bg-amber-50 border-b border-amber-200 text-amber-800 flex items-center justify-center gap-2 text-xs shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{extractError}</span>
+              </div>
+            )}
+            {errorMsg && (
+              <div className="p-2.5 bg-rose-50 border-b border-rose-200 text-rose-800 flex items-center justify-center gap-2 text-xs font-semibold shrink-0">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-hidden">
+              <DocumentRichTextEditor
+                content={editorContentHtml}
+                onChange={setEditorContentHtml}
+                documentNumber={documentNumber || '.../2026/CV-MNSM'}
+                dateLabel={formatVietnameseAdminDate(issuedDate)}
+                isReadOnly={isEditing && editingDocument?.status === 'APPROVED'}
+                layoutMode="fullscreen"
+              />
+            </div>
+          </div>
+
+          {/* Cột phải (30% - w-[360px]): Cài đặt & Thuộc tính văn bản */}
+          <div className="w-[360px] bg-white border-l border-slate-200 overflow-y-auto p-5 shrink-0 flex flex-col space-y-4 text-xs shadow-xs">
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-sm">Thuộc tính văn bản</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Thiết lập danh mục, số hiệu, ngày ban hành & hiệu lực
+              </p>
+            </div>
+
+            {/* Danh mục */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">Danh mục (*)</label>
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none cursor-pointer"
+                required
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Số hiệu văn bản */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Số hiệu văn bản <span className="font-normal text-slate-400">(tùy chọn)</span>
+              </label>
+              <input
+                type="text"
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+                placeholder="Để trống nếu cấp số tự động khi duyệt"
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Hiệu trưởng phê duyệt sẽ tự động cấp số theo format XX/YYYY/KÝ_HIỆU nếu để trống.
+              </p>
+            </div>
+
+            {/* Ngày ban hành */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">Ngày ban hành</label>
+              <input
+                type="date"
+                value={issuedDate}
+                onChange={(e) => setIssuedDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            {/* Ngày có hiệu lực */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">
+                Ngày có hiệu lực <span className="font-normal text-slate-400">(tùy chọn)</span>
+              </label>
+              <input
+                type="date"
+                value={effectiveDate}
+                onChange={(e) => setEffectiveDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            {/* Ngày hết hiệu lực & Dài hạn */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700">Ngày hết hiệu lực</label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-emerald-700 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={isLongTerm}
+                    onChange={(e) => toggleLongTerm(e.target.checked)}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                  />
+                  <span>Dài hạn</span>
+                </label>
+              </div>
+              {!isLongTerm ? (
+                <input
+                  type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none"
+                />
+              ) : (
+                <div className="p-2 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Văn bản có hiệu lực dài hạn (không bị tự động hết hạn)</span>
+                </div>
+              )}
+            </div>
+
+            {/* Phạm vi bảo mật */}
+            {isSuperAdmin && (
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  Phạm vi bảo mật
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibilityScope('ALL_ADMINS')}
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                      visibilityScope === 'ALL_ADMINS'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-900 font-semibold'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5 mb-1 text-emerald-700" />
+                    <div className="text-[11px] leading-tight">Ban Giám hiệu</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisibilityScope('SUPER_ADMIN_ONLY')}
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                      visibilityScope === 'SUPER_ADMIN_ONLY'
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 font-semibold'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5 mb-1 text-amber-700" />
+                    <div className="text-[11px] leading-tight">Chỉ Super Admin</div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Trích yếu / Ghi chú */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1.5">Ghi chú tóm tắt</label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Ghi chú nội dung chính hoặc đối tượng áp dụng..."
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none resize-none"
+              />
+            </div>
+
+            {/* Thông tin tệp gốc (nếu có) */}
+            {editingDocument?.file_name && (
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px]">
+                <div className="font-semibold text-slate-700">Tệp gốc liên kết:</div>
+                <div className="truncate mt-0.5">{editingDocument.file_name}</div>
+              </div>
+            )}
+
+            {/* Chuyển sang tải file (nếu ở DRAFT hoặc tạo mới) */}
+            {(!isEditing || editingDocument?.status === 'DRAFT') && (
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCreationMode('FILE_UPLOAD')}
+                  className="w-full py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Chuyển sang chế độ tải tệp đính kèm</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Chế độ FILE_UPLOAD: Modal dialog tiêu chuẩn gọn gàng
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-primary-700 shrink-0">
-              <FileText className="w-4 h-4" />
+              <Upload className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900">
-                  {isEditing ? 'Chỉnh sửa thông tin tài liệu' : 'Thêm tài liệu / văn bản mới'}
+                  {isEditing ? 'Cập nhật tệp văn bản đính kèm' : 'Tải tệp văn bản / Liên kết ngoài'}
                 </h2>
                 {isEditing && editingDocument && (
                   <span
@@ -509,8 +933,8 @@ export function DocumentFormModal({
               </div>
               <p className="text-xs text-slate-500">
                 {isEditing
-                  ? 'Cập nhật trích yếu, nội dung soạn thảo, hiệu lực, danh mục hoặc bảo mật'
-                  : 'Tài liệu mới được tạo ở Bản nháp (DRAFT) hoặc Trình duyệt (SUBMITTED)'}
+                  ? 'Cập nhật tệp đính kèm, danh mục, thời hạn hoặc phạm vi bảo mật'
+                  : 'Hỗ trợ tệp PDF, Word, Excel hoặc liên kết Google Workspace'}
               </p>
             </div>
           </div>
@@ -534,303 +958,143 @@ export function DocumentFormModal({
             </div>
           )}
 
-          {!isEditing && (
-            <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
-              <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
-              <span>
-                Tài liệu mới tạo sẽ ở trạng thái Bản nháp hoặc Chờ duyệt. Sau khi Hiệu trưởng Phê duyệt, hệ thống tự động cấp số hiệu, xuất tệp Word (.docx) theo thể thức chuẩn (nếu soạn trực tuyến) và lưu trữ lên Google Drive.
-              </span>
-            </div>
-          )}
-
-          {isEditing && editingDocument?.status === 'SUBMITTED' && (
-            <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
-              <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
-              <span>
-                Văn bản đang ở trạng thái <strong>Chờ duyệt</strong>. Khi lưu thay đổi, hệ thống sẽ giữ nguyên trạng thái Chờ duyệt và cập nhật nội dung mới để Hiệu trưởng xem xét.
-              </span>
-            </div>
-          )}
-
-          {/* Creation Mode Indicator / Selector */}
-          {isEditing && creationMode === 'ONLINE_EDITOR' ? (
+          {/* Nút chuyển đổi sang Soạn thảo trực tuyến */}
+          {(!isEditing || editingDocument?.status === 'DRAFT') && (
             <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between gap-3 text-blue-950">
               <div className="flex items-center gap-2">
                 <FileEdit className="w-4 h-4 text-blue-700 shrink-0" />
                 <span className="font-semibold text-xs">
-                  Chế độ: Soạn thảo trực tuyến (Chuẩn thể thức Nghị định 30/2020/NĐ-CP)
+                  Bạn muốn soạn thảo trực tiếp trên Web chuẩn Nghị định 30?
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-blue-200 font-medium text-blue-800">
-                  Phôi mẫu: {getDocumentTemplate(editorTemplateCode).label}
-                </span>
-                {editingDocument?.status === 'DRAFT' && (
+              <button
+                type="button"
+                onClick={() => setCreationMode('ONLINE_EDITOR')}
+                className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors cursor-pointer shrink-0 shadow-2xs"
+              >
+                Mở Trình soạn thảo toàn màn hình
+              </button>
+            </div>
+          )}
+
+          {/* Segmented Control cho Cấp 2: Tải tệp vs Liên kết ngoài */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            {!isEditing ? (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                    Hình thức nguồn tệp
+                  </span>
+                  <span className="text-[11px] text-slate-400">Chọn nguồn tài liệu đính kèm</span>
+                </div>
+                <div className="p-1 rounded-xl bg-slate-200/80 grid grid-cols-2 gap-1">
                   <button
                     type="button"
-                    onClick={() => setCreationMode('FILE_UPLOAD')}
-                    className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
+                    onClick={() => {
+                      setStorageType('SUPABASE_STORAGE');
+                      setErrorMsg(null);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      storageType === 'SUPABASE_STORAGE'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    Đổi sang tải tệp
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Tải tệp từ máy (PDF, Word, Excel...)</span>
                   </button>
-                )}
-              </div>
-            </div>
-          ) : isEditing && creationMode === 'FILE_UPLOAD' ? (
-            <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-3 text-slate-800">
-              <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-slate-600 shrink-0" />
-                <span className="font-semibold text-xs">
-                  Hình thức: Tải tệp đính kèm / Liên kết ngoài
-                </span>
-              </div>
-              {editingDocument?.status === 'DRAFT' && (
-                <button
-                  type="button"
-                  onClick={() => setCreationMode('ONLINE_EDITOR')}
-                  className="text-[11px] font-semibold text-blue-700 hover:text-blue-800 hover:underline cursor-pointer"
-                >
-                  Chuyển sang Soạn thảo trực tuyến
-                </button>
-              )}
-            </div>
-          ) : (
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
-                Phương thức tạo văn bản (*)
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreationMode('ONLINE_EDITOR');
-                    setErrorMsg(null);
-                  }}
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    creationMode === 'ONLINE_EDITOR'
-                      ? 'bg-blue-50 border-blue-600 text-blue-900 shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <FileEdit className="w-4 h-4 shrink-0 text-blue-700" />
-                  <div>
-                    <div className="font-bold text-blue-900">Soạn thảo trực tuyến</div>
-                    <div className="text-[11px] opacity-80">Trình soạn thảo chuẩn Nghị định 30, tự xuất file Word (.docx)</div>
-                  </div>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreationMode('FILE_UPLOAD');
-                    setErrorMsg(null);
-                  }}
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    creationMode === 'FILE_UPLOAD'
-                      ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Upload className="w-4 h-4 shrink-0 text-primary-700" />
-                  <div>
-                    <div className="font-bold">Tải tệp / Liên kết có sẵn</div>
-                    <div className="text-[11px] opacity-80">Tải tệp PDF, Word, Excel hoặc URL Google Drive</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStorageType('EXTERNAL_LINK');
+                      setErrorMsg(null);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      storageType === 'EXTERNAL_LINK'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Gắn liên kết Google Workspace</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-slate-700">
+                  {editingDocument?.storage_type === 'EXTERNAL_LINK' ? (
+                    <>
+                      <Link2 className="w-4 h-4 text-sky-600 shrink-0" />
+                      <span className="font-semibold">Nguồn: Liên kết Google Workspace / Ngoài</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 text-primary-700 shrink-0" />
+                      <div>
+                        <span className="font-semibold">{editingDocument?.file_name || 'Tệp đính kèm'}</span>
+                        <span className="text-slate-400 ml-2">
+                          ({formatDocumentFileSize(editingDocument?.file_size)})
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
-          {/* ONLINE_EDITOR UI */}
-          {creationMode === 'ONLINE_EDITOR' && (
-            <div className="space-y-3">
-              {extractingDocx && (
-                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 flex items-center gap-2.5 text-xs font-semibold animate-pulse">
-                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
-                  <span>Đang tự động đọc và trích xuất nội dung từ tệp Word (.docx) vào trình soạn thảo...</span>
-                </div>
-              )}
-              {extractError && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-2 text-xs">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{extractError}</span>
-                </div>
-              )}
-              {!isEditing && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Chọn mẫu phôi hành chính (Nghị định 30/2020/NĐ-CP)
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                    {DOCUMENT_TEMPLATES.map((tmpl) => (
-                      <button
-                        key={tmpl.code}
-                        type="button"
-                        onClick={() => {
-                          if (
-                            editorContentHtml &&
-                            editorContentHtml !== getDocumentTemplate(editorTemplateCode).initialHtml
-                          ) {
-                            if (
-                              !window.confirm(
-                                'Đổi mẫu sẽ thay thế nội dung đang soạn thảo bằng phôi mẫu mới. Bạn có chắc chắn muốn đổi?'
-                              )
-                            ) {
-                              return;
-                            }
-                          }
-                          handleSelectTemplate(tmpl.code);
-                        }}
-                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
-                          editorTemplateCode === tmpl.code
-                            ? 'bg-rose-50 border-primary-600 text-primary-900 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
-                        }`}
-                      >
-                        <div className="text-xs truncate">{tmpl.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Tiptap Rich Text Editor */}
+            {/* File Picker or External URL */}
+            {!isEditing && storageType === 'SUPABASE_STORAGE' && (
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  Nội dung văn bản (*)
-                </label>
-                <DocumentRichTextEditor
-                  content={editorContentHtml}
-                  onChange={setEditorContentHtml}
-                  documentNumber={documentNumber || '.../2026/CV-MNSM'}
-                  dateLabel={formatVietnameseAdminDate(issuedDate)}
-                  isReadOnly={isEditing && editingDocument?.status === 'APPROVED'}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* FILE_UPLOAD UI */}
-          {creationMode === 'FILE_UPLOAD' && (
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              {/* Segmented Control cho Cấp 2 */}
-              {!isEditing ? (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">
-                      Hình thức nguồn tệp
-                    </span>
-                    <span className="text-[11px] text-slate-400">Chọn nguồn tài liệu đính kèm</span>
-                  </div>
-                  <div className="p-1 rounded-xl bg-slate-200/80 grid grid-cols-2 gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStorageType('SUPABASE_STORAGE');
-                        setErrorMsg(null);
-                      }}
-                      className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        storageType === 'SUPABASE_STORAGE'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Tải tệp từ máy (PDF, Word, Excel...)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStorageType('EXTERNAL_LINK');
-                        setErrorMsg(null);
-                      }}
-                      className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        storageType === 'EXTERNAL_LINK'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Link2 className="w-3.5 h-3.5" />
-                      <span>Gắn liên kết Google Workspace</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-slate-700">
-                    {editingDocument?.storage_type === 'EXTERNAL_LINK' ? (
-                      <>
-                        <Link2 className="w-4 h-4 text-sky-600 shrink-0" />
-                        <span className="font-semibold">Nguồn: Liên kết Google Workspace / Ngoài</span>
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4 text-primary-700 shrink-0" />
-                        <div>
-                          <span className="font-semibold">{editingDocument?.file_name || 'Tệp đính kèm'}</span>
-                          <span className="text-slate-400 ml-2">
-                            ({formatDocumentFileSize(editingDocument?.file_size)})
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* File Picker or External URL */}
-              {!isEditing && storageType === 'SUPABASE_STORAGE' && (
-                <div>
-                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-white hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
-                    <Upload className="w-5 h-5 text-primary-700 mb-1" />
-                    {selectedFile ? (
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-slate-800">{selectedFile.name}</p>
-                        <p className="text-[11px] text-emerald-700 font-semibold">
-                          {formatDocumentFileSize(selectedFile.size)} • Sẵn sàng tải lên
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-0.5">
-                        <p className="font-semibold text-slate-700">Nhấn để chọn tệp từ máy tính</p>
-                        <p className="text-[11px] text-slate-400">
-                          Chấp nhận: .pdf, .doc, .docx, .xls, .xlsx, .png, .jpg (Tối đa 25MB)
-                        </p>
-                      </div>
-                    )}
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {storageType === 'EXTERNAL_LINK' && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Đường dẫn liên kết ngoài (*)
-                  </label>
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-white hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
+                  <Upload className="w-5 h-5 text-primary-700 mb-1" />
+                  {selectedFile ? (
+                    <div className="space-y-0.5">
+                      <p className="font-bold text-slate-800">{selectedFile.name}</p>
+                      <p className="text-[11px] text-emerald-700 font-semibold">
+                        {formatDocumentFileSize(selectedFile.size)} • Sẵn sàng tải lên
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-slate-700">Nhấn để chọn tệp từ máy tính</p>
+                      <p className="text-[11px] text-slate-400">
+                        Chấp nhận: .pdf, .doc, .docx, .xls, .xlsx, .png, .jpg (Tối đa 25MB)
+                      </p>
+                    </div>
+                  )}
                   <input
-                    type="url"
-                    value={externalUrl}
-                    onChange={(e) => setExternalUrl(e.target.value)}
-                    placeholder="https://drive.google.com/file/d/... hoặc https://docs.google.com/..."
-                    className="w-full bg-white border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
-                    required
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                    onChange={handleFileChange}
+                    className="hidden"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Chỉ chấp nhận HTTPS thuộc Google Workspace (Drive, Docs, Sheets, Slides, Forms, Sites) hoặc mamnonsuongmai.edu.vn.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                </label>
+              </div>
+            )}
 
-          {/* Metadata Fields */}
+            {storageType === 'EXTERNAL_LINK' && (
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Đường dẫn liên kết ngoài (*)
+                </label>
+                <input
+                  type="url"
+                  value={externalUrl}
+                  onChange={(e) => setExternalUrl(e.target.value)}
+                  placeholder="https://drive.google.com/file/d/... hoặc https://docs.google.com/..."
+                  className="w-full bg-white border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+                  required
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Chỉ chấp nhận HTTPS thuộc Google Workspace (Drive, Docs, Sheets, Slides, Forms, Sites) hoặc mamnonsuongmai.edu.vn.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Tên văn bản */}
           <div>
             <label className="block font-bold text-slate-700 mb-1.5">
               Tên văn bản / Trích yếu nội dung (*)
@@ -851,7 +1115,7 @@ export function DocumentFormModal({
               <select
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
+                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none cursor-pointer"
                 required
               >
                 {categories.map((cat) => (
@@ -900,18 +1164,31 @@ export function DocumentFormModal({
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1.5">
-                Ngày hết hiệu lực <span className="font-normal text-slate-400">(tùy chọn)</span>
-              </label>
-              <input
-                type="date"
-                value={expirationDate}
-                onChange={(e) => setExpirationDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">
-                Để trống nếu văn bản có hiệu lực dài hạn
-              </p>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="font-bold text-slate-700">Ngày hết hiệu lực</label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-emerald-700 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={isLongTerm}
+                    onChange={(e) => toggleLongTerm(e.target.checked)}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                  />
+                  <span>Dài hạn</span>
+                </label>
+              </div>
+              {!isLongTerm ? (
+                <input
+                  type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none"
+                />
+              ) : (
+                <div className="p-2 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Dài hạn</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -953,13 +1230,6 @@ export function DocumentFormModal({
                   </div>
                 </button>
               </div>
-            </div>
-          )}
-
-          {!isSuperAdmin && (
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2 text-[11px] text-slate-600">
-              <Shield className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <span>Tài liệu do Quản trị trường tạo mặc định hiển thị cho toàn Ban Giám hiệu.</span>
             </div>
           )}
 

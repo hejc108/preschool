@@ -554,9 +554,41 @@ function buildAdminSignatureTable(params: DocumentDocxParams): Table {
  * Xuất Buffer tệp Word (.docx) hoàn chỉnh chuẩn thể thức Nghị định 30/2020/NĐ-CP
  */
 export async function generateDocumentDocxBuffer(params: DocumentDocxParams): Promise<Buffer> {
-  const headerTable = buildAdminHeaderTable(params);
+  const contentNormalized = (params.editorContentHtml || '').toUpperCase();
+  const hasEmbeddedHeader =
+    contentNormalized.includes('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM') ||
+    contentNormalized.includes('CONG HOA XA HOI CHU NGHIA VIET NAM') ||
+    contentNormalized.includes('TRƯỜNG MẦM NON SƯƠNG MAI') ||
+    contentNormalized.includes('TRUONG MAM NON SUONG MAI');
+
+  const hasEmbeddedFooter =
+    contentNormalized.includes('HIỆU TRƯỞNG') ||
+    contentNormalized.includes('HIEU TRUONG');
+
+  const headerTable = hasEmbeddedHeader ? null : buildAdminHeaderTable(params);
   const bodyElements = convertHtmlToDocxElements(params.editorContentHtml || '');
-  const signatureTable = buildAdminSignatureTable(params);
+  const signatureTable = hasEmbeddedFooter ? null : buildAdminSignatureTable(params);
+
+  const sectionChildren: (Paragraph | Table)[] = [];
+  if (headerTable) {
+    sectionChildren.push(headerTable);
+    sectionChildren.push(
+      new Paragraph({
+        spacing: { before: 180, after: 180 },
+        children: [],
+      })
+    );
+  }
+  sectionChildren.push(...bodyElements);
+  if (signatureTable) {
+    sectionChildren.push(
+      new Paragraph({
+        spacing: { before: 240, after: 180 },
+        children: [],
+      })
+    );
+    sectionChildren.push(signatureTable);
+  }
 
   const doc = new Document({
     styles: {
@@ -592,21 +624,7 @@ export async function generateDocumentDocxBuffer(params: DocumentDocxParams): Pr
             },
           },
         },
-        children: [
-          headerTable,
-          // Dòng cách giữa Header và Thân văn bản
-          new Paragraph({
-            spacing: { before: 180, after: 180 },
-            children: [],
-          }),
-          ...bodyElements,
-          // Dòng cách giữa Thân văn bản và Chữ ký
-          new Paragraph({
-            spacing: { before: 240, after: 180 },
-            children: [],
-          }),
-          signatureTable,
-        ],
+        children: sectionChildren,
       },
     ],
   });
