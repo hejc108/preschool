@@ -18,6 +18,7 @@ import {
   FileEdit,
   FileSpreadsheet,
   FileText,
+  FolderCog,
   FolderOpen,
   GitBranch,
   Globe,
@@ -588,46 +589,37 @@ export default function AdminDocumentsPage() {
         </div>
 
         {!accessDeniedMessage && (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => void fetchDocuments(true)}
-              disabled={refreshing || loading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors disabled:opacity-60"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Làm mới</span>
-            </button>
-
+          <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
             {isSuperAdmin && (
               <button
                 type="button"
                 onClick={() => setCategoryModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/70 text-primary-800 text-sm font-semibold transition-colors"
+                className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold whitespace-nowrap shadow-2xs transition-colors cursor-pointer"
+                title="Quản lý danh mục văn bản"
               >
-                <Tags className="w-4 h-4" />
-                <span>Quản lý danh mục</span>
+                <FolderCog className="w-4 h-4 text-slate-600 shrink-0" />
+                <span>Danh mục</span>
               </button>
             )}
 
             <button
               type="button"
-              onClick={() => handleOpenCreate('ONLINE_EDITOR')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer ring-2 ring-blue-400/30"
-              title="Soạn thảo văn bản trực tuyến trên Web chuẩn Nghị định 30 (tự động xuất file Word .docx)"
+              onClick={() => handleOpenCreate('FILE_UPLOAD')}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100/80 text-red-700 text-sm font-semibold whitespace-nowrap shadow-2xs transition-colors cursor-pointer"
+              title="Tải tệp Word, Excel, PDF có sẵn từ máy hoặc gắn liên kết ngoài"
             >
-              <FileEdit className="w-4 h-4" />
-              <span>Soạn thảo trực tuyến</span>
+              <Upload className="w-4 h-4 text-red-600 shrink-0" />
+              <span>Tải tệp lên</span>
             </button>
 
             <button
               type="button"
-              onClick={() => handleOpenCreate('FILE_UPLOAD')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold shadow-sm hover:shadow transition-all cursor-pointer"
-              title="Tải tệp Word, Excel, PDF có sẵn từ máy hoặc gắn liên kết Google Drive"
+              onClick={() => handleOpenCreate('ONLINE_EDITOR')}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold whitespace-nowrap shadow-sm hover:shadow transition-all cursor-pointer"
+              title="Soạn thảo văn bản trực tiếp trên Web chuẩn Nghị định 30 (tự động xuất file Word .docx)"
             >
-              <Upload className="w-4 h-4" />
-              <span>Tải tệp lên</span>
+              <FileEdit className="w-4 h-4 shrink-0" />
+              <span>Soạn thảo</span>
             </button>
           </div>
         )}

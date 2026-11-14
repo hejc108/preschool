@@ -314,6 +314,18 @@ Nhằm tinh gọn thanh điều hướng bên trái và tuân thủ quy chuẩn 
 
 ---
 
+### 3.11. CR-07: Tối Giản Cụm Nút Header Trang Quản Lý Tài Liệu (/admin/documents)
+
+Theo chỉ đạo từ PO & UI/UX nhằm tối ưu hóa tầm nhìn và chống rớt dòng:
+1. **Loại bỏ nút thủ công:** Xóa bỏ hoàn toàn nút `Làm mới` (dữ liệu được tự động đồng bộ sau mọi thao tác).
+2. **Sắp xếp cụm 3 nút thẳng hàng duy nhất (`flex-nowrap`):**
+   - **Nút 1 (Cấu hình phụ):** `[Danh mục]` (icon `FolderCog`, viền xám nhã nhặn `border-slate-300 bg-white text-slate-700`, chỉ hiển thị với Super Admin).
+   - **Nút 2 (Tạo từ tệp có sẵn):** `[Tải tệp lên]` (icon `Upload`, viền đỏ `border-red-200 bg-red-50 text-red-700`).
+   - **Nút 3 (Hành động chính):** `[Soạn thảo]` (icon `FileEdit`, nền xanh `bg-blue-600 hover:bg-blue-700 text-white` đồng bộ màu cây bút ở dòng bảng).
+3. **Đồng bộ kích thước:** Cả 3 nút đều chuẩn hóa chiều cao `h-10`, `whitespace-nowrap`, đảm bảo luôn nằm trên 1 hàng ngang duy nhất ở màn hình `1280px`.
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
