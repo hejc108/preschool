@@ -43,6 +43,7 @@ export interface DocumentFormModalProps {
   categories: DocumentCategory[];
   isSuperAdmin: boolean;
   editingDocument?: SchoolDocument | null;
+  initialCreationMode?: DocumentCreationMode;
   onClose: () => void;
   onSaved: (doc: SchoolDocument, message: string) => void;
 }
@@ -64,6 +65,7 @@ export function DocumentFormModal({
   categories,
   isSuperAdmin,
   editingDocument,
+  initialCreationMode = 'ONLINE_EDITOR',
   onClose,
   onSaved,
 }: DocumentFormModalProps) {
@@ -90,7 +92,7 @@ export function DocumentFormModal({
   );
   const [externalUrl, setExternalUrl] = useState(editingDocument?.external_url || '');
   const [creationMode, setCreationMode] = useState<DocumentCreationMode>(
-    editingDocument?.creation_mode || 'FILE_UPLOAD'
+    editingDocument?.creation_mode || initialCreationMode
   );
   const [editorTemplateCode, setEditorTemplateCode] = useState<string>(
     editingDocument?.editor_template_code || 'CONG_VAN'

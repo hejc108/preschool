@@ -39,6 +39,7 @@ import {
 import {
   DocumentAuditLog,
   DocumentCategory,
+  DocumentCreationMode,
   DocumentStatus,
   DocumentWorkflowAction,
   SchoolDocument,
@@ -322,8 +323,11 @@ export default function AdminDocumentsPage() {
     setStatusFilter('ALL');
   };
 
-  const handleOpenCreate = () => {
+  const [formInitialMode, setFormInitialMode] = useState<DocumentCreationMode>('ONLINE_EDITOR');
+
+  const handleOpenCreate = (mode: DocumentCreationMode = 'ONLINE_EDITOR') => {
     setEditingDocument(null);
+    setFormInitialMode(mode);
     setFormModalOpen(true);
   };
 
@@ -557,11 +561,20 @@ export default function AdminDocumentsPage() {
 
             <button
               type="button"
-              onClick={handleOpenCreate}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold shadow-sm transition-colors"
+              onClick={() => handleOpenCreate('ONLINE_EDITOR')}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer"
+            >
+              <FileEdit className="w-4 h-4" />
+              <span>Soạn văn bản mới</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleOpenCreate('FILE_UPLOAD')}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Thêm tài liệu mới</span>
+              <span>Tải tệp / Link</span>
             </button>
           </div>
         )}
@@ -889,11 +902,19 @@ export default function AdminDocumentsPage() {
                   )}
                   <button
                     type="button"
-                    onClick={handleOpenCreate}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold"
+                    onClick={() => handleOpenCreate('ONLINE_EDITOR')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold cursor-pointer"
+                  >
+                    <FileEdit className="w-4 h-4" />
+                    Soạn văn bản mới
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCreate('FILE_UPLOAD')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Thêm tài liệu mới
+                    Tải tệp lên
                   </button>
                 </div>
               </div>
@@ -1410,6 +1431,7 @@ export default function AdminDocumentsPage() {
           categories={categories}
           isSuperAdmin={isSuperAdmin}
           editingDocument={editingDocument}
+          initialCreationMode={formInitialMode}
           onClose={() => {
             setFormModalOpen(false);
             setEditingDocument(null);
