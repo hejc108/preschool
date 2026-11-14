@@ -2040,7 +2040,7 @@ export async function cloneDocumentRecord(
     description: source.description || null,
     status: 'DRAFT' as DocumentStatus,
     storage_type: source.storage_type,
-    file_path: source.storage_type === 'SUPABASE_STORAGE' ? source.storage_path : null,
+    storage_path: source.storage_type === 'SUPABASE_STORAGE' ? source.storage_path : null,
     file_name: source.storage_type === 'SUPABASE_STORAGE' ? source.file_name : null,
     file_size: source.storage_type === 'SUPABASE_STORAGE' ? source.file_size : null,
     mime_type: source.storage_type === 'SUPABASE_STORAGE' ? source.mime_type : null,
