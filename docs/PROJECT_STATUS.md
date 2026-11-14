@@ -302,8 +302,9 @@ Mọi tính năng mới (đặc biệt bắt đầu từ **FR-02 Thông Báo Nh�
    * `npm run build` (hoặc `npx next build`) pass 100% build Next.js production.
    * Mọi API route handlers được kiểm tra quyền hạn `requireActiveRole` và Layer-2 RLS context fallback.
 
-### 6.2. Guardrails Kiến Trúc Bất Biến
+### 6.2. Guardrails Kiến Trúc Bất Biến (Tiêu Chuẩn Kiến Trúc Bắt Buộc)
 1. **Agent Handover Protocol:** Mọi AI Agent (**PO, BA, Tech Lead, Developer, QA/QC**) **BẮT BUỘC** đọc tài liệu này (`docs/PROJECT_STATUS.md`) và rà soát thư mục [`supabase/migrations/`](file:///Users/thiemvv/Projects/Preschool/supabase/migrations) **trước khi lập kế hoạch hoặc viết code**.
 2. **Zero Mobile Visibility:** Module Quản lý Tài liệu (`/admin/documents`) chỉ phục vụ quản trị Admin Web; tuyệt đối không để lộ hoặc tạo đường dẫn từ cổng Giáo viên (`/teacher`) hay Phụ huynh (`/parent`).
 3. **Bất biến Sao lưu Google Drive:** Tuyệt đối không bao giờ xóa tệp bản sao trên Google Drive khi văn bản bị chuyển trạng thái (`EXPIRED`, `SUPERSEDED`, `WITHDRAWN`) hoặc bị xóa bản ghi trên cơ sở dữ liệu.
 4. **Múi giờ Hệ thống:** Mọi tính toán ngày giờ nghiệp vụ căn cứ theo múi giờ Việt Nam (`Asia/Ho_Chi_Minh`, GMT+7).
+5. **Kiến Trúc Dự Phòng Sự Cố & Sao Lưu Độc Lập:** Toàn bộ hệ thống bắt buộc tuân thủ 4 trụ cột kiến trúc, mục tiêu cam kết RPO ($0\text{ phút}$ với văn bản duyệt, $\le 24\text{ giờ}$ với dữ liệu vận hành) và RTO ($\le 30\text{ phút}$), quy trình sao lưu độc lập (PostgreSQL daily dump lên Google Drive & Cloudflare R2), PWA Offline-First cho cổng giáo viên, Vendor Decoupling và Graceful Degradation quy định chi tiết tại [`docs/RESILIENCE_AND_BACKUP_ARCHITECTURE.md`](file:///Users/thiemvv/Projects/Preschool/docs/RESILIENCE_AND_BACKUP_ARCHITECTURE.md).
