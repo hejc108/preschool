@@ -993,16 +993,49 @@ export default function AdminDocumentsPage() {
                           {/* Title & Source */}
                           <td className="py-3.5 px-4 align-top max-w-[360px]">
                             <div className="flex items-start gap-3">
-                              <div
-                                className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${visual.badgeBg}`}
-                                title={visual.label}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (
+                                    doc.creation_mode === 'ONLINE_EDITOR' &&
+                                    (doc.status === 'DRAFT' || doc.status === 'SUBMITTED')
+                                  ) {
+                                    handleOpenEdit(doc);
+                                    return;
+                                  }
+                                  if (previewKind === 'external' && doc.external_url) {
+                                    window.open(doc.external_url, '_blank', 'noopener,noreferrer');
+                                  } else if (
+                                    previewKind === 'pdf' ||
+                                    previewKind === 'image' ||
+                                    previewKind === 'editor'
+                                  ) {
+                                    setPreviewModal({ document: doc, initialTab: 'preview' });
+                                  } else {
+                                    void handleDownloadDocument(doc);
+                                  }
+                                }}
+                                className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer hover:opacity-85 transition-opacity ${visual.badgeBg}`}
+                                title={
+                                  doc.creation_mode === 'ONLINE_EDITOR' &&
+                                  (doc.status === 'DRAFT' || doc.status === 'SUBMITTED')
+                                    ? 'Bấm để mở trình soạn thảo trực tuyến'
+                                    : visual.label
+                                }
                               >
                                 <DocIcon className="w-4 h-4" />
-                              </div>
+                              </button>
                               <div className="min-w-0 flex-1">
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    if (
+                                      doc.creation_mode === 'ONLINE_EDITOR' &&
+                                      (doc.status === 'DRAFT' || doc.status === 'SUBMITTED')
+                                    ) {
+                                      handleOpenEdit(doc);
+                                      return;
+                                    }
                                     if (previewKind === 'external' && doc.external_url) {
                                       window.open(
                                         doc.external_url,
@@ -1020,17 +1053,38 @@ export default function AdminDocumentsPage() {
                                     }
                                   }}
                                   className="text-left font-semibold text-slate-900 hover:text-primary-700 transition-colors line-clamp-2 cursor-pointer"
+                                  title={
+                                    doc.creation_mode === 'ONLINE_EDITOR' &&
+                                    (doc.status === 'DRAFT' || doc.status === 'SUBMITTED')
+                                      ? 'Bấm để mở trình soạn thảo trực tuyến'
+                                      : 'Bấm để xem trước văn bản'
+                                  }
                                 >
                                   {doc.title}
                                 </button>
 
                                 <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-slate-500">
-                                  {doc.creation_mode === 'ONLINE_EDITOR' && (
+                                  {/* Nhãn nhận diện loại tài liệu */}
+                                  {doc.creation_mode === 'ONLINE_EDITOR' ? (
                                     <span className="inline-flex items-center gap-1 font-semibold text-[11px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
                                       <FileEdit className="w-3 h-3" />
-                                      Soạn trên Web
+                                      Soạn trực tuyến
+                                    </span>
+                                  ) : doc.storage_type === 'EXTERNAL_LINK' ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 font-medium text-[11px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200"
+                                      title={doc.external_url || ''}
+                                    >
+                                      <Globe className="w-3 h-3" />
+                                      Liên kết ngoài
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 font-medium text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                                      <FileText className="w-3 h-3" />
+                                      Tệp đính kèm
                                     </span>
                                   )}
+
                                   {doc.document_number ? (
                                     <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
                                       Số: {doc.document_number}
@@ -1040,6 +1094,7 @@ export default function AdminDocumentsPage() {
                                       Chưa cấp số
                                     </span>
                                   )}
+
                                   {doc.storage_type === 'SUPABASE_STORAGE' ? (
                                     <span className="truncate max-w-[210px]" title={doc.file_name || ''}>
                                       {doc.file_name || 'Tệp đính kèm'}
@@ -1246,18 +1301,30 @@ export default function AdminDocumentsPage() {
                           {/* Row Actions (THAO TÁC - Max 2 nút chính + menu ⋮) */}
                           <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
                             <div className="relative inline-flex items-center justify-end gap-1.5">
-                              {/* 1. DRAFT: [Sửa] + [Trình duyệt] */}
+                              {/* 1. DRAFT: [Soạn thảo]/[Cập nhật] + [Trình duyệt] */}
                               {doc.status === 'DRAFT' && (
                                 <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEdit(doc)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                    title="Chỉnh sửa nội dung & thông tin"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                    <span>Sửa</span>
-                                  </button>
+                                  {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(doc)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                                      title="Soạn thảo trực tuyến trên Web chuẩn Nghị định 30"
+                                    >
+                                      <FileEdit className="w-3.5 h-3.5" />
+                                      <span>Soạn thảo</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEdit(doc)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                      title="Cập nhật tệp đính kèm & thông tin"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                      <span>Cập nhật</span>
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -1275,7 +1342,7 @@ export default function AdminDocumentsPage() {
                                 </>
                               )}
 
-                              {/* 2. SUBMITTED: [Phê duyệt]/[Xem] + [Sửa] */}
+                              {/* 2. SUBMITTED: [Phê duyệt]/[Xem] + [Soạn thảo]/[Cập nhật] */}
                               {doc.status === 'SUBMITTED' && (
                                 <>
                                   {isSuperAdmin ? (
@@ -1291,15 +1358,27 @@ export default function AdminDocumentsPage() {
                                         <FileCheck2 className="w-3.5 h-3.5" />
                                         <span>Phê duyệt</span>
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEdit(doc)}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                        title="Chỉnh sửa văn bản đang chờ duyệt"
-                                      >
-                                        <Edit3 className="w-3.5 h-3.5" />
-                                        <span>Sửa</span>
-                                      </button>
+                                      {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEdit(doc)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                                          title="Soạn thảo / chỉnh sửa nội dung văn bản đang chờ duyệt"
+                                        >
+                                          <FileEdit className="w-3.5 h-3.5" />
+                                          <span>Soạn thảo</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEdit(doc)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                          title="Cập nhật văn bản đang chờ duyệt"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                          <span>Cập nhật</span>
+                                        </button>
+                                      )}
                                     </>
                                   ) : (
                                     <>
@@ -1314,15 +1393,27 @@ export default function AdminDocumentsPage() {
                                         <Eye className="w-3.5 h-3.5" />
                                         <span>Xem</span>
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEdit(doc)}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                        title="Chỉnh sửa văn bản đang chờ duyệt"
-                                      >
-                                        <Edit3 className="w-3.5 h-3.5" />
-                                        <span>Sửa</span>
-                                      </button>
+                                      {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEdit(doc)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                                          title="Soạn thảo / chỉnh sửa nội dung văn bản đang chờ duyệt"
+                                        >
+                                          <FileEdit className="w-3.5 h-3.5" />
+                                          <span>Soạn thảo</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEdit(doc)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                          title="Cập nhật văn bản đang chờ duyệt"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                          <span>Cập nhật</span>
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </>

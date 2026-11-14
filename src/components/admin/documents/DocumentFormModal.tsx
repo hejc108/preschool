@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   FileEdit,
@@ -101,6 +101,33 @@ export function DocumentFormModal({
     editingDocument?.editor_content_html || getDocumentTemplate('CONG_VAN').initialHtml
   );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Đồng bộ lại toàn bộ dữ liệu khi editingDocument thay đổi (đảm bảo không bao giờ bị trắng trang)
+  useEffect(() => {
+    if (editingDocument) {
+      setTitle(editingDocument.title || '');
+      setDocumentNumber(editingDocument.document_number || '');
+      setCategoryId(editingDocument.category_id || defaultCategoryId);
+      setIssuedDate(editingDocument.issued_date || getTodayVietnamClient());
+      setEffectiveDate(editingDocument.effective_date || '');
+      setExpirationDate(editingDocument.expiration_date || '');
+      setVisibilityScope(editingDocument.visibility_scope || 'ALL_ADMINS');
+      setDescription(editingDocument.description || '');
+      setStorageType(editingDocument.storage_type || 'SUPABASE_STORAGE');
+      setExternalUrl(editingDocument.external_url || '');
+      const mode = editingDocument.creation_mode || 'FILE_UPLOAD';
+      setCreationMode(mode);
+      const tmplCode = editingDocument.editor_template_code || 'CONG_VAN';
+      setEditorTemplateCode(tmplCode);
+      setEditorContentHtml(
+        editingDocument.editor_content_html || getDocumentTemplate(tmplCode).initialHtml
+      );
+    } else {
+      setCreationMode(initialCreationMode);
+      setEditorTemplateCode('CONG_VAN');
+      setEditorContentHtml(getDocumentTemplate('CONG_VAN').initialHtml);
+    }
+  }, [editingDocument, defaultCategoryId, initialCreationMode]);
 
   const handleSelectTemplate = (code: string) => {
     setEditorTemplateCode(code);
@@ -476,32 +503,54 @@ export function DocumentFormModal({
             </div>
           )}
 
-          {/* Creation Mode Selector (Tải tệp vs Soạn thảo trực tiếp) */}
-          {!isEditing || editingDocument?.status === 'DRAFT' ? (
+          {/* Creation Mode Indicator / Selector */}
+          {isEditing && creationMode === 'ONLINE_EDITOR' ? (
+            <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between gap-3 text-blue-950">
+              <div className="flex items-center gap-2">
+                <FileEdit className="w-4 h-4 text-blue-700 shrink-0" />
+                <span className="font-semibold text-xs">
+                  Chế độ: Soạn thảo trực tuyến (Chuẩn thể thức Nghị định 30/2020/NĐ-CP)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-blue-200 font-medium text-blue-800">
+                  Phôi mẫu: {getDocumentTemplate(editorTemplateCode).label}
+                </span>
+                {editingDocument?.status === 'DRAFT' && (
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('FILE_UPLOAD')}
+                    className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline cursor-pointer"
+                  >
+                    Đổi sang tải tệp
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : isEditing && creationMode === 'FILE_UPLOAD' ? (
+            <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-3 text-slate-800">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-slate-600 shrink-0" />
+                <span className="font-semibold text-xs">
+                  Hình thức: Tải tệp đính kèm / Liên kết ngoài
+                </span>
+              </div>
+              {editingDocument?.status === 'DRAFT' && (
+                <button
+                  type="button"
+                  onClick={() => setCreationMode('ONLINE_EDITOR')}
+                  className="text-[11px] font-semibold text-blue-700 hover:text-blue-800 hover:underline cursor-pointer"
+                >
+                  Chuyển sang Soạn thảo trực tuyến
+                </button>
+              )}
+            </div>
+          ) : (
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">
                 Phương thức tạo văn bản (*)
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreationMode('FILE_UPLOAD');
-                    setErrorMsg(null);
-                  }}
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    creationMode === 'FILE_UPLOAD'
-                      ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Upload className="w-4 h-4 shrink-0 text-primary-700" />
-                  <div>
-                    <div className="font-bold">Tải tệp / Liên kết có sẵn</div>
-                    <div className="text-[11px] opacity-80">Tải tệp PDF, Word, Excel hoặc URL Google Drive</div>
-                  </div>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -520,21 +569,28 @@ export function DocumentFormModal({
                     <div className="text-[11px] opacity-80">Trình soạn thảo chuẩn Nghị định 30, tự xuất file Word (.docx)</div>
                   </div>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreationMode('FILE_UPLOAD');
+                    setErrorMsg(null);
+                  }}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    creationMode === 'FILE_UPLOAD'
+                      ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Upload className="w-4 h-4 shrink-0 text-primary-700" />
+                  <div>
+                    <div className="font-bold">Tải tệp / Liên kết có sẵn</div>
+                    <div className="text-[11px] opacity-80">Tải tệp PDF, Word, Excel hoặc URL Google Drive</div>
+                  </div>
+                </button>
               </div>
             </div>
-          ) : editingDocument?.creation_mode === 'ONLINE_EDITOR' ? (
-            <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between gap-3 text-blue-950">
-              <div className="flex items-center gap-2">
-                <FileEdit className="w-4 h-4 text-blue-700 shrink-0" />
-                <span className="font-semibold text-xs">
-                  Hình thức: Soạn thảo trực tuyến (Chuẩn Nghị định 30/2020/NĐ-CP)
-                </span>
-              </div>
-              <span className="text-[11px] bg-white px-2 py-0.5 rounded-full border border-blue-200 font-medium text-blue-800">
-                Mẫu: {getDocumentTemplate(editorTemplateCode).label}
-              </span>
-            </div>
-          ) : null}
+          )}
 
           {/* ONLINE_EDITOR UI */}
           {creationMode === 'ONLINE_EDITOR' && (

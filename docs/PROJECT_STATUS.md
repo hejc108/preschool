@@ -198,22 +198,28 @@ Nhằm tối ưu hóa trải nghiệm thao tác trên màn hình máy tính ph�
 1. **API Nhân Bản Văn Bản (`POST /api/admin/documents/[id]/clone`):**
    * Cho phép nhân bản từ **bất kỳ trạng thái nào** (`DRAFT`, `SUBMITTED`, `APPROVED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`).
    * Tạo bản ghi mới ở trạng thái `DRAFT`, tiêu đề `${source.title} (Bản sao)`, số hiệu để trống (`NULL`), kế thừa toàn bộ danh mục, tóm tắt, phạm vi truy cập, mã phôi mẫu và nội dung soạn thảo HTML (`editor_content_html`).
-   * Nếu là `FILE_UPLOAD`: Kế thừa `file_path`, `file_name`, `file_type`, `file_size` hoặc `external_url`.
+   * Nếu là `FILE_UPLOAD`: Kế thừa `storage_path`, `file_name`, `file_type`, `file_size` hoặc `external_url`.
    * Ghi log nhật ký `CLONE_DOCUMENT` trong `document_audit_logs`.
    * Trên UI: Ngay sau khi nhân bản thành công, tự động mở modal soạn thảo/chỉnh sửa với bản nháp vừa tạo.
 2. **Quyền Chỉnh Sửa Khi Đang Chờ Duyệt (`SUBMITTED`):**
    * Cho phép Quản trị viên/Văn thư và Hiệu trưởng sửa đổi metadata / nội dung soạn thảo khi văn bản đang ở `SUBMITTED` mà không làm mất trạng thái chờ duyệt.
    * Hệ thống ghi log `EDIT_WHILE_SUBMITTED` vào `document_audit_logs`.
 3. **Quy Tắc Khóa Bất Biến & Xóa Vĩnh Viễn:**
-   * **Tuyệt đối khóa và ẩn nút `[Sửa]` và `[Xóa]`** đối với văn bản đã `APPROVED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`.
+   * **Tuyệt đối khóa và ẩn nút `[Soạn thảo]`/`[Cập nhật]` và `[Xóa]`** đối với văn bản đã `APPROVED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`.
    * **Chỉ cho phép Xóa vĩnh viễn đối với bản nháp (`DRAFT`)** và bắt buộc vai trò `SUPER_ADMIN`.
-4. **Ma Trận UI/UX Cột Thao Tác Bảng (Tối Đa 2 Nút Chính + Menu `⋮`):**
+4. **Mở Trình Soạn Thảo Trực Tiếp & Phân Biệt Nút Hành Động Rõ Nghĩa:**
+   * **Bấm vào Tiêu đề văn bản:** Với văn bản `ONLINE_EDITOR` đang ở `DRAFT` hoặc `SUBMITTED`, bấm vào tiêu đề mở thẳng Modal Soạn thảo trực tuyến Tiptap. Với văn bản đã `APPROVED` trở đi hoặc dạng tệp, bấm tiêu đề mở Modal Xem trước.
+   * **Phân biệt nút hành động trên dòng danh sách:**
+     * `ONLINE_EDITOR` (chưa duyệt): Nút **`[Soạn thảo]`** (icon `FileEdit`, màu xanh dương `blue-600`), bấm mở thẳng trình soạn thảo.
+     * `FILE_UPLOAD` (chưa duyệt): Nút **`[Cập nhật]`** (icon `Edit3`, màu xám `slate-700`), bấm mở form cập nhật tệp/thông tin.
+   * **Nhãn nhận diện loại văn bản:** Cột `VĂN BẢN` gắn nhãn phân loại trực quan: `Soạn trực tuyến` (màu xanh), `Tệp đính kèm` (màu xám), `Liên kết ngoài` (màu tím).
+5. **Ma Trận UI/UX Cột Thao Tác Bảng (Tối Đa 2 Nút Chính + Menu `⋮`):**
    * Giới hạn mỗi hàng tối đa **2 nút hành động trực tiếp** + 1 nút dropdown **`⋮` (Thao tác khác)**, tuyệt đối không dàn 6–8 nút gây vỡ khung và rớt dòng:
-     * `DRAFT`: Nút chính `[Sửa]` + `[Trình duyệt]`; Menu `⋮`: *Nhân bản*, *Xem/Tải nháp*, *Lịch sử*, *Xóa*.
-     * `SUBMITTED`: Nút chính `[Phê duyệt]` (hoặc `[Xem]`) + `[Sửa]`; Menu `⋮`: *Từ chối*, *Nhân bản*, *Xem/Tải*, *Lịch sử*.
+     * `DRAFT`: Nút chính `[Soạn thảo]` / `[Cập nhật]` + `[Trình duyệt]`; Menu `⋮`: *Nhân bản*, *Xem/Tải nháp*, *Lịch sử*, *Xóa*.
+     * `SUBMITTED`: Nút chính `[Phê duyệt]` (hoặc `[Xem]`) + `[Soạn thảo]` / `[Cập nhật]`; Menu `⋮`: *Từ chối*, *Nhân bản*, *Xem/Tải*, *Lịch sử*.
      * `APPROVED`: Nút chính `[.docx]` / `[Tải về]` + `[Thay thế]` (hoặc `[Xem]`); Menu `⋮`: *Xem trước*, *Nhân bản*, *Thu hồi*, *Hết hạn*, *Lịch sử*.
      * `WITHDRAWN` / `SUPERSEDED` / `EXPIRED`: Nút chính `[Xem]` + `[Nhân bản]`; Menu `⋮`: *Tải tệp*, *Lịch sử*.
-5. **Chuẩn Hóa Tiêu Đề Bảng 1–2 Từ Lõi & Cột Lưu Trữ Gọn Gàng:**
+6. **Chuẩn Hóa Tiêu Đề Bảng 1–2 Từ Lõi & Cột Lưu Trữ Gọn Gàng:**
    * 5 cột bảng: `VĂN BẢN` | `PHÂN LOẠI` | `TRẠNG THÁI` | `LƯU TRỮ` | `THAO TÁC`.
    * Cột `LƯU TRỮ`: Chỉ hiển thị 1 badge trạng thái (`Đã sao lưu` / `Chờ sao lưu` / `Lỗi đồng bộ`) + nút `[Đồng bộ lại]` nhỏ gọn; toàn bộ thông điệp/lỗi chi tiết đưa vào Tooltip (`title`) khi rê chuột.
 
