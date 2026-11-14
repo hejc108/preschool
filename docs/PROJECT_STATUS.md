@@ -108,6 +108,8 @@ Module đã được nâng cấp hoàn chỉnh **100% khớp đặc tả `SRS_FR
   * `public.document_audit_logs`: Bảng nhật ký luân chuyển văn bản bất biến (truy vấn lịch sử trong modal chi tiết).
 * [`00018_document_audit_auto_expire.sql`](file:///Users/thiemvv/Projects/Preschool/supabase/migrations/00018_document_audit_auto_expire.sql):
   * Mở rộng CHECK constraint bảng `document_audit_logs` bổ sung action `'AUTO_EXPIRE'` và index `idx_school_documents_approved_expiration` tối ưu cho Vercel Cron Job.
+* [`00020_document_clone_and_audit_actions.sql`](file:///Users/thiemvv/Projects/Preschool/supabase/migrations/00020_document_clone_and_audit_actions.sql):
+  * Mở rộng CHECK constraint bảng `document_audit_logs` bổ sung 2 hành động mới: `'CLONE_DOCUMENT'` (nhân bản tài liệu sang bản nháp mới) và `'EDIT_WHILE_SUBMITTED'` (sửa đổi nội dung/thông tin khi văn bản đang ở trạng thái Chờ duyệt).
 
 #### B. Máy Trạng Thái Vòng Đời Văn Bản, Quy Tắc Dài Hạn & Zero Mobile Visibility
 * Định nghĩa chuẩn hóa tại [`src/lib/documents/validation.ts`](file:///Users/thiemvv/Projects/Preschool/src/lib/documents/validation.ts) và thực thi tại [`src/lib/documents/documentService.ts`](file:///Users/thiemvv/Projects/Preschool/src/lib/documents/documentService.ts):
@@ -189,6 +191,34 @@ Bổ sung phân hệ soạn thảo trực tiếp không cần tải tệp ban đ
 
 ---
 
+### 3.6. Tính Năng Nhân Bản Văn Bản (CLONE) & Chuẩn Hóa Ma Trận UI/UX Bảng Tài Liệu
+
+Nhằm tối ưu hóa trải nghiệm thao tác trên màn hình máy tính phổ thông (`1280px`) và hỗ trợ soạn thảo nhanh từ các văn bản đã ban hành:
+
+1. **API Nhân Bản Văn Bản (`POST /api/admin/documents/[id]/clone`):**
+   * Cho phép nhân bản từ **bất kỳ trạng thái nào** (`DRAFT`, `SUBMITTED`, `APPROVED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`).
+   * Tạo bản ghi mới ở trạng thái `DRAFT`, tiêu đề `${source.title} (Bản sao)`, số hiệu để trống (`NULL`), kế thừa toàn bộ danh mục, tóm tắt, phạm vi truy cập, mã phôi mẫu và nội dung soạn thảo HTML (`editor_content_html`).
+   * Nếu là `FILE_UPLOAD`: Kế thừa `file_path`, `file_name`, `file_type`, `file_size` hoặc `external_url`.
+   * Ghi log nhật ký `CLONE_DOCUMENT` trong `document_audit_logs`.
+   * Trên UI: Ngay sau khi nhân bản thành công, tự động mở modal soạn thảo/chỉnh sửa với bản nháp vừa tạo.
+2. **Quyền Chỉnh Sửa Khi Đang Chờ Duyệt (`SUBMITTED`):**
+   * Cho phép Quản trị viên/Văn thư và Hiệu trưởng sửa đổi metadata / nội dung soạn thảo khi văn bản đang ở `SUBMITTED` mà không làm mất trạng thái chờ duyệt.
+   * Hệ thống ghi log `EDIT_WHILE_SUBMITTED` vào `document_audit_logs`.
+3. **Quy Tắc Khóa Bất Biến & Xóa Vĩnh Viễn:**
+   * **Tuyệt đối khóa và ẩn nút `[Sửa]` và `[Xóa]`** đối với văn bản đã `APPROVED`, `WITHDRAWN`, `SUPERSEDED`, `EXPIRED`.
+   * **Chỉ cho phép Xóa vĩnh viễn đối với bản nháp (`DRAFT`)** và bắt buộc vai trò `SUPER_ADMIN`.
+4. **Ma Trận UI/UX Cột Thao Tác Bảng (Tối Đa 2 Nút Chính + Menu `⋮`):**
+   * Giới hạn mỗi hàng tối đa **2 nút hành động trực tiếp** + 1 nút dropdown **`⋮` (Thao tác khác)**, tuyệt đối không dàn 6–8 nút gây vỡ khung và rớt dòng:
+     * `DRAFT`: Nút chính `[Sửa]` + `[Trình duyệt]`; Menu `⋮`: *Nhân bản*, *Xem/Tải nháp*, *Lịch sử*, *Xóa*.
+     * `SUBMITTED`: Nút chính `[Phê duyệt]` (hoặc `[Xem]`) + `[Sửa]`; Menu `⋮`: *Từ chối*, *Nhân bản*, *Xem/Tải*, *Lịch sử*.
+     * `APPROVED`: Nút chính `[.docx]` / `[Tải về]` + `[Thay thế]` (hoặc `[Xem]`); Menu `⋮`: *Xem trước*, *Nhân bản*, *Thu hồi*, *Hết hạn*, *Lịch sử*.
+     * `WITHDRAWN` / `SUPERSEDED` / `EXPIRED`: Nút chính `[Xem]` + `[Nhân bản]`; Menu `⋮`: *Tải tệp*, *Lịch sử*.
+5. **Chuẩn Hóa Tiêu Đề Bảng 1–2 Từ Lõi & Cột Lưu Trữ Gọn Gàng:**
+   * 5 cột bảng: `VĂN BẢN` | `PHÂN LOẠI` | `TRẠNG THÁI` | `LƯU TRỮ` | `THAO TÁC`.
+   * Cột `LƯU TRỮ`: Chỉ hiển thị 1 badge trạng thái (`Đã sao lưu` / `Chờ sao lưu` / `Lỗi đồng bộ`) + nút `[Đồng bộ lại]` nhỏ gọn; toàn bộ thông điệp/lỗi chi tiết đưa vào Tooltip (`title`) khi rê chuột.
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
@@ -202,6 +232,7 @@ Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
 8. `00017_documents_srs_workflow.sql`: Máy trạng thái SRS 6 trạng thái, số hiệu tự động & audit logs.
 9. `00018_document_audit_auto_expire.sql`: Cho phép audit action `AUTO_EXPIRE` & index quét cron hết hạn.
 10. `00019_document_rich_text_editor.sql`: Mở rộng `creation_mode`, `editor_content_html`, `editor_template_code`, `generated_docx_path` hỗ trợ Web Rich Text Editor & xuất Word chuẩn Nghị định 30.
+11. `00020_document_clone_and_audit_actions.sql`: Mở rộng CHECK constraint `document_audit_logs_action_check` cho phép 2 hành động `CLONE_DOCUMENT` và `EDIT_WHILE_SUBMITTED`.
 
 ---
 
@@ -213,17 +244,30 @@ Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
 
 ---
 
-## 6. AGENT HANDOVER PROTOCOL & GUARDRAILS BẮT BUỘC
+## 6. AGENT HANDOVER PROTOCOL & QUY TRÌNH PHÁT TRIỂN BẮT BUỘC (MANDATORY WORKFLOW GATE)
 
-1. **Quy trình bàn giao (Agent Handover Protocol):**
-   * Mọi AI Agent (**PO, BA, Tech Lead, Developer, QA/QC**) **BẮT BUỘC** đọc tài liệu này (`docs/PROJECT_STATUS.md`) và rà soát thư mục [`supabase/migrations/`](file:///Users/thiemvv/Projects/Preschool/supabase/migrations) **trước khi lập kế hoạch hoặc viết code** cho bất kỳ tính năng mới nào.
-2. **Product Owner / BA:** Mọi yêu cầu mới phải tôn trọng mô hình Multi-Role (`user_roles`, `activeRole`), bảo mật phạm vi `SUPER_ADMIN` (Hiệu trưởng) vs `SCHOOL_ADMIN` (Phó HT/Văn thư) vs `TEACHER`/`STAFF`/`PARENT`, quy tắc Zero Mobile Visibility cho module Tài liệu, và chuẩn ngôn ngữ sư phạm thân thiện với phụ huynh.
-3. **Tech Lead / Developer:**
-   * **Tuyệt đối không** sửa các file trong `src/components/pwa/*` nếu tác vụ không liên quan trực tiếp đến PWA.
-   * Mọi API mới bắt buộc xác thực đầu vào bằng `requireActiveRole(request, [...])` từ `@/lib/auth/sessionContext` và truy vấn DB bằng `executeWithContextFallback` / RLS Layer-2 dùng `public.current_active_role()`.
-   * Không bao giờ xóa bản sao lưu trên Google Drive trong bất kỳ luồng cập nhật/thu hồi/hết hạn/xóa nào.
-   * Mọi logic ngày hiện tại nghiệp vụ phải dùng múi giờ Việt Nam (`Asia/Ho_Chi_Minh`, `getTodayVietnamDate()`).
-4. **QA / QC:** Sau mỗi thay đổi code, bắt buộc kiểm tra tối thiểu:
-   * `npx tsc --noEmit` (không lỗi type)
-   * Unit/integration test logic nghiệp vụ bằng `npx tsx`
-   * `npm run build` (pass toàn bộ Next.js production build trước khi commit & deploy Vercel).
+### 6.1. Quy Trình 4 Cổng Kiểm Duyệt Bắt Buộc (4-Role Workflow Gate)
+Mọi tính năng mới (đặc biệt bắt đầu từ **FR-02 Thông Báo Nhà Trường & Lớp Học**) bắt buộc phải đi qua 4 cổng kiểm duyệt trước khi coi là hoàn tất:
+
+1. **Product Owner (PO Gate):**
+   * Sử dụng 100% tiếng Việt tự nhiên, chuẩn phong cách sư phạm mầm non.
+   * Thông báo, banner hướng dẫn phải giải thích rõ ràng kết quả hành động (hệ thống tự làm gì, sau khi duyệt điều gì xảy ra) thay vì dùng thuật ngữ kỹ thuật khô cứng.
+2. **Business Analyst (BA Gate):**
+   * Ma trận trạng thái vòng đời chặt chẽ, không có ngõ cụt logic.
+   * Xác định rõ điều kiện tiên quyết (pre-conditions), quyền hạn từng vai trò (`SUPER_ADMIN`, `SCHOOL_ADMIN`, `TEACHER`, `PARENT`), và nhật ký audit log đối với mọi thao tác nhạy cảm.
+3. **UI/UX Gate (Quy chuẩn giao diện 1280px):**
+   * **Mockup-First Rule:** Trước khi viết code backend hoặc tích hợp sâu vào hệ thống, bắt buộc phải tạo file Mockup HTML độc lập có tương tác (interactive standalone HTML mockup) để xem xét trực quan trước.
+   * **Bố cục bảng dữ liệu thoáng đãng:**
+     * Tiêu đề các cột (`<th>`): Chỉ sử dụng **1–2 từ lõi** viết IN HOA đồng bộ (`whitespace-nowrap`), **tuyệt đối không** ghép nhiều khái niệm bằng dấu `&` hoặc `/` gây rớt từ hoặc ngộp mắt.
+     * Cột thao tác (`THAO TÁC`): Mỗi dòng tối đa **2 nút hành động trực tiếp** + 1 nút menu dropdown **`⋮` (Thao tác khác)**. Tuyệt đối không dàn 6–8 nút bấm làm phình to dòng và tràn khung ngang màn hình `1280px`.
+     * Cột trạng thái tích hợp (`LƯU TRỮ`, `TRẠNG THÁI`): Giữ hiển thị 1 badge súc tích + 1 nút xử lý nhỏ gọn (nếu cần), đưa toàn bộ chi tiết lỗi/mô tả dài vào Tooltip (`title`) khi hover.
+4. **Quality Control (QC Gate):**
+   * `npx tsc --noEmit` đạt 0 lỗi TypeScript.
+   * `npm run build` (hoặc `npx next build`) pass 100% build Next.js production.
+   * Mọi API route handlers được kiểm tra quyền hạn `requireActiveRole` và Layer-2 RLS context fallback.
+
+### 6.2. Guardrails Kiến Trúc Bất Biến
+1. **Agent Handover Protocol:** Mọi AI Agent (**PO, BA, Tech Lead, Developer, QA/QC**) **BẮT BUỘC** đọc tài liệu này (`docs/PROJECT_STATUS.md`) và rà soát thư mục [`supabase/migrations/`](file:///Users/thiemvv/Projects/Preschool/supabase/migrations) **trước khi lập kế hoạch hoặc viết code**.
+2. **Zero Mobile Visibility:** Module Quản lý Tài liệu (`/admin/documents`) chỉ phục vụ quản trị Admin Web; tuyệt đối không để lộ hoặc tạo đường dẫn từ cổng Giáo viên (`/teacher`) hay Phụ huynh (`/parent`).
+3. **Bất biến Sao lưu Google Drive:** Tuyệt đối không bao giờ xóa tệp bản sao trên Google Drive khi văn bản bị chuyển trạng thái (`EXPIRED`, `SUPERSEDED`, `WITHDRAWN`) hoặc bị xóa bản ghi trên cơ sở dữ liệu.
+4. **Múi giờ Hệ thống:** Mọi tính toán ngày giờ nghiệp vụ căn cứ theo múi giờ Việt Nam (`Asia/Ho_Chi_Minh`, GMT+7).

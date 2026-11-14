@@ -306,6 +306,8 @@ export const DOCUMENT_AUDIT_ACTION_LABELS: Record<DocumentAuditAction, string> =
   EXPIRE: 'Chuyển hết hiệu lực',
   AUTO_EXPIRE: 'Tự động hết hiệu lực theo hạn',
   DRIVE_SYNC: 'Đồng bộ Google Drive',
+  CLONE_DOCUMENT: 'Nhân bản văn bản',
+  EDIT_WHILE_SUBMITTED: 'Chỉnh sửa khi chờ duyệt',
 };
 
 const CATEGORY_SYMBOL_MAP: Record<string, string> = {

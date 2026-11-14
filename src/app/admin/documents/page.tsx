@@ -9,6 +9,7 @@ import {
   Clock,
   Cloud,
   CloudOff,
+  Copy,
   Download,
   Edit3,
   ExternalLink,
@@ -26,6 +27,7 @@ import {
   Info,
   Loader2,
   Lock,
+  MoreVertical,
   Plus,
   RefreshCw,
   Search,
@@ -165,6 +167,8 @@ export default function AdminDocumentsPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState<boolean>(false);
   const [syncingDocId, setSyncingDocId] = useState<string | null>(null);
   const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
+  const [cloningDocId, setCloningDocId] = useState<string | null>(null);
+  const [openActionDropdownId, setOpenActionDropdownId] = useState<string | null>(null);
 
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -333,7 +337,34 @@ export default function AdminDocumentsPage() {
 
   const handleOpenEdit = (doc: SchoolDocument) => {
     setEditingDocument(doc);
+    setFormInitialMode(doc.creation_mode || 'ONLINE_EDITOR');
     setFormModalOpen(true);
+  };
+
+  const handleCloneDocument = async (doc: SchoolDocument) => {
+    setOpenActionDropdownId(null);
+    setCloningDocId(doc.id);
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}/clone`, {
+        method: 'POST',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success || !json.document) {
+        showToast('error', json.message || json.error || 'Nhân bản văn bản thất bại.');
+        return;
+      }
+      showToast('success', 'Đã nhân bản thành công sang Bản nháp mới.');
+      await fetchDocuments(false);
+      // Tự động mở ngay Modal Sửa với bản nháp vừa tạo
+      setEditingDocument(json.document as SchoolDocument);
+      setFormInitialMode(json.document.creation_mode || 'ONLINE_EDITOR');
+      setFormModalOpen(true);
+      if (previewModal) setPreviewModal(null);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Lỗi kết nối khi nhân bản văn bản.');
+    } finally {
+      setCloningDocId(null);
+    }
   };
 
   const handleFormSaved = async (savedDoc: SchoolDocument, message: string) => {
@@ -919,15 +950,15 @@ export default function AdminDocumentsPage() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto min-h-[360px] pb-12">
                 <table className="w-full min-w-[1060px] text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                      <th className="py-3.5 px-4">Tài liệu & Tệp / Liên kết</th>
-                      <th className="py-3.5 px-4">Danh mục & Hiệu lực</th>
-                      <th className="py-3.5 px-4">Phạm vi & Trạng thái</th>
-                      <th className="py-3.5 px-4">Sao lưu Google Drive</th>
-                      <th className="py-3.5 px-4 text-right">Thao tác</th>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      <th className="py-3.5 px-4 whitespace-nowrap">VĂN BẢN</th>
+                      <th className="py-3.5 px-4 whitespace-nowrap">PHÂN LOẠI</th>
+                      <th className="py-3.5 px-4 whitespace-nowrap">TRẠNG THÁI</th>
+                      <th className="py-3.5 px-4 whitespace-nowrap">LƯU TRỮ</th>
+                      <th className="py-3.5 px-4 whitespace-nowrap text-right">THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
@@ -943,11 +974,7 @@ export default function AdminDocumentsPage() {
                         doc.status === 'SUPERSEDED' ||
                         doc.status === 'EXPIRED';
                       const canEdit =
-                        (isSuperAdmin &&
-                          (doc.status === 'DRAFT' ||
-                            doc.status === 'SUBMITTED' ||
-                            doc.status === 'APPROVED')) ||
-                        (!isSuperAdmin && doc.status === 'DRAFT');
+                        doc.status === 'DRAFT' || doc.status === 'SUBMITTED';
 
                       return (
                         <tr
@@ -1126,31 +1153,32 @@ export default function AdminDocumentsPage() {
                             </div>
                           </td>
 
-                          {/* Google Drive Backup Status */}
+                          {/* Google Drive Backup Status (LƯU TRỮ) */}
                           <td className="py-3.5 px-4 align-top whitespace-nowrap">
-                            <div className="flex flex-col items-start gap-1.5">
+                            <div className="flex flex-col items-start gap-1">
                               {doc.status === 'DRAFT' || doc.status === 'SUBMITTED' ? (
                                 <span
                                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200"
-                                  title="Tự động đồng bộ Google Drive ngay khi Hiệu trưởng Phê duyệt (APPROVED)"
+                                  title="Chờ Hiệu trưởng phê duyệt mới tự động sao lưu Google Drive"
                                 >
                                   <Clock className="w-3 h-3" />
-                                  Chờ phê duyệt mới lưu
+                                  Chờ sao lưu
                                 </span>
                               ) : doc.drive_sync_status === 'SYNCED' ? (
                                 <>
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                     <Cloud className="w-3 h-3" />
-                                    Đã lưu Drive
+                                    Đã sao lưu
                                   </span>
                                   {doc.drive_web_view_link && (
                                     <a
                                       href={doc.drive_web_view_link}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline"
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary-700 hover:underline"
+                                      title="Mở tệp lưu trữ trên Google Drive"
                                     >
-                                      <span>Mở trên Drive</span>
+                                      <span>Mở Drive</span>
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
                                   )}
@@ -1158,26 +1186,19 @@ export default function AdminDocumentsPage() {
                               ) : doc.drive_sync_status === 'FAILED' ? (
                                 <>
                                   <span
-                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200"
-                                    title={doc.drive_sync_error || 'Lỗi đồng bộ Google Drive'}
+                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 cursor-help"
+                                    title={doc.drive_sync_error || 'Lỗi kết nối sao lưu Google Drive'}
                                   >
                                     <CloudOff className="w-3 h-3" />
                                     Lỗi đồng bộ
                                   </span>
-                                  {doc.drive_sync_error && (
-                                    <p
-                                      className="text-[11px] leading-snug text-rose-700 max-w-[230px] whitespace-normal line-clamp-2 select-text"
-                                      title={doc.drive_sync_error}
-                                    >
-                                      {doc.drive_sync_error}
-                                    </p>
-                                  )}
                                   {doc.status === 'APPROVED' && (
                                     <button
                                       type="button"
                                       onClick={() => void handleSyncDrive(doc)}
                                       disabled={isSyncing}
-                                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline disabled:opacity-60 cursor-pointer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline disabled:opacity-60 cursor-pointer"
+                                      title={doc.drive_sync_error || 'Thử đồng bộ lại lên Google Drive'}
                                     >
                                       {isSyncing ? (
                                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -1191,7 +1212,7 @@ export default function AdminDocumentsPage() {
                               ) : (
                                 <>
                                   <span
-                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200"
+                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 cursor-help"
                                     title={doc.drive_sync_error || undefined}
                                   >
                                     <CloudOff className="w-3 h-3" />
@@ -1204,7 +1225,7 @@ export default function AdminDocumentsPage() {
                                       type="button"
                                       onClick={() => void handleSyncDrive(doc)}
                                       disabled={isSyncing}
-                                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline disabled:opacity-60 cursor-pointer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-700 hover:text-primary-800 hover:underline disabled:opacity-60 cursor-pointer"
                                     >
                                       {isSyncing ? (
                                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -1219,11 +1240,162 @@ export default function AdminDocumentsPage() {
                             </div>
                           </td>
 
-                          {/* Row Actions */}
+                          {/* Row Actions (THAO TÁC - Max 2 nút chính + menu ⋮) */}
                           <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
-                            <div className="inline-flex flex-wrap items-center justify-end gap-1.5 max-w-[340px]">
-                              {/* Preview / Download / Link */}
-                              {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                            <div className="relative inline-flex items-center justify-end gap-1.5">
+                              {/* 1. DRAFT: [Sửa] + [Trình duyệt] */}
+                              {doc.status === 'DRAFT' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEdit(doc)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                    title="Chỉnh sửa nội dung & thông tin"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>Sửa</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setTransitionModal({
+                                        document: doc,
+                                        action: 'submit_for_approval',
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-semibold transition-colors cursor-pointer"
+                                    title="Trình Hiệu trưởng phê duyệt"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>Trình duyệt</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* 2. SUBMITTED: [Phê duyệt]/[Xem] + [Sửa] */}
+                              {doc.status === 'SUBMITTED' && (
+                                <>
+                                  {isSuperAdmin ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setTransitionModal({ document: doc, action: 'approve' })
+                                        }
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Phê duyệt ban hành & tự động sao lưu Google Drive"
+                                      >
+                                        <FileCheck2 className="w-3.5 h-3.5" />
+                                        <span>Phê duyệt</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEdit(doc)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Chỉnh sửa văn bản đang chờ duyệt"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        <span>Sửa</span>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setPreviewModal({ document: doc, initialTab: 'preview' })
+                                        }
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Xem trước văn bản"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        <span>Xem</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEdit(doc)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Chỉnh sửa văn bản đang chờ duyệt"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        <span>Sửa</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+
+                              {/* 3. APPROVED: [.docx]/[Tải về] + [Thay thế]/[Xem] (Tuyệt đối KHÔNG có [Sửa] và [Xóa]) */}
+                              {doc.status === 'APPROVED' && (
+                                <>
+                                  {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                    <a
+                                      href={`/api/admin/documents/${doc.id}/docx`}
+                                      download
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors"
+                                      title="Tải tệp Word (.docx) chuẩn Nghị định 30"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                      <span>.docx</span>
+                                    </a>
+                                  ) : previewKind === 'external' && doc.external_url ? (
+                                    <a
+                                      href={doc.external_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-colors"
+                                      title="Mở liên kết ngoài"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      <span>Mở link</span>
+                                    </a>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDownloadDocument(doc)}
+                                      disabled={isDownloading}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-60 cursor-pointer"
+                                      title="Tải tệp đính kèm"
+                                    >
+                                      {isDownloading ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Download className="w-3.5 h-3.5" />
+                                      )}
+                                      <span>Tải về</span>
+                                    </button>
+                                  )}
+
+                                  {isSuperAdmin ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setTransitionModal({ document: doc, action: 'supersede' })
+                                      }
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-semibold transition-colors cursor-pointer"
+                                      title="Đánh dấu văn bản bị thay thế bởi văn bản mới"
+                                    >
+                                      <GitBranch className="w-3.5 h-3.5" />
+                                      <span>Thay thế</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setPreviewModal({ document: doc, initialTab: 'preview' })
+                                      }
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                                      title="Xem trước văn bản"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Xem</span>
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                              {/* 4. TERMINAL (WITHDRAWN / SUPERSEDED / EXPIRED): [Xem] + [Nhân bản] (Tuyệt đối KHÔNG có [Sửa] và [Xóa]) */}
+                              {isTerminal && (
                                 <>
                                   <button
                                     type="button"
@@ -1231,187 +1403,205 @@ export default function AdminDocumentsPage() {
                                       setPreviewModal({ document: doc, initialTab: 'preview' })
                                     }
                                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                    title="Xem trước văn bản trực tuyến"
+                                    title="Xem trước tài liệu"
                                   >
                                     <Eye className="w-3.5 h-3.5" />
                                     <span>Xem</span>
                                   </button>
-                                  <a
-                                    href={`/api/admin/documents/${doc.id}/docx`}
-                                    download
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors"
-                                    title="Tải tệp Word (.docx) chuẩn Nghị định 30"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span>{doc.status === 'APPROVED' ? '.docx' : 'Nháp .docx'}</span>
-                                  </a>
-                                </>
-                              ) : previewKind === 'external' && doc.external_url ? (
-                                <a
-                                  href={doc.external_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-colors"
-                                  title="Mở liên kết ngoài"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                  <span>Mở link</span>
-                                </a>
-                              ) : (
-                                <>
-                                  {(previewKind === 'pdf' || previewKind === 'image') && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setPreviewModal({ document: doc, initialTab: 'preview' })
-                                      }
-                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                                      title="Xem trước tài liệu"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                      <span>Xem</span>
-                                    </button>
-                                  )}
                                   <button
                                     type="button"
-                                    onClick={() => void handleDownloadDocument(doc)}
-                                    disabled={isDownloading}
+                                    onClick={() => void handleCloneDocument(doc)}
+                                    disabled={cloningDocId === doc.id}
                                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors disabled:opacity-60 cursor-pointer"
-                                    title="Tải tệp xuống"
+                                    title="Nhân bản sang bản nháp mới"
                                   >
-                                    {isDownloading ? (
+                                    {cloningDocId === doc.id ? (
                                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                     ) : (
-                                      <Download className="w-3.5 h-3.5" />
+                                      <Copy className="w-3.5 h-3.5" />
                                     )}
-                                    <span>Tải</span>
+                                    <span>Nhân bản</span>
                                   </button>
                                 </>
                               )}
 
-                              {/* Details & Audit History */}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPreviewModal({ document: doc, initialTab: 'details' })
-                                }
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
-                                title="Xem chi tiết hiệu lực & lịch sử duyệt"
-                              >
-                                <History className="w-3.5 h-3.5" />
-                                <span>Lịch sử</span>
-                              </button>
-
-                              {/* Edit metadata (role & state guarded) */}
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEdit(doc)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
-                                  title="Chỉnh sửa thông tin tài liệu"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                  <span>Sửa</span>
-                                </button>
-                              )}
-
-                              {/* Workflow: DRAFT -> SUBMITTED (SCHOOL_ADMIN & SUPER_ADMIN) */}
-                              {doc.status === 'DRAFT' && (
+                              {/* Dropdown Menu ⋮ (Thao tác khác) */}
+                              <div className="relative inline-block">
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    setTransitionModal({
-                                      document: doc,
-                                      action: 'submit_for_approval',
-                                    })
+                                    setOpenActionDropdownId(
+                                      openActionDropdownId === doc.id ? null : doc.id
+                                    )
                                   }
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-semibold transition-colors cursor-pointer"
-                                  title="Trình Hiệu trưởng phê duyệt"
+                                  className={`p-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer ${
+                                    openActionDropdownId === doc.id
+                                      ? 'bg-slate-100 text-slate-900 border-slate-300'
+                                      : 'bg-white hover:bg-slate-50 text-slate-600'
+                                  }`}
+                                  title="Thao tác khác"
                                 >
-                                  <Send className="w-3.5 h-3.5" />
-                                  <span>Trình duyệt</span>
+                                  <MoreVertical className="w-4 h-4" />
                                 </button>
-                              )}
 
-                              {/* Workflow: SUBMITTED -> APPROVED / WITHDRAWN (SUPER_ADMIN only) */}
-                              {doc.status === 'SUBMITTED' && isSuperAdmin && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setTransitionModal({ document: doc, action: 'approve' })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors cursor-pointer"
-                                    title="Phê duyệt ban hành & tự động sao lưu Google Drive"
-                                  >
-                                    <FileCheck2 className="w-3.5 h-3.5" />
-                                    <span>Phê duyệt</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setTransitionModal({ document: doc, action: 'reject' })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer"
-                                    title="Từ chối phê duyệt (yêu cầu nhập lý do)"
-                                  >
-                                    <Ban className="w-3.5 h-3.5" />
-                                    <span>Từ chối</span>
-                                  </button>
-                                </>
-                              )}
+                                {openActionDropdownId === doc.id && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-20 cursor-default"
+                                      onClick={() => setOpenActionDropdownId(null)}
+                                    />
+                                    <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl z-30 text-left">
+                                      {/* Clone action (always available in dropdown unless already in main buttons for terminal) */}
+                                      {!isTerminal && (
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleCloneDocument(doc)}
+                                          disabled={cloningDocId === doc.id}
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                        >
+                                          {cloningDocId === doc.id ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                                          ) : (
+                                            <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                          )}
+                                          <span>Nhân bản (Clone)</span>
+                                        </button>
+                                      )}
 
-                              {/* Workflow: APPROVED -> SUPERSEDED / WITHDRAWN / EXPIRED (SUPER_ADMIN only) */}
-                              {doc.status === 'APPROVED' && isSuperAdmin && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setTransitionModal({ document: doc, action: 'supersede' })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-medium transition-colors cursor-pointer"
-                                    title="Đánh dấu văn bản bị thay thế bởi văn bản mới"
-                                  >
-                                    <GitBranch className="w-3.5 h-3.5" />
-                                    <span>Thay thế</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setTransitionModal({ document: doc, action: 'withdraw' })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-medium transition-colors cursor-pointer"
-                                    title="Thu hồi khẩn cấp văn bản"
-                                  >
-                                    <Ban className="w-3.5 h-3.5" />
-                                    <span>Thu hồi</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setTransitionModal({ document: doc, action: 'expire' })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100 text-amber-800 text-xs font-medium transition-colors cursor-pointer"
-                                    title="Chuyển sang Hết hiệu lực"
-                                  >
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span>Hết hạn</span>
-                                  </button>
-                                </>
-                              )}
+                                      {/* View option if not primary */}
+                                      {(doc.status === 'DRAFT' || (doc.status === 'SUBMITTED' && isSuperAdmin) || doc.status === 'APPROVED') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenActionDropdownId(null);
+                                            setPreviewModal({ document: doc, initialTab: 'preview' });
+                                          }}
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 text-slate-400" />
+                                          <span>Xem trước</span>
+                                        </button>
+                                      )}
 
-                              {/* Permanent Delete (SUPER_ADMIN only) */}
-                              {isSuperAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteTarget(doc)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-medium transition-colors cursor-pointer"
-                                  title="Xóa vĩnh viễn tài liệu khỏi hệ thống"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Xóa</span>
-                                </button>
-                              )}
+                                      {/* Download / Open file options */}
+                                      {doc.creation_mode === 'ONLINE_EDITOR' ? (
+                                        <a
+                                          href={`/api/admin/documents/${doc.id}/docx`}
+                                          download
+                                          onClick={() => setOpenActionDropdownId(null)}
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50/60 flex items-center gap-2 cursor-pointer"
+                                        >
+                                          <Download className="w-3.5 h-3.5 text-blue-500" />
+                                          <span>Tải tệp .docx</span>
+                                        </a>
+                                      ) : doc.storage_type === 'EXTERNAL_LINK' && doc.external_url ? (
+                                        <a
+                                          href={doc.external_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={() => setOpenActionDropdownId(null)}
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-50/60 flex items-center gap-2 cursor-pointer"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5 text-indigo-500" />
+                                          <span>Mở liên kết ngoài</span>
+                                        </a>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenActionDropdownId(null);
+                                            void handleDownloadDocument(doc);
+                                          }}
+                                          disabled={isDownloading}
+                                          className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                        >
+                                          <Download className="w-3.5 h-3.5 text-slate-400" />
+                                          <span>Tải tệp đính kèm</span>
+                                        </button>
+                                      )}
+
+                                      {/* History & Details */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionDropdownId(null);
+                                          setPreviewModal({ document: doc, initialTab: 'details' });
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <History className="w-3.5 h-3.5 text-slate-400" />
+                                        <span>Lịch sử xử lý</span>
+                                      </button>
+
+                                      {/* Workflow options inside dropdown */}
+                                      {doc.status === 'SUBMITTED' && isSuperAdmin && (
+                                        <>
+                                          <div className="border-t border-slate-100 my-1" />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenActionDropdownId(null);
+                                              setTransitionModal({ document: doc, action: 'reject' });
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 text-rose-500" />
+                                            <span>Từ chối duyệt</span>
+                                          </button>
+                                        </>
+                                      )}
+
+                                      {doc.status === 'APPROVED' && isSuperAdmin && (
+                                        <>
+                                          <div className="border-t border-slate-100 my-1" />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenActionDropdownId(null);
+                                              setTransitionModal({ document: doc, action: 'withdraw' });
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 text-rose-500" />
+                                            <span>Thu hồi khẩn cấp</span>
+                                          </button>
+                                          {doc.expiration_date && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenActionDropdownId(null);
+                                                setTransitionModal({ document: doc, action: 'expire' });
+                                              }}
+                                              className="w-full text-left px-3 py-2 text-xs font-medium text-amber-700 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
+                                            >
+                                              <Clock className="w-3.5 h-3.5 text-amber-500" />
+                                              <span>Chuyển hết hạn</span>
+                                            </button>
+                                          )}
+                                        </>
+                                      )}
+
+                                      {/* Permanent Delete ONLY for DRAFT and SUPER_ADMIN */}
+                                      {doc.status === 'DRAFT' && isSuperAdmin && (
+                                        <>
+                                          <div className="border-t border-slate-100 my-1" />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenActionDropdownId(null);
+                                              setDeleteTarget(doc);
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                            <span>Xóa vĩnh viễn</span>
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1462,6 +1652,10 @@ export default function AdminDocumentsPage() {
             if (target) {
               setPreviewModal({ document: target, initialTab: 'details' });
             }
+          }}
+          onCloneDocument={(doc) => {
+            setPreviewModal(null);
+            void handleCloneDocument(doc);
           }}
         />
       )}

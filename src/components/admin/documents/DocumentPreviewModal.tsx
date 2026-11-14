@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Calendar,
   Cloud,
+  Copy,
   Download,
   ExternalLink,
   Eye,
@@ -34,6 +35,7 @@ export interface DocumentPreviewModalProps {
   initialTab?: 'preview' | 'details';
   onClose: () => void;
   onSelectDocumentById?: (docId: string) => void;
+  onCloneDocument?: (doc: SchoolDocument) => void;
 }
 
 function formatDateVi(dateStr?: string | null): string {
@@ -64,6 +66,7 @@ export function DocumentPreviewModal({
   initialTab,
   onClose,
   onSelectDocumentById,
+  onCloneDocument,
 }: DocumentPreviewModalProps) {
   const [detailDoc, setDetailDoc] = useState<SchoolDocument>(initialDoc);
   const previewKind = getDocumentPreviewKind(detailDoc);
@@ -266,6 +269,18 @@ export function DocumentPreviewModal({
                   <span>Tải về máy</span>
                 </button>
               </>
+            )}
+
+            {onCloneDocument && (
+              <button
+                type="button"
+                onClick={() => onCloneDocument(detailDoc)}
+                className="px-3 py-1.5 rounded-pill border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Nhân bản văn bản này sang Bản nháp mới"
+              >
+                <Copy className="w-3.5 h-3.5 text-primary-700" />
+                <span>Nhân bản</span>
+              </button>
             )}
 
             <button

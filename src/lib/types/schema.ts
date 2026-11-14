@@ -569,7 +569,9 @@ export type DocumentAuditAction =
   | 'WITHDRAW'
   | 'EXPIRE'
   | 'AUTO_EXPIRE'
-  | 'DRIVE_SYNC';
+  | 'DRIVE_SYNC'
+  | 'CLONE_DOCUMENT'
+  | 'EDIT_WHILE_SUBMITTED';
 export type DocumentDriveSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED' | 'SKIPPED';
 
 export interface DocumentCategory {

@@ -462,7 +462,16 @@ export function DocumentFormModal({
             <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
               <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
               <span>
-                Theo quy trình phê duyệt, tài liệu nháp chưa đồng bộ lên Google Drive. Sau khi Hiệu trưởng <strong>Phê duyệt (APPROVED)</strong>, hệ thống tự động sinh tệp Word (.docx) chuẩn Nghị định 30 (nếu soạn trực tuyến) và sao lưu lên Drive.
+                Tài liệu mới tạo sẽ ở trạng thái Bản nháp hoặc Chờ duyệt. Sau khi Hiệu trưởng Phê duyệt, hệ thống tự động cấp số hiệu, xuất tệp Word (.docx) theo thể thức chuẩn (nếu soạn trực tuyến) và lưu trữ lên Google Drive.
+              </span>
+            </div>
+          )}
+
+          {isEditing && editingDocument?.status === 'SUBMITTED' && (
+            <div className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-sky-900 flex items-start gap-2 text-[11px] leading-relaxed">
+              <Info className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
+              <span>
+                Văn bản đang ở trạng thái <strong>Chờ duyệt</strong>. Khi lưu thay đổi, hệ thống sẽ giữ nguyên trạng thái Chờ duyệt và cập nhật nội dung mới để Hiệu trưởng xem xét.
               </span>
             </div>
           )}
@@ -586,31 +595,31 @@ export function DocumentFormModal({
 
           {/* FILE_UPLOAD UI */}
           {creationMode === 'FILE_UPLOAD' && (
-            <>
-              {/* Storage Type Selector (Create only) */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              {/* Segmented Control cho Cấp 2 */}
               {!isEditing ? (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Hình thức lưu trữ (*)
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                      Hình thức nguồn tệp
+                    </span>
+                    <span className="text-[11px] text-slate-400">Chọn nguồn tài liệu đính kèm</span>
+                  </div>
+                  <div className="p-1 rounded-xl bg-slate-200/80 grid grid-cols-2 gap-1">
                     <button
                       type="button"
                       onClick={() => {
                         setStorageType('SUPABASE_STORAGE');
                         setErrorMsg(null);
                       }}
-                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         storageType === 'SUPABASE_STORAGE'
-                          ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <Upload className="w-4 h-4 shrink-0" />
-                      <div>
-                        <div className="font-bold">Tải tệp lên hệ thống</div>
-                        <div className="text-[11px] opacity-80">PDF, Word, Excel, Ảnh (≤ 25MB)</div>
-                      </div>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Tải tệp từ máy (PDF, Word, Excel...)</span>
                     </button>
 
                     <button
@@ -619,22 +628,19 @@ export function DocumentFormModal({
                         setStorageType('EXTERNAL_LINK');
                         setErrorMsg(null);
                       }}
-                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         storageType === 'EXTERNAL_LINK'
-                          ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <Link2 className="w-4 h-4 shrink-0" />
-                      <div>
-                        <div className="font-bold">Gắn liên kết ngoài</div>
-                        <div className="text-[11px] opacity-80">Google Drive / Docs / mamnonsuongmai.edu.vn</div>
-                      </div>
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>Gắn liên kết Google Workspace</span>
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-slate-700">
                     {editingDocument?.storage_type === 'EXTERNAL_LINK' ? (
                       <>
@@ -659,11 +665,8 @@ export function DocumentFormModal({
               {/* File Picker or External URL */}
               {!isEditing && storageType === 'SUPABASE_STORAGE' && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
-                    Chọn tệp đính kèm (*)
-                  </label>
-                  <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-slate-50/70 hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
-                    <Upload className="w-6 h-6 text-primary-700 mb-1.5" />
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-white hover:bg-rose-50/30 transition-colors cursor-pointer text-center">
+                    <Upload className="w-5 h-5 text-primary-700 mb-1" />
                     {selectedFile ? (
                       <div className="space-y-0.5">
                         <p className="font-bold text-slate-800">{selectedFile.name}</p>
@@ -691,7 +694,7 @@ export function DocumentFormModal({
 
               {storageType === 'EXTERNAL_LINK' && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">
+                  <label className="block font-bold text-slate-700 mb-1">
                     Đường dẫn liên kết ngoài (*)
                   </label>
                   <input
@@ -699,7 +702,7 @@ export function DocumentFormModal({
                     value={externalUrl}
                     onChange={(e) => setExternalUrl(e.target.value)}
                     placeholder="https://drive.google.com/file/d/... hoặc https://docs.google.com/..."
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 focus:border-primary-600 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none"
                     required
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
@@ -707,7 +710,7 @@ export function DocumentFormModal({
                   </p>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {/* Metadata Fields */}

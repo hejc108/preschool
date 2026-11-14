@@ -16,6 +16,7 @@ import {
   DocumentAuditLog,
   DocumentCategory,
   DocumentCreationMode,
+  DocumentDriveSyncStatus,
   DocumentStatus,
   DocumentStorageType,
   DocumentVisibilityScope,
@@ -275,15 +276,37 @@ async function insertAuditRowWithFallback(
   payload: Record<string, any>
 ): Promise<{ data: any; error: any }> {
   const res = await sb.from('document_audit_logs').insert(payload);
-  if (res.error && res.error.code === '23514' && payload.action === 'AUTO_EXPIRE') {
-    return await sb.from('document_audit_logs').insert({
-      ...payload,
-      action: 'EXPIRE',
-      metadata: {
-        ...(payload.metadata || {}),
-        intended_action: 'AUTO_EXPIRE',
-      },
-    });
+  if (res.error && res.error.code === '23514') {
+    if (payload.action === 'AUTO_EXPIRE') {
+      return await sb.from('document_audit_logs').insert({
+        ...payload,
+        action: 'EXPIRE',
+        metadata: {
+          ...(payload.metadata || {}),
+          intended_action: 'AUTO_EXPIRE',
+        },
+      });
+    }
+    if (payload.action === 'CLONE_DOCUMENT') {
+      return await sb.from('document_audit_logs').insert({
+        ...payload,
+        action: 'CREATE_DRAFT',
+        metadata: {
+          ...(payload.metadata || {}),
+          intended_action: 'CLONE_DOCUMENT',
+        },
+      });
+    }
+    if (payload.action === 'EDIT_WHILE_SUBMITTED') {
+      return await sb.from('document_audit_logs').insert({
+        ...payload,
+        action: 'UPDATE_METADATA',
+        metadata: {
+          ...(payload.metadata || {}),
+          intended_action: 'EDIT_WHILE_SUBMITTED',
+        },
+      });
+    }
   }
   return res;
 }
@@ -1259,23 +1282,14 @@ export async function updateDocumentRecord(
   if (!existingRes.ok) return existingRes;
   const existing = existingRes.document;
 
-  if (ctx.activeRole !== 'SUPER_ADMIN' && existing.status !== 'DRAFT') {
-    return fail(
-      403,
-      'FORBIDDEN_EDIT_NON_DRAFT',
-      'Quản trị trường chỉ được chỉnh sửa thông tin khi tài liệu đang ở trạng thái Soạn thảo (DRAFT).'
-    );
-  }
-
-  if (
-    existing.status === 'WITHDRAWN' ||
-    existing.status === 'SUPERSEDED' ||
-    existing.status === 'EXPIRED'
-  ) {
+  // Quyền sửa: Cho phép sửa ở cả DRAFT và SUBMITTED; khóa cứng sau APPROVED và các trạng thái kết thúc
+  if (existing.status !== 'DRAFT' && existing.status !== 'SUBMITTED') {
     return fail(
       409,
-      'DOCUMENT_LOCKED_TERMINAL_STATE',
-      'Văn bản đã thu hồi, bị thay thế hoặc hết hiệu lực không thể chỉnh sửa nội dung.'
+      'DOCUMENT_LOCKED_NON_EDITABLE',
+      existing.status === 'APPROVED'
+        ? 'Văn bản đã phê duyệt không thể chỉnh sửa trực tiếp để bảo toàn tính pháp lý. Vui lòng sử dụng tính năng Thay thế hoặc Thu hồi.'
+        : 'Văn bản đã thu hồi, bị thay thế hoặc hết hiệu lực không thể chỉnh sửa nội dung.'
     );
   }
 
@@ -1363,7 +1377,7 @@ export async function updateDocumentRecord(
     updates.document_number = nextDocNumber;
   }
 
-  if (nextDocNumber && (existing.status === 'APPROVED' || input.document_number !== undefined)) {
+  if (nextDocNumber && input.document_number !== undefined) {
     const dup = await checkDuplicateApprovedDocumentNumber(ctx, nextDocNumber, existing.id);
     if (dup) {
       return fail(
@@ -1416,12 +1430,23 @@ export async function updateDocumentRecord(
     return fail(500, 'UPDATE_DOCUMENT_FAILED', updErr?.message || 'Không thể cập nhật tài liệu.');
   }
 
+  const isEditingSubmitted = existing.status === 'SUBMITTED';
+  const auditAction: DocumentAuditAction = isEditingSubmitted
+    ? 'EDIT_WHILE_SUBMITTED'
+    : 'UPDATE_METADATA';
+
   await appendDocumentAuditLog(ctx, {
     documentId: id,
-    action: 'UPDATE_METADATA',
+    action: auditAction,
     fromStatus: existing.status,
     toStatus: existing.status,
-    metadata: { updated_fields: Object.keys(updates) },
+    reason: isEditingSubmitted
+      ? 'Chỉnh sửa và cập nhật nội dung văn bản khi đang trong hàng đợi chờ duyệt'
+      : null,
+    metadata: {
+      updated_fields: Object.keys(updates),
+      edited_while_submitted: isEditingSubmitted,
+    },
   });
 
   let hydrated = await hydrateSingleDocument(ctx, updatedRow, targetCategory);
@@ -1886,6 +1911,14 @@ export async function deleteDocumentPermanently(
   if (!docRes.ok) return docRes;
   const doc = docRes.document;
 
+  if (doc.status !== 'DRAFT') {
+    return fail(
+      409,
+      'CANNOT_DELETE_NON_DRAFT',
+      'Chỉ được phép xóa tài liệu ở trạng thái Bản nháp (DRAFT). Văn bản đã trình duyệt hoặc đã phê duyệt không thể xóa để bảo toàn tính pháp lý và lịch sử kiểm định.'
+    );
+  }
+
   // Xóa file vật lý trên Supabase Storage (tuyệt đối KHÔNG xóa bản sao lưu trên Google Drive)
   if (doc.storage_type === 'SUPABASE_STORAGE' && doc.storage_path) {
     try {
@@ -1982,4 +2015,77 @@ export async function generateDraftDocxForDocument(
   const fileName = `${prefix}${safeBase || 'van_ban'}.docx`;
 
   return { ok: true, buffer, fileName, isApproved };
+}
+
+export async function cloneDocumentRecord(
+  ctx: SessionContext,
+  id: string
+): Promise<{ ok: true; document: SchoolDocument } | ServiceErrorResult> {
+  const existingRes = await getDocumentById(ctx, id);
+  if (!existingRes.ok) return existingRes;
+  const source = existingRes.document;
+
+  const profileId = getSafeProfileUuid(ctx);
+  const clonedTitle = `${source.title} (Bản sao)`;
+  const today = getTodayVietnamDate();
+
+  const insertPayload = {
+    title: clonedTitle,
+    document_number: null,
+    category_id: source.category_id,
+    issued_date: today,
+    effective_date: null,
+    expiration_date: null,
+    visibility_scope: source.visibility_scope,
+    description: source.description || null,
+    status: 'DRAFT' as DocumentStatus,
+    storage_type: source.storage_type,
+    file_path: source.storage_type === 'SUPABASE_STORAGE' ? source.storage_path : null,
+    file_name: source.storage_type === 'SUPABASE_STORAGE' ? source.file_name : null,
+    file_size: source.storage_type === 'SUPABASE_STORAGE' ? source.file_size : null,
+    mime_type: source.storage_type === 'SUPABASE_STORAGE' ? source.mime_type : null,
+    external_url: source.storage_type === 'EXTERNAL_LINK' ? source.external_url : null,
+    drive_sync_status: 'PENDING' as DocumentDriveSyncStatus,
+    drive_file_id: null,
+    drive_web_view_link: null,
+    creation_mode: source.creation_mode || 'FILE_UPLOAD',
+    editor_content_html: source.editor_content_html || null,
+    editor_template_code: source.editor_template_code || null,
+    generated_docx_path: null,
+    uploaded_by: profileId,
+    approved_by: null,
+    approved_at: null,
+    rejection_reason: null,
+    superseded_by_id: null,
+  };
+
+  const { data: inserted, error: insertErr } = await executeWithContextFallback(
+    ctx,
+    async (sb) =>
+      await sb.from('school_documents').insert(insertPayload).select('*').single()
+  );
+
+  if (insertErr || !inserted) {
+    return fail(
+      500,
+      'CLONE_DOCUMENT_FAILED',
+      insertErr?.message || 'Không thể nhân bản văn bản.'
+    );
+  }
+
+  await appendDocumentAuditLog(ctx, {
+    documentId: inserted.id,
+    action: 'CLONE_DOCUMENT',
+    fromStatus: null,
+    toStatus: 'DRAFT',
+    reason: `Nhân bản từ văn bản "${source.title}" (${source.id})`,
+    metadata: {
+      cloned_from_id: source.id,
+      cloned_from_title: source.title,
+      cloned_from_status: source.status,
+    },
+  });
+
+  const hydrated = await hydrateSingleDocument(ctx, inserted, existingRes.category);
+  return { ok: true, document: hydrated };
 }
