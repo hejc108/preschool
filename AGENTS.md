@@ -62,3 +62,9 @@ Mọi AI Agent khi tiếp nhận tác vụ **BẮT BUỘC** tuân thủ tuyệt 
 - **BA Gate:** Luồng nghiệp vụ liền mạch, ma trận quyền hạn rõ ràng, có audit log.
 - **UI/UX Gate:** Mockup-First (xây dựng giao diện mẫu trực quan trước khi gắn backend), chống tràn khung 1280px.
 - **QC Gate:** `tsc --noEmit` sạch 0 lỗi và `next build` pass 100% trước khi tạo commit và push lên repository.
+
+### 8. Quy Chuẩn Tổ Chức Menu Điều Hướng & Cấu Hình Phụ (Contextual Sub-Navigation)
+- **Không tách menu cấp 1 cho cấu hình phụ:** Không tách các màn hình cấu hình phụ của một nghiệp vụ thành menu cấp 1 trên thanh Sidebar bên trái (ví dụ: không tách riêng "Chu kỳ thực đơn" thành mục độc lập khỏi "Thực đơn 4 tuần").
+- **Tích hợp ngữ cảnh:** Các cấu hình chuyên biệt của phân hệ nào phải đặt gọn dưới dạng Tab con hoặc nút Cấu hình ngay bên trong phân hệ đó.
+- **Dự phòng liên kết cũ (Graceful Redirection):** Luôn duy trì redirect chuyển tiếp mượt mà cho các route cũ sang route tích hợp (kèm query param mở sẵn tab/modal tương ứng) để không bao giờ phát sinh lỗi 404 cho người dùng.
+

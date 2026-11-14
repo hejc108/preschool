@@ -24,7 +24,7 @@
 * Các phân hệ chính:
   * `/admin/dashboard` — Bảng điều khiển tổng quan Ban Giám Hiệu.
   * `/admin/documents` — **FR-01 Quản lý Văn bản & Hồ sơ Nhà trường** (6 trạng thái SRS + Drive Archive).
-  * `/admin/menu` & `/admin/menu/settings` — Ma trận thực đơn 4 tuần & Cấu hình chu kỳ tháng linh hoạt.
+  * `/admin/menu` — **Thực đơn 4 tuần & Cấu hình chu kỳ** (Tích hợp 2 tab: Bảng thực đơn 4 tuần & Cấu hình chu kỳ tháng; tự động chuyển hướng từ `/admin/menu/settings`).
   * `/admin/health` — Sổ theo dõi sức khỏe & biểu đồ tăng trưởng WHO.
   * `/admin/kitchen` — Báo cáo suất ăn nhà bếp hằng ngày.
   * `/admin/students` & `/admin/students/[id]` — Hồ sơ học sinh & liên kết phụ huynh.
@@ -272,6 +272,26 @@ Nhằm tối ưu hóa trải nghiệm soạn thảo chuyên nghiệp như Google
    * Khi nạp hoặc trích xuất nội dung từ tệp `.docx` (`DOCX_EXTRACTED`), hệ thống kiểm tra nếu nội dung đã chứa chuỗi Quốc hiệu `"CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"` hoặc `"TRƯỜNG MẦM NON SƯƠNG MAI"` thì:
      * Cả giao diện soạn thảo (`DocumentRichTextEditor`) và bộ sinh file Word (`docxGeneratorService`) đều tự động ẩn phần Header thể thức chèn sẵn, nạp trực tiếp nội dung trích xuất của tệp Word lên trang giấy, chấm dứt triệt để lỗi hiển thị 2 lần Quốc hiệu – Tiêu ngữ.
      * Tương tự đối với khối Chữ ký Hiệu trưởng & Nơi nhận (nếu tài liệu gốc đã có sẵn).
+
+---
+
+### 3.9. CR-05: Tinh Gọn Sidebar & Gộp "Chu Kỳ Thực Đơn" Vào Bên Trong Trang "Thực Đơn 4 Tuần"
+
+Nhằm tinh gọn thanh điều hướng bên trái và tuân thủ quy chuẩn Contextual Sub-Navigation:
+
+1. **Tinh gọn Sidebar Admin:**
+   * Loại bỏ mục menu riêng lẻ `Chu kỳ thực đơn` (badge `Tháng`) khỏi nhóm Quản lý Vận hành trên thanh điều hướng bên trái ([`src/app/admin/layout.tsx`](file:///Users/thiemvv/Projects/Preschool/src/app/admin/layout.tsx)).
+   * Chỉ giữ lại duy nhất mục `Thực đơn 4 tuần` cho toàn bộ phân hệ quản lý thực đơn.
+
+2. **Tích hợp Cấu hình chu kỳ vào trang `Thực đơn 4 tuần` ([`src/app/admin/menu/page.tsx`](file:///Users/thiemvv/Projects/Preschool/src/app/admin/menu/page.tsx)):**
+   * Bổ sung bộ chuyển đổi 2 Segmented Tabs ngay đầu trang:
+     * **Tab 1: Bảng thực đơn 4 tuần:** Hiển thị chọn bộ thực đơn 4 tuần, bảng ma trận chỉnh sửa món ăn 5 ngày x 5 bữa ăn, nút `[Lưu thay đổi]`, và dải tóm tắt chu kỳ vận hành hôm nay kèm nút mở nhanh cấu hình.
+     * **Tab 2: Cấu hình chu kỳ:** Nhúng toàn bộ giao diện [`MenuCycleSettingsPanel`](file:///Users/thiemvv/Projects/Preschool/src/components/admin/MenuCycleSettingsPanel.tsx) cho phép điều chỉnh chế độ tự động xoay vòng 4 tuần hoặc gán thủ công theo tuần học trong tháng.
+   * Đồng bộ trạng thái mượt mà thông qua query param `?tab=cycle` và `window.history.replaceState`.
+   * **Dự phòng liên kết cũ:** Tuyến đường [`/admin/menu/settings`](file:///Users/thiemvv/Projects/Preschool/src/app/admin/menu/settings/page.tsx) được cấu hình `redirect('/admin/menu?tab=cycle')` để tự động chuyển tiếp người dùng về đúng tab Cấu hình chu kỳ mà không bao giờ gặp lỗi 404.
+
+3. **Quy chuẩn UI/UX bổ sung:**
+   * *Không tách các màn hình cấu hình phụ của một nghiệp vụ thành menu cấp 1 trên Sidebar; các cấu hình chuyên biệt của phân hệ nào phải đặt gọn dưới dạng Tab con hoặc nút Cấu hình ngay bên trong phân hệ đó.*
 
 ---
 
