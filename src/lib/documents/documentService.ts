@@ -43,6 +43,7 @@ import {
 } from '@/lib/documents/validation';
 import { syncDocumentToGoogleDrive } from '@/lib/documents/googleDriveService';
 import { generateDocumentDocxBuffer } from '@/lib/documents/docxGeneratorService';
+import { extractHtmlForDocument, isDocxFileRecord } from '@/lib/documents/docxHtmlExtractorService';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -69,7 +70,7 @@ function getActorDisplayName(ctx: SessionContext): string {
   return (ctx.fullName || ctx.email || 'Quản trị viên').trim();
 }
 
-async function getPreferredStorageClient(ctx: SessionContext): Promise<SupabaseClient> {
+export async function getPreferredStorageClient(ctx: SessionContext): Promise<SupabaseClient> {
   const cfg = getSupabaseConfig();
   if (cfg.isValidServiceRoleKey) {
     return getSupabaseAdminClient(false);
@@ -1266,6 +1267,7 @@ export async function updateDocumentRecord(
     visibility_scope?: unknown;
     status?: unknown;
     external_url?: unknown;
+    creation_mode?: unknown;
     editor_content_html?: unknown;
     editor_template_code?: unknown;
   }
@@ -1399,9 +1401,17 @@ export async function updateDocumentRecord(
     updates.external_url = urlCheck.url;
   }
 
+  if (input.creation_mode !== undefined) {
+    const mode = String(input.creation_mode || '').trim();
+    if (mode === 'ONLINE_EDITOR' || mode === 'FILE_UPLOAD') {
+      updates.creation_mode = mode;
+    }
+  }
+
   if (input.editor_content_html !== undefined) {
     const rawHtml = String(input.editor_content_html || '').trim();
-    if (!rawHtml && existing.creation_mode === 'ONLINE_EDITOR') {
+    const targetMode = updates.creation_mode || existing.creation_mode;
+    if (!rawHtml && targetMode === 'ONLINE_EDITOR') {
       return fail(400, 'MISSING_EDITOR_CONTENT', 'Nội dung văn bản không được để trống.');
     }
     updates.editor_content_html = rawHtml || null;
@@ -2029,6 +2039,25 @@ export async function cloneDocumentRecord(
   const clonedTitle = `${source.title} (Bản sao)`;
   const today = getTodayVietnamDate();
 
+  let targetCreationMode = source.creation_mode || 'FILE_UPLOAD';
+  let targetEditorHtml = source.editor_content_html || null;
+  let targetTemplateCode = source.editor_template_code || null;
+
+  // Nếu bản gốc là tệp .docx trong Storage nhưng chưa có editor_content_html:
+  // Tự động chuyển đổi nội dung .docx sang HTML và bật ONLINE_EDITOR cho bản sao
+  if (!targetEditorHtml && isDocxFileRecord(source) && source.storage_path) {
+    try {
+      const extRes = await extractHtmlForDocument(ctx, source);
+      if (extRes.ok && extRes.html) {
+        targetEditorHtml = extRes.html;
+        targetCreationMode = 'ONLINE_EDITOR';
+        targetTemplateCode = targetTemplateCode || 'BLANK';
+      }
+    } catch {
+      // Giữ nguyên file copy fallback
+    }
+  }
+
   const insertPayload = {
     title: clonedTitle,
     document_number: null,
@@ -2048,9 +2077,9 @@ export async function cloneDocumentRecord(
     drive_sync_status: 'PENDING' as DocumentDriveSyncStatus,
     drive_file_id: null,
     drive_web_view_link: null,
-    creation_mode: source.creation_mode || 'FILE_UPLOAD',
-    editor_content_html: source.editor_content_html || null,
-    editor_template_code: source.editor_template_code || null,
+    creation_mode: targetCreationMode,
+    editor_content_html: targetEditorHtml,
+    editor_template_code: targetTemplateCode,
     generated_docx_path: null,
     uploaded_by: profileId,
     approved_by: null,

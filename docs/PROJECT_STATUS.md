@@ -10,7 +10,7 @@
 | Thành phần | Công nghệ / Dịch vụ sử dụng | Ghi chú kỹ thuật |
 | :--- | :--- | :--- |
 | **Frontend / Full-stack** | Next.js `14.2.24` (App Router), React `18.3.1`, TypeScript `5.7.3` | SSR + API Route Handlers (`force-dynamic` cho API nghiệp vụ) |
-| **UI & Tiện ích** | TailwindCSS `3.4`, `lucide-react`, `framer-motion`, `swr`, `xlsx`, `pptxgenjs`, `qrcode.react` | Hỗ trợ đa ngôn ngữ (`LanguageContext`), giao diện Admin Sidebar + PWA Mobile |
+| **UI & Tiện ích** | TailwindCSS `3.4`, `lucide-react`, `framer-motion`, `swr`, `xlsx`, `pptxgenjs`, `qrcode.react`, `@tiptap/*`, `docx`, `mammoth` | Hỗ trợ đa ngôn ngữ (`LanguageContext`), Web Rich Text Editor, trích xuất & sinh Word chuẩn NĐ30 |
 | **Cơ sở dữ liệu & Auth** | Supabase Cloud (PostgreSQL, Auth, Storage, Realtime) | Bảo mật Layer-2 RLS kết hợp `Custom Access Token Hook` + `RPC` |
 | **Sao lưu & Lưu trữ ngoài** | Google Drive API v3 (Service Account JWT + Shared Drive) | Tự động phân loại thư mục theo năm & danh mục văn bản |
 | **Triển khai & Tác vụ định kỳ** | Vercel Hosting + Vercel Cron Jobs ([`vercel.json`](file:///Users/thiemvv/Projects/Preschool/vercel.json)) | Cron chạy Keep-Alive (3 ngày/lần) & Auto-Expire văn bản (hằng ngày) |
@@ -222,6 +222,36 @@ Nhằm tối ưu hóa trải nghiệm thao tác trên màn hình máy tính ph�
 6. **Chuẩn Hóa Tiêu Đề Bảng 1–2 Từ Lõi & Cột Lưu Trữ Gọn Gàng:**
    * 5 cột bảng: `VĂN BẢN` | `PHÂN LOẠI` | `TRẠNG THÁI` | `LƯU TRỮ` | `THAO TÁC`.
    * Cột `LƯU TRỮ`: Chỉ hiển thị 1 badge trạng thái (`Đã sao lưu` / `Chờ sao lưu` / `Lỗi đồng bộ`) + nút `[Đồng bộ lại]` nhỏ gọn; toàn bộ thông điệp/lỗi chi tiết đưa vào Tooltip (`title`) khi rê chuột.
+
+---
+
+### 3.7. CR-03: Tự Động Đọc Nội Dung File Word (.docx) Sang Trình Soạn Thảo Web & Chuẩn Hóa Chống Tràn Bảng 1280px
+
+Nhằm nâng cấp trải nghiệm biên tập trực tiếp và khắc phục triệt để lỗi tràn ngang trên màn hình `1280px`:
+
+1. **Chuyển Đổi Nội Dung Tệp Word (`.docx`) Sang Web Rich Text Editor:**
+   * **Thư viện trích xuất:** `mammoth` (chạy thuần Node.js, nhẹ, không phụ thuộc native binary, tương thích hoàn toàn Vercel Serverless).
+   * **API Trích xuất:** `GET /api/admin/documents/[id]/extract-html`
+     * Kiểm tra quyền bảo mật Layer-2 RLS / `current_active_role()`.
+     * Tải Buffer tệp `.docx` từ Supabase Storage bucket `school-documents`.
+     * Sử dụng cấu hình styleMap semantic chuyển đổi sang HTML sạch giữ nguyên định dạng in đậm, in nghiêng, gạch chân, tiêu đề các cấp và bảng biểu.
+   * **Tự động đọc vào Editor khi mở văn bản `.docx`:** Khi mở form chỉnh sửa (`DocumentFormModal`) với tệp `.docx` chưa có `editor_content_html`, hệ thống hiển thị banner trạng thái nhẹ, tự động gọi API `/extract-html` nạp HTML vào Tiptap Editor và lưu dưới chế độ `ONLINE_EDITOR`.
+2. **Tự Động Trích Xuất Khi Nhân Bản (`CLONE`):**
+   * Khi nhân bản (`POST /api/admin/documents/[id]/clone`) từ một tệp `.docx` tải lên trong Storage, server tự động chạy `mammoth.convertToHtml` ngay lúc Clone để lưu sẵn `editor_content_html` và đặt `creation_mode = 'ONLINE_EDITOR'` cho bản sao mới — giúp bản sao mở lên là soạn thảo được ngay lập tức mà không cần chuyển đổi lại.
+3. **Mở Thẳng Soạn Thảo Cho Cả Tệp Word (`.docx`):**
+   * Với mọi văn bản `DRAFT` hoặc `SUBMITTED` thuộc loại `ONLINE_EDITOR` HOẶC là tệp Word `.docx`:
+     * Bấm trực tiếp vào **Tiêu đề văn bản** hoặc **Icon văn bản** trên bảng sẽ mở thẳng Modal Trình soạn thảo trực tuyến Tiptap.
+     * Nút hành động đầu tiên trên dòng hiển thị rõ là **`[Soạn thảo]`** (icon `FileEdit`, màu xanh dương `blue-700` đồng bộ với header).
+     * Gắn nhãn nhận diện phân loại trực quan: `Tệp Word (.docx)` (màu xanh/slate) hoặc `Soạn trực tuyến` (màu xanh).
+4. **Khắc Phục Triệt Để Lỗi Tràn Khung Bên Phải Trên Màn Hình `1280px`:**
+   * Loại bỏ hoàn toàn `min-w-[1060px]`, thay thế bằng layout `table-fixed w-full` với tỷ lệ phần trăm phân bổ cố định:
+     * `VĂN BẢN` (**32%**) | `PHÂN LOẠI` (**22%**) | `TRẠNG THÁI` (**16%**) | `LƯU TRỮ` (**15%**) | `THAO TÁC` (**15%**).
+   * **Cột Thao tác (`THAO TÁC`):** Giới hạn nghiêm ngặt **1 nút chính duy nhất** + **1 nút menu `⋮`** (tổng bề rộng ~125px, vừa khít 15% của viewport khả dụng ~`972px` trừ sidebar và padding):
+     * `DRAFT`: Nút chính là `[Soạn thảo]` (với docx/online editor) hoặc `[Cập nhật]` (file khác). Đưa `[Trình duyệt]` vào đầu menu `⋮`.
+     * `SUBMITTED`: Super Admin có nút chính là `[Phê duyệt]`, đưa `[Soạn thảo]`/`[Cập nhật]` và `[Từ chối]` vào menu `⋮`. Với tài khoản thường: Nút chính là `[Soạn thảo]`/`[Cập nhật]`.
+     * `APPROVED`: Nút chính là `[.docx]` (với online/docx) hoặc `[Mở link]`/`[Tải về]`. Đưa `[Thay thế]` vào menu `⋮`.
+     * `TERMINAL` (`WITHDRAWN`, `SUPERSEDED`, `EXPIRED`): Nút chính là `[Xem]`, đưa `[Nhân bản]` vào menu `⋮`.
+   * Bảng hiển thị hoàn hảo, không có thanh cuộn ngang và không bị che khuất bất kỳ nút thao tác nào ở độ phân giải `1280px`.
 
 ---
 

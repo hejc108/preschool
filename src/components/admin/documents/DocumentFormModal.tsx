@@ -101,9 +101,13 @@ export function DocumentFormModal({
     editingDocument?.editor_content_html || getDocumentTemplate('CONG_VAN').initialHtml
   );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [extractingDocx, setExtractingDocx] = useState<boolean>(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   // Đồng bộ lại toàn bộ dữ liệu khi editingDocument thay đổi (đảm bảo không bao giờ bị trắng trang)
   useEffect(() => {
+    let isCancelled = false;
+
     if (editingDocument) {
       setTitle(editingDocument.title || '');
       setDocumentNumber(editingDocument.document_number || '');
@@ -115,18 +119,60 @@ export function DocumentFormModal({
       setDescription(editingDocument.description || '');
       setStorageType(editingDocument.storage_type || 'SUPABASE_STORAGE');
       setExternalUrl(editingDocument.external_url || '');
-      const mode = editingDocument.creation_mode || 'FILE_UPLOAD';
-      setCreationMode(mode);
+
+      const isDocx =
+        editingDocument.creation_mode === 'ONLINE_EDITOR' ||
+        (editingDocument.storage_type === 'SUPABASE_STORAGE' &&
+          Boolean(
+            editingDocument.file_name?.toLowerCase().endsWith('.docx') ||
+            editingDocument.storage_path?.toLowerCase().endsWith('.docx')
+          ));
+
+      setCreationMode(isDocx ? 'ONLINE_EDITOR' : (editingDocument.creation_mode || 'FILE_UPLOAD'));
       const tmplCode = editingDocument.editor_template_code || 'CONG_VAN';
       setEditorTemplateCode(tmplCode);
       setEditorContentHtml(
         editingDocument.editor_content_html || getDocumentTemplate(tmplCode).initialHtml
       );
+
+      // Nếu là tệp .docx nhưng chưa có editor_content_html -> tự động trích xuất
+      if (
+        isDocx &&
+        (!editingDocument.editor_content_html || editingDocument.editor_content_html.trim() === '')
+      ) {
+        setExtractingDocx(true);
+        setExtractError(null);
+        fetch(`/api/admin/documents/${editingDocument.id}/extract-html`, { cache: 'no-store' })
+          .then((res) => res.json().catch(() => ({})))
+          .then((json) => {
+            if (!isCancelled && json.success && json.html) {
+              setEditorContentHtml(json.html);
+              setCreationMode('ONLINE_EDITOR');
+              setEditorTemplateCode('BLANK');
+            } else if (!isCancelled && json.message && !json.unsupportedReason) {
+              setExtractError(json.message);
+            }
+          })
+          .catch((err) => {
+            if (!isCancelled) {
+              setExtractError('Không thể tự động đọc nội dung file Word: ' + (err?.message || 'Lỗi mạng'));
+            }
+          })
+          .finally(() => {
+            if (!isCancelled) setExtractingDocx(false);
+          });
+      }
     } else {
       setCreationMode(initialCreationMode);
       setEditorTemplateCode('CONG_VAN');
       setEditorContentHtml(getDocumentTemplate('CONG_VAN').initialHtml);
+      setExtractingDocx(false);
+      setExtractError(null);
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [editingDocument, defaultCategoryId, initialCreationMode]);
 
   const handleSelectTemplate = (code: string) => {
@@ -234,15 +280,18 @@ export function DocumentFormModal({
           expiration_date: cleanExpirationDate,
           description: description.trim() || null,
           ...(isSuperAdmin ? { visibility_scope: visibilityScope } : {}),
-          ...(editingDocument.storage_type === 'EXTERNAL_LINK'
+          ...(storageType === 'EXTERNAL_LINK'
             ? { external_url: externalUrl.trim() }
             : {}),
-          ...(editingDocument.creation_mode === 'ONLINE_EDITOR'
+          ...(creationMode === 'ONLINE_EDITOR'
             ? {
+                creation_mode: 'ONLINE_EDITOR',
                 editor_content_html: editorContentHtml,
                 editor_template_code: editorTemplateCode,
               }
-            : {}),
+            : {
+                creation_mode: 'FILE_UPLOAD',
+              }),
         };
 
         const res = await fetch(`/api/admin/documents/${editingDocument.id}`, {
@@ -595,6 +644,18 @@ export function DocumentFormModal({
           {/* ONLINE_EDITOR UI */}
           {creationMode === 'ONLINE_EDITOR' && (
             <div className="space-y-3">
+              {extractingDocx && (
+                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 flex items-center gap-2.5 text-xs font-semibold animate-pulse">
+                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
+                  <span>Đang tự động đọc và trích xuất nội dung từ tệp Word (.docx) vào trình soạn thảo...</span>
+                </div>
+              )}
+              {extractError && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{extractError}</span>
+                </div>
+              )}
               {!isEditing && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1.5">
