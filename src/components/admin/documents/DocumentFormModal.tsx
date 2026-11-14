@@ -477,7 +477,7 @@ export function DocumentFormModal({
           )}
 
           {/* Creation Mode Selector (Tải tệp vs Soạn thảo trực tiếp) */}
-          {!isEditing ? (
+          {!isEditing || editingDocument?.status === 'DRAFT' ? (
             <div>
               <label className="block font-bold text-slate-700 mb-1.5">
                 Phương thức tạo văn bản (*)
@@ -495,7 +495,7 @@ export function DocumentFormModal({
                       : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <Upload className="w-4 h-4 shrink-0" />
+                  <Upload className="w-4 h-4 shrink-0 text-primary-700" />
                   <div>
                     <div className="font-bold">Tải tệp / Liên kết có sẵn</div>
                     <div className="text-[11px] opacity-80">Tải tệp PDF, Word, Excel hoặc URL Google Drive</div>
@@ -510,27 +510,27 @@ export function DocumentFormModal({
                   }}
                   className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     creationMode === 'ONLINE_EDITOR'
-                      ? 'bg-rose-50 border-primary-600 text-primary-900 shadow-2xs'
+                      ? 'bg-blue-50 border-blue-600 text-blue-900 shadow-2xs'
                       : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <FileEdit className="w-4 h-4 shrink-0 text-primary-700" />
+                  <FileEdit className="w-4 h-4 shrink-0 text-blue-700" />
                   <div>
-                    <div className="font-bold">Soạn thảo trực tiếp trên Web</div>
+                    <div className="font-bold text-blue-900">Soạn thảo trực tuyến</div>
                     <div className="text-[11px] opacity-80">Trình soạn thảo chuẩn Nghị định 30, tự xuất file Word (.docx)</div>
                   </div>
                 </button>
               </div>
             </div>
           ) : editingDocument?.creation_mode === 'ONLINE_EDITOR' ? (
-            <div className="p-3 rounded-xl bg-primary-50/70 border border-primary-200 flex items-center justify-between gap-3 text-primary-950">
+            <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between gap-3 text-blue-950">
               <div className="flex items-center gap-2">
-                <FileEdit className="w-4 h-4 text-primary-700 shrink-0" />
+                <FileEdit className="w-4 h-4 text-blue-700 shrink-0" />
                 <span className="font-semibold text-xs">
-                  Hình thức: Soạn thảo trực tiếp trên Web (Chuẩn Nghị định 30/2020/NĐ-CP)
+                  Hình thức: Soạn thảo trực tuyến (Chuẩn Nghị định 30/2020/NĐ-CP)
                 </span>
               </div>
-              <span className="text-[11px] bg-white px-2 py-0.5 rounded-full border border-primary-200 font-medium text-primary-800">
+              <span className="text-[11px] bg-white px-2 py-0.5 rounded-full border border-blue-200 font-medium text-blue-800">
                 Mẫu: {getDocumentTemplate(editorTemplateCode).label}
               </span>
             </div>

@@ -36,6 +36,7 @@ import {
   ShieldAlert,
   Tags,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -593,19 +594,21 @@ export default function AdminDocumentsPage() {
             <button
               type="button"
               onClick={() => handleOpenCreate('ONLINE_EDITOR')}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer ring-2 ring-blue-400/30"
+              title="Soạn thảo văn bản trực tuyến trên Web chuẩn Nghị định 30 (tự động xuất file Word .docx)"
             >
               <FileEdit className="w-4 h-4" />
-              <span>Soạn văn bản mới</span>
+              <span>Soạn thảo trực tuyến</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleOpenCreate('FILE_UPLOAD')}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold shadow-sm hover:shadow transition-all cursor-pointer"
+              title="Tải tệp Word, Excel, PDF có sẵn từ máy hoặc gắn liên kết Google Drive"
             >
-              <Plus className="w-4 h-4" />
-              <span>Tải tệp / Link</span>
+              <Upload className="w-4 h-4" />
+              <span>Tải tệp lên</span>
             </button>
           </div>
         )}
@@ -934,17 +937,17 @@ export default function AdminDocumentsPage() {
                   <button
                     type="button"
                     onClick={() => handleOpenCreate('ONLINE_EDITOR')}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-sm cursor-pointer"
                   >
                     <FileEdit className="w-4 h-4" />
-                    Soạn văn bản mới
+                    Soạn thảo trực tuyến
                   </button>
                   <button
                     type="button"
                     onClick={() => handleOpenCreate('FILE_UPLOAD')}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-pill bg-primary-700 hover:bg-primary-800 text-white text-sm font-semibold cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Upload className="w-4 h-4" />
                     Tải tệp lên
                   </button>
                 </div>
