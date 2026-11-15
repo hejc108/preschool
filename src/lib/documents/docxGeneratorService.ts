@@ -153,7 +153,7 @@ function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
           new TextRun({
             text: 'Nội dung văn bản đang được soạn thảo.',
             font: DEFAULT_FONT,
-            size: SIZE_13PT,
+            size: SIZE_14PT,
             italics: true,
           }),
         ],
@@ -171,7 +171,7 @@ function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
         elements.push(
           new Paragraph({
             spacing: { after: 120, line: 276 },
-            children: [new TextRun({ text: txt, font: DEFAULT_FONT, size: SIZE_13PT })],
+            children: [new TextRun({ text: txt, font: DEFAULT_FONT, size: SIZE_14PT })],
           })
         );
       }
@@ -184,11 +184,16 @@ function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
     const alignment = parseAlignment(styleAttr);
 
     if (tag === 'p' || tag === 'div') {
-      const runs = extractRunsFromHtmlNode(node, { size: SIZE_13PT });
+      const runs = extractRunsFromHtmlNode(node, { size: SIZE_14PT });
+      // Chuẩn Nghị định 30: thụt đầu dòng 1.27cm (720 twips) nếu không phải căn giữa hoặc căn phải
+      const shouldIndent =
+        alignment !== AlignmentType.CENTER && alignment !== AlignmentType.RIGHT;
+
       elements.push(
         new Paragraph({
           alignment,
           spacing: { after: 120, line: 276 },
+          indent: shouldIndent ? { firstLine: 720 } : undefined,
           children: runs.length > 0 ? runs : [new TextRun({ text: '', font: DEFAULT_FONT })],
         })
       );
@@ -207,7 +212,7 @@ function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
       let itemIdx = 1;
       for (const li of node.childNodes) {
         if (li.nodeType === 1 && (li as any).tagName?.toLowerCase() === 'li') {
-          const runs = extractRunsFromHtmlNode(li, { size: SIZE_13PT });
+          const runs = extractRunsFromHtmlNode(li, { size: SIZE_14PT });
           elements.push(
             new Paragraph({
               spacing: { after: 80, line: 276 },
@@ -218,7 +223,7 @@ function convertHtmlToDocxElements(html: string): (Paragraph | Table)[] {
                       text: `${itemIdx++}. `,
                       bold: true,
                       font: DEFAULT_FONT,
-                      size: SIZE_13PT,
+                      size: SIZE_14PT,
                     }),
                     ...runs,
                   ]
@@ -596,7 +601,7 @@ export async function generateDocumentDocxBuffer(params: DocumentDocxParams): Pr
         document: {
           run: {
             font: DEFAULT_FONT,
-            size: SIZE_13PT,
+            size: SIZE_14PT,
           },
           paragraph: {
             spacing: {

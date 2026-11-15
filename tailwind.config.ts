@@ -61,7 +61,10 @@ const config: Config = {
       borderRadius: {
         'convent': '1rem',
         'pill': '9999px',
-      }
+      },
+      fontFamily: {
+        serif: ['"Times New Roman"', 'Tinos', 'Times', 'serif'],
+      },
     },
   },
   plugins: [],

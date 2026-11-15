@@ -701,10 +701,10 @@ export function DocumentFormModal({
           </div>
         </div>
 
-        {/* 2. Main Workspace chia 2 cột (flex-1 overflow-hidden flex) */}
-        <div className="flex-1 overflow-hidden flex">
-          {/* Cột trái (70% - flex-1): Vùng soạn thảo trang A4 */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100">
+        {/* 2. Main Workspace chia 2 cột (w-full flex-1 flex flex-row overflow-hidden) */}
+        <div className="flex-1 w-full flex flex-row overflow-hidden">
+          {/* Cột trái (flex: 1, min-width: 0): Vùng soạn thảo trang A4 */}
+          <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-slate-100">
             {extractingDocx && (
               <div className="p-2.5 bg-blue-50 border-b border-blue-200 text-blue-800 flex items-center justify-center gap-2 text-xs font-semibold animate-pulse shrink-0">
                 <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
@@ -724,7 +724,7 @@ export function DocumentFormModal({
               </div>
             )}
 
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
               <DocumentRichTextEditor
                 content={editorContentHtml}
                 onChange={setEditorContentHtml}
@@ -736,8 +736,8 @@ export function DocumentFormModal({
             </div>
           </div>
 
-          {/* Cột phải (30% - w-[360px]): Cài đặt & Thuộc tính văn bản */}
-          <div className="w-[360px] bg-white border-l border-slate-200 overflow-y-auto p-5 shrink-0 flex flex-col space-y-4 text-xs shadow-xs">
+          {/* Cột phải: Cài đặt & Thuộc tính văn bản (Cố định width: 320px, flex-shrink: 0, không bị bóp méo hay cắt ngang) */}
+          <div className="w-[320px] shrink-0 bg-white border-l border-slate-200 overflow-y-auto p-4 sm:p-5 flex flex-col space-y-4 text-xs shadow-xs z-10">
             <div className="border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900 text-sm">Thuộc tính văn bản</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">

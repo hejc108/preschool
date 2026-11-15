@@ -336,29 +336,48 @@ export function DocumentRichTextEditor({
     <div
       className={`w-full ${
         layoutMode === 'fullscreen'
-          ? 'max-w-[820px] min-h-[1050px] bg-white border border-slate-300 shadow-sm rounded-sm p-10 md:p-14 space-y-6 font-serif my-4'
-          : 'max-w-[760px] bg-white border border-slate-300 rounded-xl shadow-md p-8 md:p-12 space-y-6 font-serif'
+          ? 'w-[210mm] max-w-full bg-white border border-slate-300 shadow-md flex flex-col space-y-6 my-6 mx-auto transition-all'
+          : 'max-w-[760px] bg-white border border-slate-300 rounded-xl shadow-md p-8 md:p-12 space-y-6'
       }`}
+      style={
+        layoutMode === 'fullscreen'
+          ? {
+              width: '210mm',
+              minHeight: '297mm',
+              height: 'auto',
+              padding: '20mm 20mm 20mm 30mm',
+              boxSizing: 'border-box',
+              fontFamily: '"Times New Roman", "Tinos", Times, serif',
+            }
+          : {
+              minHeight: '297mm',
+              height: 'auto',
+              fontFamily: '"Times New Roman", "Tinos", Times, serif',
+            }
+      }
     >
       {/* Header Quốc hiệu - Tiêu ngữ & Đơn vị ban hành (chỉ hiện khi CHƯA có header sẵn trong nội dung trích xuất) */}
       {!hasEmbeddedHeader && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-dashed border-slate-300 text-xs text-slate-800 leading-normal">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-dashed border-slate-300 leading-normal select-none"
+          style={{ fontFamily: '"Times New Roman", "Tinos", Times, serif' }}
+        >
           {/* Cột trái: Đơn vị */}
           <div className="text-center sm:text-center space-y-0.5">
-            <p className="uppercase tracking-wide font-normal">PHÒNG GIÁO DỤC VÀ ĐÀO TẠO</p>
-            <p className="uppercase font-bold tracking-wide">TRƯỜNG MẦM NON SƯƠNG MAI</p>
+            <p className="uppercase tracking-wide font-normal" style={{ fontSize: '13pt', margin: 0, lineHeight: 1.3 }}>PHÒNG GIÁO DỤC VÀ ĐÀO TẠO</p>
+            <p className="uppercase font-bold tracking-wide" style={{ fontSize: '13pt', margin: 0, lineHeight: 1.3 }}>TRƯỜNG MẦM NON SƯƠNG MAI</p>
             <div className="w-16 h-0.5 bg-slate-700 mx-auto my-1" />
-            <p className="font-sans font-semibold text-slate-700 text-[11px] pt-0.5">
+            <p className="font-semibold text-slate-700 text-xs pt-0.5" style={{ margin: 0 }}>
               {documentNumber ? `Số: ${documentNumber}` : 'Số: .../2026/CV-MNSM'}
             </p>
           </div>
 
           {/* Cột phải: Quốc hiệu */}
           <div className="text-center sm:text-center space-y-0.5">
-            <p className="uppercase font-bold tracking-wide">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
-            <p className="font-bold">Độc lập - Tự do - Hạnh phúc</p>
+            <p className="uppercase font-bold tracking-wide" style={{ fontSize: '12pt', margin: 0, lineHeight: 1.3 }}>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+            <p className="font-bold" style={{ fontSize: '13pt', margin: 0, lineHeight: 1.3 }}>Độc lập - Tự do - Hạnh phúc</p>
             <div className="w-24 h-0.5 bg-slate-700 mx-auto my-1" />
-            <p className="italic text-slate-600 text-[11px] pt-0.5">
+            <p className="italic text-slate-600 text-xs pt-0.5" style={{ margin: 0 }}>
               {dateLabel || 'Hà Nội, ngày ... tháng ... năm 2026'}
             </p>
           </div>
@@ -366,28 +385,31 @@ export function DocumentRichTextEditor({
       )}
 
       {/* Vùng soạn thảo chính của Tiptap */}
-      <div className={`prose prose-slate max-w-none prose-p:my-2 prose-headings:my-3 ${layoutMode === 'fullscreen' ? 'min-h-[600px]' : ''}`}>
+      <div className="w-full flex-1 admin-document-content">
         <EditorContent editor={editor} />
       </div>
 
       {/* Footer chữ ký Hiệu trưởng & Nơi nhận (chỉ hiện khi CHƯA có footer sẵn trong nội dung trích xuất) */}
       {!hasEmbeddedFooter && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-dashed border-slate-300 text-xs text-slate-800">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-dashed border-slate-300 select-none"
+          style={{ fontFamily: '"Times New Roman", "Tinos", Times, serif' }}
+        >
           {/* Cột trái: Nơi nhận */}
           <div className="text-left space-y-1">
-            <p className="font-bold italic">Nơi nhận:</p>
-            <p className="text-[11px] leading-tight">- Như trên;</p>
-            <p className="text-[11px] leading-tight">- Phòng GD&ĐT (để b/c);</p>
-            <p className="text-[11px] leading-tight">- Lưu: VT, BGH.</p>
+            <p className="font-bold italic text-xs" style={{ fontSize: '12pt', margin: 0 }}>Nơi nhận:</p>
+            <p className="text-xs leading-tight" style={{ margin: '2pt 0' }}>- Như trên;</p>
+            <p className="text-xs leading-tight" style={{ margin: '2pt 0' }}>- Phòng GD&ĐT (để b/c);</p>
+            <p className="text-xs leading-tight" style={{ margin: '2pt 0' }}>- Lưu: VT, BGH.</p>
           </div>
 
           {/* Cột phải: Hiệu trưởng */}
           <div className="text-center space-y-1">
-            <p className="uppercase font-bold tracking-wider">HIỆU TRƯỞNG</p>
-            <div className="h-16 flex items-center justify-center text-slate-400 italic text-[11px]">
+            <p className="uppercase font-bold tracking-wider" style={{ fontSize: '13pt', margin: 0 }}>HIỆU TRƯỞNG</p>
+            <div className="h-16 flex items-center justify-center text-slate-400 italic text-xs">
               (Khoảng trống ký tên & đóng dấu)
             </div>
-            <p className="font-semibold text-slate-700 text-xs">TRƯỜNG MẦM NON SƯƠNG MAI</p>
+            <p className="font-semibold text-slate-700 text-xs" style={{ margin: 0 }}>TRƯỜNG MẦM NON SƯƠNG MAI</p>
           </div>
         </div>
       )}
@@ -398,7 +420,7 @@ export function DocumentRichTextEditor({
     <div
       className={
         layoutMode === 'fullscreen'
-          ? 'h-full flex flex-col overflow-hidden bg-slate-100'
+          ? 'h-full flex flex-col overflow-hidden bg-slate-100 min-w-0 flex-1'
           : 'border border-slate-300 rounded-2xl overflow-hidden bg-white shadow-sm flex flex-col'
       }
     >
@@ -409,7 +431,7 @@ export function DocumentRichTextEditor({
       <div
         className={
           layoutMode === 'fullscreen'
-            ? 'flex-1 overflow-y-auto p-6 md:p-8 flex justify-center bg-slate-100'
+            ? 'flex-1 min-w-0 overflow-x-auto overflow-y-auto p-4 md:p-8 flex justify-center items-start bg-slate-200/70'
             : 'p-6 md:p-8 bg-slate-100/50 flex justify-center'
         }
       >
@@ -417,28 +439,104 @@ export function DocumentRichTextEditor({
       </div>
 
       <style jsx global>{`
-        .tiptap table {
+        /* Chuẩn hóa định dạng Nghị định 30/2020/NĐ-CP & Google Font Tinos */
+        .tiptap.ProseMirror {
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          font-size: 14pt !important;
+          line-height: 1.45 !important;
+          color: #000000 !important;
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          min-height: 200mm;
+          height: auto;
+          outline: none;
+        }
+
+        .tiptap.ProseMirror p {
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          font-size: 14pt !important;
+          line-height: 1.45 !important;
+          color: #000000 !important;
+          margin-top: 0;
+          margin-bottom: 6pt;
+          text-indent: 1.27cm;
+          text-align: justify;
+        }
+
+        /* Miễn thụt đầu dòng đối với các thành phần đặc thù chuẩn hành chính */
+        .tiptap.ProseMirror p[style*="text-align: center"],
+        .tiptap.ProseMirror p[style*="text-align:center"],
+        .tiptap.ProseMirror p[style*="text-align: right"],
+        .tiptap.ProseMirror p[style*="text-align:right"],
+        .tiptap.ProseMirror table p,
+        .tiptap.ProseMirror table td,
+        .tiptap.ProseMirror table th,
+        .tiptap.ProseMirror ul p,
+        .tiptap.ProseMirror ol p,
+        .tiptap.ProseMirror li,
+        .tiptap.ProseMirror li p,
+        .tiptap.ProseMirror .no-indent {
+          text-indent: 0 !important;
+        }
+
+        .tiptap.ProseMirror h1,
+        .tiptap.ProseMirror h2,
+        .tiptap.ProseMirror h3,
+        .tiptap.ProseMirror h4 {
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          color: #000000 !important;
+          text-indent: 0 !important;
+          margin-top: 10pt;
+          margin-bottom: 6pt;
+          line-height: 1.3 !important;
+        }
+
+        .tiptap.ProseMirror h1 {
+          font-size: 16pt !important;
+          font-weight: bold;
+          text-align: center;
+        }
+
+        .tiptap.ProseMirror h2 {
+          font-size: 15pt !important;
+          font-weight: bold;
+        }
+
+        .tiptap.ProseMirror h3 {
+          font-size: 14pt !important;
+          font-weight: bold;
+        }
+
+        .tiptap.ProseMirror table {
           border-collapse: collapse;
           table-layout: fixed;
           width: 100%;
-          margin: 12px 0;
+          margin: 10pt 0;
           overflow: hidden;
         }
-        .tiptap table td,
-        .tiptap table th {
+
+        .tiptap.ProseMirror table td,
+        .tiptap.ProseMirror table th {
           min-width: 1em;
-          border: 1px solid #cbd5e1;
-          padding: 6px 8px;
+          border: 1px solid #000000;
+          padding: 6pt 8pt;
           vertical-align: top;
           box-sizing: border-box;
           position: relative;
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          font-size: 13pt !important;
+          line-height: 1.3 !important;
+          color: #000000 !important;
         }
-        .tiptap table th {
+
+        .tiptap.ProseMirror table th {
           font-weight: bold;
           text-align: center;
           background-color: #f8fafc;
         }
-        .tiptap .selectedCell:after {
+
+        .tiptap.ProseMirror .selectedCell:after {
           z-index: 2;
           position: absolute;
           content: '';
@@ -449,18 +547,27 @@ export function DocumentRichTextEditor({
           background: rgba(200, 200, 255, 0.4);
           pointer-events: none;
         }
-        .tiptap ul {
+
+        .tiptap.ProseMirror ul {
           list-style-type: disc;
           padding-left: 1.5rem;
           margin: 0.5rem 0;
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          font-size: 14pt !important;
+          color: #000000 !important;
         }
-        .tiptap ol {
+
+        .tiptap.ProseMirror ol {
           list-style-type: decimal;
           padding-left: 1.5rem;
           margin: 0.5rem 0;
+          font-family: "Times New Roman", "Tinos", Times, serif !important;
+          font-size: 14pt !important;
+          color: #000000 !important;
         }
-        .tiptap p {
-          margin: 0.35rem 0;
+
+        .tiptap.ProseMirror li {
+          margin-bottom: 4pt;
         }
       `}</style>
     </div>

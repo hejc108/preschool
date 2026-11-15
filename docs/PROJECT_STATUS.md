@@ -326,6 +326,25 @@ Theo chỉ đạo từ PO & UI/UX nhằm tối ưu hóa tầm nhìn và chống 
 
 ---
 
+### 3.12. CR-08: Sửa Lỗi Nhảy Dấu Tiếng Việt, Chuẩn Hóa Typography Nghị Định 30 & Khắc Phục Layout Trang Soạn Thảo
+
+Theo yêu cầu chuẩn hóa thể thức văn bản hành chính và giao diện biên tập:
+1. **Khắc phục triệt để lỗi nhảy dấu tiếng Việt (Font chữ):**
+   - Nhúng Google Font `Tinos` (hỗ trợ đầy đủ subset `vietnamese`, `latin`) vào hệ thống qua `<link>` trong `src/app/layout.tsx`.
+   - Cấu hình chuỗi ưu tiên font-family cho vùng soạn thảo: `"Times New Roman", "Tinos", Times, serif`. Trên Windows dùng Times New Roman gốc, trên macOS/Linux/Mobile fallback sang Tinos chuẩn dấu tiếng Việt, triệt tiêu hoàn toàn hiện tượng lệch dấu.
+2. **Chuẩn hóa định dạng Nghị định 30/2020/NĐ-CP:**
+   - Cỡ chữ nội dung mặc định: `14pt` (`font-size: 14pt`).
+   - Giãn dòng: `1.45` (`line-height: 1.45`).
+   - Khoảng cách đoạn văn: `margin-bottom: 6pt`, lùi đầu dòng chuẩn hành chính `text-indent: 1.27cm` (ngoại trừ các đoạn căn giữa, căn phải, tiêu đề và bảng biểu).
+   - Màu chữ đen tuyền `#000000`, bật `text-rendering: optimizeLegibility` và `-webkit-font-smoothing: antialiased`.
+   - Đồng bộ font `Times New Roman`, cỡ chữ `14pt` và khoảng lùi đầu dòng `720 twips` (1.27cm) vào tệp Word xuất ra (`docxGeneratorService`).
+3. **Khắc phục lỗi tràn trang giấy A4:**
+   - Đặt kích thước container trang giấy `.a4-page-container` thành `min-height: 297mm; height: auto; width: 210mm`, padding chuẩn Nghị định 30 (`20mm 20mm 20mm 30mm`). Khi văn bản dài, khung trang giấy trắng tự động giãn nở liền mạch theo nội dung, chấm dứt hiện tượng chữ tràn ra nền xám.
+4. **Khắc phục lỗi cắt Sidebar trên màn hình laptop/desktop:**
+   - Cấu trúc lại bố cục Flexbox: vùng soạn thảo đặt `flex: 1; min-width: 0; overflow-x: auto; overflow-y: auto;` cuộn độc lập khi thu hẹp; cột Sidebar thuộc tính cố định `width: 320px; flex-shrink: 0; overflow-y: auto;` luôn hiển thị trọn vẹn và không bao giờ bị cắt ngang.
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
