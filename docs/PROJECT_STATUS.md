@@ -345,6 +345,21 @@ Theo yêu cầu chuẩn hóa thể thức văn bản hành chính và giao diệ
 
 ---
 
+### 3.13. FR-02: Quản Lý & Tạo Thông Báo Đa Phương Tiện (Multimedia Announcement Studio)
+
+Triển khai toàn diện phân hệ Thông báo Đa phương tiện theo file mẫu chuẩn hóa `FR02_ThongBao_Studio_Antigravity_Final.html`:
+1. **Chuyển đổi kiến trúc Next.js 14 App Router, TypeScript & Tailwind CSS:**
+   - **View 1: Danh sách thông báo (`/admin/announcements`)**: Bảng 5 cột chuẩn 1280px (`TIÊU ĐỀ`, `PHÂN LOẠI`, `TRẠNG THÁI`, `ĐÃ ĐỌC`, `THAO TÁC`), bộ lọc theo trạng thái (`Tất cả`, `Đã phát hành`, `Chờ duyệt`, `Bản nháp`), tìm kiếm theo từ khóa, modal thống kê Read-Receipt theo thời gian thực và nút Nhân bản kỳ mới.
+   - **View 2: Studio Thiết kế 2 cột (Full-Screen Studio)**:
+     - Cột trái (60%): Bật/Tắt ảnh nền Poster, thư viện 11 chủ đề nền mầm non sắc nét (kèm tải ảnh riêng & modal AI Gemini), nội dung cốt lõi (tiêu đề, phạm vi, lời ngỏ), tùy biến linh hoạt 5 khối thẻ thông tin động (Thời gian, Địa điểm, Bảng chi tiết khoản thu/thực đơn, Hạn chót/Liên hệ, Con dấu đỏ Hiệu trưởng), thiết lập giọng đọc AI Tiếng Việt và nhạc nền bản quyền.
+     - Cột phải (40%): Live Preview Poster giữ chuẩn 100% tỷ lệ thẩm mỹ 6 tầng (Header trường SM, Ruy băng tiêu đề căn giữa cân đối tuyệt đối không xoay lệch, các thẻ thông tin động bo góc thanh lịch, lời ngỏ sư phạm, phạm vi nhận và dấu đỏ Hiệu trưởng Vũ Thị Xuân). Tích hợp nút xuất ảnh Poster độ phân giải cao (.PNG) trực tiếp bằng `html-to-image`.
+   - **View 3: Góc nhìn Phụ huynh Mobile PWA (375px)**: Khung điện thoại 375px hiển thị trung thực giao diện phụ huynh, hỗ trợ chuyển đổi mượt mà giữa tab "Xem Poster" và "Văn bản gốc", tích hợp trình phát Audio AI của nhà trường.
+2. **Cơ sở dữ liệu & API:**
+   - Migration `00021_announcements_multimedia_fr02.sql`: Bổ sung các cột `category`, `status`, `metadata`, `updated_at`, cùng các chính sách Layer-2 RLS UPDATE và DELETE cho quản trị viên.
+   - Tối ưu hóa API `/api/announcements`: Hỗ trợ đầy đủ phương thức GET, POST, PUT, PATCH, DELETE; tự động liên kết số liệu đã đọc (`read_count`) và điều phối thông báo đẩy qua Web Push khi phát hành.
+
+---
+
 ## 4. DANH MỤC MIGRATIONS CƠ SỞ DỮ LIỆU
 
 Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
@@ -359,6 +374,7 @@ Thứ tự áp dụng trên Supabase SQL Editor (`supabase/migrations/`):
 9. `00018_document_audit_auto_expire.sql`: Cho phép audit action `AUTO_EXPIRE` & index quét cron hết hạn.
 10. `00019_document_rich_text_editor.sql`: Mở rộng `creation_mode`, `editor_content_html`, `editor_template_code`, `generated_docx_path` hỗ trợ Web Rich Text Editor & xuất Word chuẩn Nghị định 30.
 11. `00020_document_clone_and_audit_actions.sql`: Mở rộng CHECK constraint `document_audit_logs_action_check` cho phép 2 hành động `CLONE_DOCUMENT` và `EDIT_WHILE_SUBMITTED`.
+12. `00021_announcements_multimedia_fr02.sql`: Bổ sung `category`, `status`, `metadata`, `updated_at` và RLS policies cho thông báo đa phương tiện FR-02.
 
 ---
 

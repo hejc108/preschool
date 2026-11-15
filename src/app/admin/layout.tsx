@@ -81,6 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: t('admin.sidebar.admissions'), href: '/admin/admissions', icon: UserPlus },
     { label: t('admin.sidebar.children_parents'), href: '/admin/students', icon: Users },
     { label: 'Quản lý tài liệu', href: '/admin/documents', icon: FileText },
+    { label: 'Quản lý thông báo', href: '/admin/announcements', icon: Bell, badge: 'FR-02' },
     { label: 'Mã QR', href: '/admin/qr-codes', icon: QrCode, badge: 'Standee' },
   ];
 
