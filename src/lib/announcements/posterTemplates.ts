@@ -41,7 +41,10 @@ export interface AnnouncementMetadata {
     row2_amt?: string;
   };
   voice?: string;
+  voice_type?: string;
   music?: string;
+  background_music?: string;
+  audio_url?: string | null;
   audio_synced?: boolean;
   has_poster?: boolean;
   has_audio?: boolean;
@@ -68,6 +71,9 @@ export interface AnnouncementItem {
   total_target_count?: number;
   is_urgent?: boolean;
   requires_acknowledgement?: boolean;
+  audio_url?: string | null;
+  voice_type?: string;
+  background_music?: string;
 }
 
 export const EMBEDDED_BACKGROUNDS: Record<string, string> = {

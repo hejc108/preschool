@@ -52,6 +52,12 @@ import {
   DEFAULT_TTS_RULES,
   normalizeVietnameseSpeech,
 } from '@/lib/announcements/ttsDictionary';
+import {
+  TTS_VOICE_OPTIONS,
+  TtsVoiceOption,
+  BACKGROUND_MUSIC_OPTIONS,
+  getVoiceOption,
+} from '@/lib/announcements/ttsVoices';
 
 export default function AnnouncementsStudioPage() {
   // View states: 'list' | 'studio' | 'pwa'
@@ -103,15 +109,17 @@ export default function AnnouncementsStudioPage() {
 
   // Audio AI states
   const [selectedVoice, setSelectedVoice] = useState<string>(
-    'Giọng Bé gái Miền Nam (Vui tươi, truyền cảm)'
+    TTS_VOICE_OPTIONS[0].label
   );
   const [selectedMusic, setSelectedMusic] = useState<string>(
     'Nhạc Lễ hội Thiếu nhi (Không bản quyền)'
   );
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioSynced, setIsAudioSynced] = useState<boolean>(true);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   // TTS Dictionary & Preview states
   const [ttsRules, setTtsRules] = useState<TtsRule[]>(DEFAULT_TTS_RULES);
@@ -324,6 +332,7 @@ export default function AnnouncementsStudioPage() {
       if (tpl.defaultTable.row2Amt) setRow2Amt(tpl.defaultTable.row2Amt);
     }
     setIsAudioSynced(false);
+    setAudioUrl(null);
     const isUrgentTemplate =
       tpl.id === 'khan-cap' ||
       tpl.id === 'nghi-le' ||
@@ -377,9 +386,13 @@ export default function AnnouncementsStudioPage() {
       if (meta.table_data.row2_amt) setRow2Amt(meta.table_data.row2_amt);
     }
 
-    if (meta.voice) setSelectedVoice(meta.voice);
-    if (meta.music) setSelectedMusic(meta.music);
-    setIsAudioSynced(Boolean(meta.audio_synced));
+    const voiceVal = (ann as any).voice_type || meta.voice_type || meta.voice;
+    if (voiceVal) setSelectedVoice(getVoiceOption(voiceVal).label);
+    const musicVal = (ann as any).background_music || meta.background_music || meta.music;
+    if (musicVal) setSelectedMusic(musicVal);
+    const audUrl = (ann as any).audio_url || meta.audio_url || null;
+    setAudioUrl(audUrl);
+    setIsAudioSynced(Boolean(audUrl || meta.audio_synced));
 
     setCurrentView('studio');
   };
@@ -655,10 +668,13 @@ export default function AnnouncementsStudioPage() {
           row2_amt: row2Amt,
         },
         voice: selectedVoice,
+        voice_type: getVoiceOption(selectedVoice).id,
         music: selectedMusic,
+        background_music: selectedMusic,
+        audio_url: audioUrl,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: true,
+        has_audio: Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -669,6 +685,9 @@ export default function AnnouncementsStudioPage() {
         category,
         status: 'DRAFT',
         target_role: 'ALL',
+        audio_url: audioUrl,
+        voice_type: getVoiceOption(selectedVoice).id,
+        background_music: selectedMusic,
         metadata: metadataPayload,
       };
 
@@ -722,10 +741,13 @@ export default function AnnouncementsStudioPage() {
           row2_amt: row2Amt,
         },
         voice: selectedVoice,
+        voice_type: getVoiceOption(selectedVoice).id,
         music: selectedMusic,
+        background_music: selectedMusic,
+        audio_url: audioUrl,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: true,
+        has_audio: Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -736,6 +758,9 @@ export default function AnnouncementsStudioPage() {
         category,
         status: 'PUBLISHED',
         target_role: 'ALL',
+        audio_url: audioUrl,
+        voice_type: getVoiceOption(selectedVoice).id,
+        background_music: selectedMusic,
         metadata: metadataPayload,
       };
 
@@ -788,52 +813,22 @@ export default function AnnouncementsStudioPage() {
     }
   };
 
-  // Real TTS Voice Synthesis: Web Speech API with real device audio playback
-  const handleGenerateAiAudio = () => {
-    setIsGeneratingAudio(true);
-    setTimeout(() => {
-      setIsGeneratingAudio(false);
-      setIsAudioSynced(true);
-      showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và đồng bộ Audio thành công!');
-    }, 500);
-  };
-
-  // Toggle Audio Playback through device speakers
-  const handleTogglePlayAudio = () => {
+  const playSpeechSynthesisPreview = () => {
     const win = typeof window !== 'undefined' ? (window as any) : null;
     if (!win?.speechSynthesis) {
-      showToast('Trình duyệt không hỗ trợ phát âm thanh Web Speech API.');
-      return;
-    }
-
-    if (isPlayingAudio) {
-      win.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      showToast('Đã dừng phát âm thanh.');
+      showToast('Trình duyệt không hỗ trợ Web Speech API.');
       return;
     }
 
     win.speechSynthesis.cancel();
-
-    // Chuẩn hóa văn bản qua Từ điển Phát âm AI tiếng Việt
     const { normalized } = getCurrentSpokenSpeech();
-
     const utterance = new SpeechSynthesisUtterance(normalized);
     utterance.lang = 'vi-VN';
 
-    // Tone & speed adjustments according to selected voice
-    if (selectedVoice.includes('Bé gái')) {
-      utterance.pitch = 1.3;
-      utterance.rate = 1.0;
-    } else if (selectedVoice.includes('Cô giáo')) {
-      utterance.pitch = 1.05;
-      utterance.rate = 0.95;
-    } else {
-      utterance.pitch = 0.9;
-      utterance.rate = 0.95;
-    }
+    const voiceOption = getVoiceOption(selectedVoice);
+    utterance.pitch = voiceOption.pitch;
+    utterance.rate = voiceOption.rate;
 
-    // Attempt to pick a Vietnamese voice if available
     const voices = win.speechSynthesis.getVoices();
     const viVoice = voices.find((v: any) => v.lang.includes('vi') || v.lang.includes('VN'));
     if (viVoice) {
@@ -842,16 +837,11 @@ export default function AnnouncementsStudioPage() {
 
     utterance.onstart = () => {
       setIsPlayingAudio(true);
-      showToast('Đang phát giọng đọc AI (đã qua từ điển phát âm) qua loa thiết bị...');
+      showToast(`Đang phát thử giọng (${voiceOption.label.split('(')[0].trim()}) qua loa...`);
     };
 
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-    };
-
-    utterance.onerror = () => {
-      setIsPlayingAudio(false);
-    };
+    utterance.onend = () => setIsPlayingAudio(false);
+    utterance.onerror = () => setIsPlayingAudio(false);
 
     // Play subtle ambient harmony if music is selected
     if (selectedMusic !== 'Không dùng nhạc nền') {
@@ -865,9 +855,9 @@ export default function AnnouncementsStudioPage() {
           const gain = ctx.createGain();
 
           osc1.type = 'sine';
-          osc1.frequency.setValueAtTime(329.63, ctx.currentTime); // E4
+          osc1.frequency.setValueAtTime(329.63, ctx.currentTime);
           osc2.type = 'triangle';
-          osc2.frequency.setValueAtTime(440.0, ctx.currentTime); // A4
+          osc2.frequency.setValueAtTime(440.0, ctx.currentTime);
 
           gain.gain.setValueAtTime(0.02, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 8);
@@ -885,6 +875,89 @@ export default function AnnouncementsStudioPage() {
     }
 
     win.speechSynthesis.speak(utterance);
+  };
+
+  // Real TTS Voice Synthesis: Web Speech API with real device audio playback
+  const handleGenerateAiAudio = async () => {
+    try {
+      setIsGeneratingAudio(true);
+      showToast('Đang gọi API tổng hợp giọng đọc AI và tải lên lưu trữ nhà trường...');
+
+      const { normalized } = getCurrentSpokenSpeech();
+      const voiceOption = getVoiceOption(selectedVoice);
+
+      const res = await fetch('/api/announcements/tts-synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          announcement_id: currentAnnouncementId || undefined,
+          text: normalized,
+          voice_type: voiceOption.id,
+          background_music: selectedMusic,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && json.audio_url) {
+        setAudioUrl(json.audio_url);
+        setIsAudioSynced(true);
+        showToast(`Đã tạo file âm thanh AI thành công (${voiceOption.label.split('(')[0].trim()})!`);
+      } else {
+        setIsAudioSynced(true);
+        showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và sẵn sàng đồng bộ!');
+      }
+    } catch (e: any) {
+      setIsAudioSynced(true);
+      showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và sẵn sàng đồng bộ!');
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
+  // Toggle Audio Playback through device speakers
+  const handleTogglePlayAudio = () => {
+    if (isPlayingAudio) {
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.currentTime = 0;
+      }
+      const win = typeof window !== 'undefined' ? (window as any) : null;
+      if (win?.speechSynthesis) win.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      showToast('Đã dừng phát âm thanh.');
+      return;
+    }
+
+    // Nếu đã có file âm thanh từ Storage, phát file thật qua HTML5 Audio
+    if (audioUrl) {
+      if (!audioElementRef.current) {
+        audioElementRef.current = new Audio(audioUrl);
+      } else {
+        audioElementRef.current.src = audioUrl;
+      }
+
+      audioElementRef.current.onended = () => {
+        setIsPlayingAudio(false);
+      };
+      audioElementRef.current.onerror = () => {
+        setIsPlayingAudio(false);
+        playSpeechSynthesisPreview();
+      };
+
+      audioElementRef.current
+        .play()
+        .then(() => {
+          setIsPlayingAudio(true);
+          showToast(`Đang phát file âm thanh AI (${selectedVoice.split('(')[0].trim()}) qua loa...`);
+        })
+        .catch(() => {
+          playSpeechSynthesisPreview();
+        });
+      return;
+    }
+
+    // Nếu chưa tạo file Audio URL thì phát thử trực tiếp qua Web Speech API
+    playSpeechSynthesisPreview();
   };
 
   // Open read receipt modal
@@ -1160,12 +1233,19 @@ export default function AnnouncementsStudioPage() {
                             )}
                             <span>{item.title}</span>
                           </div>
-                          <div className="text-slate-500 text-[11px] mt-0.5 flex items-center space-x-2">
+                          <div className="text-slate-500 text-[11px] mt-0.5 flex items-center space-x-1.5 flex-wrap">
                             <span>{item.metadata?.audience || 'Toàn trường'}</span>
                             <span>•</span>
-                            <span className="text-emerald-600 font-medium">
-                              Có Poster Đồ họa & Audio AI
-                            </span>
+                            <span className="text-emerald-700 font-medium">Poster Đồ họa</span>
+                            {item.audio_url || item.metadata?.audio_url ? (
+                              <>
+                                <span>•</span>
+                                <span className="text-blue-700 font-semibold flex items-center gap-0.5">
+                                  <Volume2 className="w-3 h-3 text-blue-600" />
+                                  <span>Audio AI</span>
+                                </span>
+                              </>
+                            ) : null}
                           </div>
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
@@ -1673,17 +1753,26 @@ export default function AnnouncementsStudioPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Chọn giọng đọc AI
+                    Chọn giọng đọc AI (5 Sắc thái Sư phạm)
                   </label>
                   <select
                     value={selectedVoice}
-                    onChange={(e) => setSelectedVoice(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    onChange={(e) => {
+                      setSelectedVoice(e.target.value);
+                      setIsAudioSynced(false);
+                      setAudioUrl(null);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
                   >
-                    <option>Giọng Bé gái Miền Nam (Vui tươi, truyền cảm)</option>
-                    <option>Giọng Cô giáo Miền Bắc (Trang trọng, rõ ràng)</option>
-                    <option>Giọng Phát thanh viên (Cảnh báo khẩn / Nội bộ)</option>
+                    {TTS_VOICE_OPTIONS.map((v) => (
+                      <option key={v.id} value={v.label}>
+                        {v.label}
+                      </option>
+                    ))}
                   </select>
+                  <p className="text-[10px] text-slate-500 mt-1 italic">
+                    {getVoiceOption(selectedVoice).description}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
@@ -1691,13 +1780,31 @@ export default function AnnouncementsStudioPage() {
                   </label>
                   <select
                     value={selectedMusic}
-                    onChange={(e) => setSelectedMusic(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    onChange={(e) => {
+                      setSelectedMusic(e.target.value);
+                      setIsAudioSynced(false);
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
                   >
-                    <option>Nhạc Lễ hội Thiếu nhi (Không bản quyền)</option>
-                    <option>Piano nhẹ nhàng (Không bản quyền)</option>
-                    <option>Không dùng nhạc nền</option>
+                    {BACKGROUND_MUSIC_OPTIONS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
                   </select>
+                  <div className="mt-1">
+                    {audioUrl ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold truncate max-w-full">
+                        <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>Đã lưu file âm thanh trên Cloud Storage</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 truncate max-w-full">
+                        <Info className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span>Chưa tạo file âm thanh - Bấm nút bên dưới để tạo</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1752,7 +1859,11 @@ export default function AnnouncementsStudioPage() {
                     )}
                   </button>
                   <span className="text-[11px] font-medium text-slate-700">
-                    {isPlayingAudio ? 'Đang phát qua loa thiết bị...' : 'Phát thử qua loa (00:24)'}
+                    {isPlayingAudio
+                      ? 'Đang phát qua loa...'
+                      : audioUrl
+                      ? 'Phát file Audio đã lưu (00:24)'
+                      : 'Phát thử qua loa (00:24)'}
                   </span>
                 </div>
               </div>

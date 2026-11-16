@@ -146,17 +146,27 @@ export async function GET(request: Request) {
 
       // If full detail is requested (single item or ?full=true)
       if (isFullRequested || requestedId) {
+        const audioUrl = a.audio_url || rawMeta.audio_url || null;
+        const voiceType = a.voice_type || rawMeta.voice_type || rawMeta.voice || 'vn_north_female_teacher';
+        const bgMusic = a.background_music || rawMeta.background_music || rawMeta.music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
+
         return {
           ...a,
+          audio_url: audioUrl,
+          voice_type: voiceType,
+          background_music: bgMusic,
           category: a.category || rawMeta.category || 'Lễ hội',
           status: a.status || rawMeta.status || 'PUBLISHED',
           is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
           priority: Boolean(a.is_urgent || rawMeta.is_urgent) ? 'URGENT' : 'NORMAL',
           requires_acknowledgement: Boolean(a.requires_acknowledgement || rawMeta.requires_acknowledgement),
-          has_audio: Boolean(rawMeta.has_audio !== false),
+          has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
           has_poster: Boolean(rawMeta.has_poster !== false),
           metadata: {
             ...rawMeta,
+            audio_url: audioUrl,
+            voice_type: voiceType,
+            background_music: bgMusic,
             custom_bg_url: sanitizedBg,
           },
           is_read: Boolean(readAt),
@@ -167,6 +177,10 @@ export async function GET(request: Request) {
       }
 
       // Lightweight list payload: compact content snippet (< 160 chars) and minimal metadata
+      const audioUrl = a.audio_url || rawMeta.audio_url || null;
+      const voiceType = a.voice_type || rawMeta.voice_type || rawMeta.voice || 'vn_north_female_teacher';
+      const bgMusic = a.background_music || rawMeta.background_music || rawMeta.music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
+
       return {
         id: a.id,
         title: a.title,
@@ -181,11 +195,17 @@ export async function GET(request: Request) {
         is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
         priority: Boolean(a.is_urgent || rawMeta.is_urgent) ? 'URGENT' : 'NORMAL',
         requires_acknowledgement: Boolean(a.requires_acknowledgement || rawMeta.requires_acknowledgement),
-        has_audio: Boolean(rawMeta.has_audio !== false),
+        audio_url: audioUrl,
+        voice_type: voiceType,
+        background_music: bgMusic,
+        has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
         has_poster: Boolean(rawMeta.has_poster !== false),
         metadata: {
+          audio_url: audioUrl,
+          voice_type: voiceType,
+          background_music: bgMusic,
           is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
-          has_audio: Boolean(rawMeta.has_audio !== false),
+          has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
           has_poster: Boolean(rawMeta.has_poster !== false),
           audience: rawMeta.audience || 'Toàn trường',
           template_id: rawMeta.template_id || 'le-hoi',
@@ -275,6 +295,17 @@ export async function POST(request: Request) {
     const notificationChannel = targetRole === 'TEACHER' ? 'TEACHER' : 'PARENT';
     const createdBy = ctx.profileId.startsWith('bootstrap-') ? null : ctx.profileId;
 
+    const audioUrl = body.audio_url || metadata.audio_url || null;
+    const voiceType = body.voice_type || metadata.voice_type || metadata.voice || 'vn_north_female_teacher';
+    const backgroundMusic = body.background_music || metadata.background_music || metadata.music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
+
+    const mergedMetadata = {
+      ...metadata,
+      audio_url: audioUrl,
+      voice_type: voiceType,
+      background_music: backgroundMusic,
+    };
+
     const insertPayload: any = {
       title,
       content,
@@ -284,7 +315,10 @@ export async function POST(request: Request) {
       created_by: createdBy,
       category,
       status,
-      metadata,
+      metadata: mergedMetadata,
+      audio_url: audioUrl,
+      voice_type: voiceType,
+      background_music: backgroundMusic,
     };
 
     let { data, error } = await executeWithContextFallback(ctx, async (sb) =>
@@ -372,7 +406,18 @@ export async function PUT(request: Request) {
     if (body.category !== undefined) updatePayload.category = String(body.category).trim();
     if (body.status !== undefined) updatePayload.status = String(body.status).trim();
     if (body.target_role !== undefined) updatePayload.target_role = String(body.target_role).trim();
-    if (body.metadata !== undefined) updatePayload.metadata = body.metadata;
+    if (body.audio_url !== undefined) updatePayload.audio_url = body.audio_url;
+    if (body.voice_type !== undefined) updatePayload.voice_type = body.voice_type;
+    if (body.background_music !== undefined) updatePayload.background_music = body.background_music;
+
+    if (body.metadata !== undefined) {
+      updatePayload.metadata = {
+        ...(body.metadata || {}),
+        ...(body.audio_url !== undefined ? { audio_url: body.audio_url } : {}),
+        ...(body.voice_type !== undefined ? { voice_type: body.voice_type } : {}),
+        ...(body.background_music !== undefined ? { background_music: body.background_music } : {}),
+      };
+    }
     updatePayload.updated_at = new Date().toISOString();
 
     let { data, error } = await executeWithContextFallback(ctx, async (sb) =>

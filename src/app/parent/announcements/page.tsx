@@ -27,6 +27,7 @@ import {
 } from '@/lib/announcements/posterTemplates';
 import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
 import { normalizeVietnameseSpeech } from '@/lib/announcements/ttsDictionary';
+import { getVoiceOption } from '@/lib/announcements/ttsVoices';
 
 function ParentAnnouncementsSkeleton() {
   return (
@@ -81,6 +82,7 @@ function ParentAnnouncementsInner() {
   const [audioProgress, setAudioProgress] = useState<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   // Bottom action acknowledgment state
   const [acknowledgedMap, setAcknowledgedMap] = useState<Record<string, boolean>>({});
@@ -168,16 +170,25 @@ function ParentAnnouncementsInner() {
   // Current active announcement for detail view
   const currentAnnouncement = detailAnnouncement || (requestedId ? announcements.find((a) => a.id === requestedId) || null : null);
 
-  // Clean Speech synthesis on unmount or announcement switch
+  // Clean Audio playback on unmount or announcement switch
   useEffect(() => {
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+    }
     const win = typeof window !== 'undefined' ? (window as any) : null;
     if (win?.speechSynthesis) {
       win.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      setAudioProgress(0);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
     }
+    setIsPlayingAudio(false);
+    setAudioProgress(0);
+    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+
     return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
       const w = typeof window !== 'undefined' ? (window as any) : null;
       if (w?.speechSynthesis) {
         w.speechSynthesis.cancel();
@@ -218,70 +229,63 @@ function ParentAnnouncementsInner() {
     return () => clearTimeout(timer);
   }, [currentAnnouncement?.id, currentAnnouncement?.is_read]);
 
-  // Handle Web Speech Audio Playback
+  // Handle Real Audio Playback from Cloud Storage
   const handleTogglePlayAudio = () => {
-    const win = typeof window !== 'undefined' ? (window as any) : null;
-    if (!win || !win.speechSynthesis) {
-      showToast('Trình duyệt không hỗ trợ Web Speech API.');
+    if (!currentAnnouncement) return;
+    const meta = currentAnnouncement.metadata || {};
+    const audioUrl = (currentAnnouncement as any).audio_url || meta.audio_url;
+
+    if (!audioUrl) {
+      showToast('Thông báo này chưa có file âm thanh.');
       return;
+    }
+
+    if (!audioPlayerRef.current) {
+      const audio = new Audio(audioUrl);
+      audioPlayerRef.current = audio;
+
+      audio.ontimeupdate = () => {
+        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+          const pct = (audio.currentTime / audio.duration) * 100;
+          setAudioProgress(Math.min(100, Math.round(pct)));
+        }
+      };
+
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+        setAudioProgress(100);
+      };
+
+      audio.onerror = () => {
+        setIsPlayingAudio(false);
+        showToast('Không thể tải tệp âm thanh từ máy chủ.');
+      };
+    } else if (audioPlayerRef.current.src !== audioUrl) {
+      audioPlayerRef.current.src = audioUrl;
     }
 
     if (isPlayingAudio) {
-      win.speechSynthesis.cancel();
+      audioPlayerRef.current.pause();
       setIsPlayingAudio(false);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-      return;
+    } else {
+      audioPlayerRef.current
+        .play()
+        .then(() => setIsPlayingAudio(true))
+        .catch(() => {
+          setIsPlayingAudio(false);
+          showToast('Vui lòng chạm để cho phép trình duyệt phát âm thanh.');
+        });
     }
-
-    if (!currentAnnouncement) return;
-
-    win.speechSynthesis.cancel();
-
-    const meta = currentAnnouncement.metadata || {};
-    const rawSpoken = `${currentAnnouncement.title}. ${currentAnnouncement.content}. ${
-      meta.time_value ? `Thời gian: ${meta.time_value}.` : ''
-    } ${meta.location_value ? `Địa điểm: ${meta.location_value}.` : ''} ${
-      meta.deadline_value ? `Lưu ý: ${meta.deadline_value}.` : ''
-    } Trường Mầm non Sương Mai trân trọng thông báo đến Quý Phụ huynh.`;
-
-    const spokenText = normalizeVietnameseSpeech(rawSpoken);
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    utterance.lang = 'vi-VN';
-    utterance.pitch = 1.25;
-    utterance.rate = 1.0;
-
-    utterance.onstart = () => {
-      setIsPlayingAudio(true);
-      setAudioProgress(0);
-      audioIntervalRef.current = setInterval(() => {
-        setAudioProgress((prev) => (prev >= 100 ? 100 : prev + 4));
-      }, 500);
-    };
-
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-      setAudioProgress(100);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    };
-
-    utterance.onerror = () => {
-      setIsPlayingAudio(false);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    };
-
-    win.speechSynthesis.speak(utterance);
   };
 
   // Replay Audio
   const handleReplayAudio = () => {
-    const win = typeof window !== 'undefined' ? (window as any) : null;
-    if (win?.speechSynthesis) {
-      win.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      setAudioProgress(0);
-      setTimeout(() => {
-        handleTogglePlayAudio();
-      }, 150);
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current
+        .play()
+        .then(() => setIsPlayingAudio(true))
+        .catch(() => setIsPlayingAudio(false));
     }
   };
 
@@ -473,56 +477,60 @@ function ParentAnnouncementsInner() {
                   </div>
                 </header>
 
-                {/* Trình phát Audio AI trên cùng */}
-                <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white px-4 py-3 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <button
-                        type="button"
-                        onClick={handleTogglePlayAudio}
-                        className="w-9 h-9 rounded-full bg-white text-red-600 flex items-center justify-center shadow-md active:scale-95 transition shrink-0"
-                      >
-                        {isPlayingAudio ? (
-                          <Pause className="w-4 h-4 fill-red-600" />
-                        ) : (
-                          <Play className="w-4 h-4 fill-red-600 ml-0.5" />
-                        )}
-                      </button>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <Volume2 className="w-3.5 h-3.5 text-white/90" />
-                          <span className="text-xs font-bold truncate">
-                            {isPlayingAudio ? 'Đang phát qua loa máy...' : 'Nghe thông báo qua Audio AI'}
-                          </span>
+                {/* Trình phát Audio AI trên cùng (Chỉ hiển thị khi đã có file âm thanh thật từ Storage) */}
+                {Boolean(meta.audio_url || (ann as any).audio_url) && (
+                  <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white px-4 py-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={handleTogglePlayAudio}
+                          className="w-9 h-9 rounded-full bg-white text-red-600 flex items-center justify-center shadow-md active:scale-95 transition shrink-0"
+                          aria-label={isPlayingAudio ? 'Tạm dừng audio' : 'Phát audio'}
+                        >
+                          {isPlayingAudio ? (
+                            <Pause className="w-4 h-4 fill-red-600" />
+                          ) : (
+                            <Play className="w-4 h-4 fill-red-600 ml-0.5" />
+                          )}
+                        </button>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <Volume2 className="w-3.5 h-3.5 text-white/90" />
+                            <span className="text-xs font-bold truncate">
+                              {isPlayingAudio ? 'Đang phát qua loa máy...' : 'Nghe thông báo qua Audio AI'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-red-100 truncate mt-0.5">
+                            {(() => {
+                              const vProfile = getVoiceOption(meta.voice_type || meta.voice || (ann as any).voice_type);
+                              return `${vProfile.label.split('(')[0].trim()} • Sương Mai Studio`;
+                            })()}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-red-100 truncate mt-0.5">
-                          Giọng đọc AI Sương Mai • Dành cho phụ huynh khi bận rộn
-                        </p>
                       </div>
+
+                      {isPlayingAudio && (
+                        <button
+                          type="button"
+                          onClick={handleReplayAudio}
+                          className="p-1.5 rounded-full hover:bg-white/20 text-white/90 transition shrink-0"
+                          title="Phát lại từ đầu"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
 
-                    {isPlayingAudio && (
-                      <button
-                        type="button"
-                        onClick={handleReplayAudio}
-                        className="p-1.5 rounded-full hover:bg-white/20 text-white/90 transition shrink-0"
-                        title="Phát lại từ đầu"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Thanh tiến trình Audio nhỏ */}
-                  {isPlayingAudio && (
+                    {/* Thanh tiến trình Audio nhỏ */}
                     <div className="w-full bg-white/30 rounded-full h-1 mt-2.5 overflow-hidden">
                       <div
                         className="bg-white h-1 rounded-full transition-all duration-300"
                         style={{ width: `${audioProgress}%` }}
                       />
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Bộ 2 Tab chuyển đổi: Xem Poster / Văn bản gốc */}
                 <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between">
