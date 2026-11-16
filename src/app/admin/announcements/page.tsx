@@ -152,7 +152,7 @@ export default function AnnouncementsStudioPage() {
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/announcements');
+      const res = await fetch('/api/announcements?full=true');
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {

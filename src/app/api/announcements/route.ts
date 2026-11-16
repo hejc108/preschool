@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import { expandClassIdAliases } from '@/lib/constants/classes';
+import { EMBEDDED_BACKGROUNDS } from '@/lib/announcements/posterTemplates';
 import {
   assertTeacherClassAccess,
   executeWithContextFallback,
@@ -32,10 +33,25 @@ export async function GET(request: Request) {
     const requestedTarget = searchParams.get('target_role')?.toUpperCase().trim() || '';
     const requestedCategory = searchParams.get('category')?.trim() || '';
     const requestedStatus = searchParams.get('status')?.toUpperCase().trim() || '';
+    const isFullRequested =
+      searchParams.get('full') === 'true' || Boolean(requestedId) || isAdminRole(ctx.activeRole);
 
-    const { data: rows, error } = await executeWithContextFallback(ctx, async (sb) =>
-      await sb.from('announcements').select('*').order('created_at', { ascending: false }).limit(100)
-    );
+    const { data: rows, error } = await executeWithContextFallback(ctx, async (sb) => {
+      if (requestedId) {
+        return (await sb.from('announcements').select('*').eq('id', requestedId).limit(1)) as any;
+      }
+      let query = sb
+        .from('announcements')
+        .select(
+          'id, title, category, status, target_role, notification_channel, class_id, created_at, updated_at, metadata, content'
+        )
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (!isAdminRole(ctx.activeRole)) {
+        query = query.eq('status', 'PUBLISHED');
+      }
+      return (await query) as any;
+    });
 
     if (error) {
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
@@ -59,7 +75,8 @@ export async function GET(request: Request) {
       }
     });
 
-    const filtered = (rows || []).filter((item: any) => {
+    const rowsList: any[] = Array.isArray(rows) ? rows : (rows as any) ? [rows] : [];
+    const filtered = rowsList.filter((item: any) => {
       if (requestedId && item.id !== requestedId) return false;
       if (isAdminRole(ctx.activeRole)) {
         if (requestedTarget && item.target_role !== requestedTarget) return false;
@@ -119,29 +136,89 @@ export async function GET(request: Request) {
     const announcements = filtered.map((a: any) => {
       const readAt = readMap.get(a.id) || null;
       const count = readCountMap.get(a.id) ?? (a.metadata?.read_count ?? (a.status === 'PUBLISHED' ? 184 : 0));
+      const rawMeta = a.metadata || {};
+
+      // Sanitize background URL - convert any legacy base64 to static path
+      let sanitizedBg = rawMeta.custom_bg_url;
+      if (sanitizedBg && typeof sanitizedBg === 'string' && sanitizedBg.startsWith('data:image')) {
+        sanitizedBg = EMBEDDED_BACKGROUNDS[rawMeta.template_id] || '/images/announcements/le-hoi.jpg';
+      }
+
+      // If full detail is requested (single item or ?full=true)
+      if (isFullRequested || requestedId) {
+        return {
+          ...a,
+          category: a.category || rawMeta.category || 'Lễ hội',
+          status: a.status || rawMeta.status || 'PUBLISHED',
+          is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
+          priority: Boolean(a.is_urgent || rawMeta.is_urgent) ? 'URGENT' : 'NORMAL',
+          requires_acknowledgement: Boolean(a.requires_acknowledgement || rawMeta.requires_acknowledgement),
+          has_audio: Boolean(rawMeta.has_audio !== false),
+          has_poster: Boolean(rawMeta.has_poster !== false),
+          metadata: {
+            ...rawMeta,
+            custom_bg_url: sanitizedBg,
+          },
+          is_read: Boolean(readAt),
+          read_at: readAt,
+          read_count: count,
+          total_target_count: rawMeta.total_target_count || 200,
+        };
+      }
+
+      // Lightweight list payload: compact content snippet (< 160 chars) and minimal metadata
       return {
-        ...a,
-        category: a.category || a.metadata?.category || 'Lễ hội',
-        status: a.status || a.metadata?.status || 'PUBLISHED',
-        is_urgent: Boolean(a.is_urgent || a.metadata?.is_urgent),
-        requires_acknowledgement: Boolean(a.requires_acknowledgement || a.metadata?.requires_acknowledgement),
+        id: a.id,
+        title: a.title,
+        content: (a.content || '').slice(0, 160),
+        category: a.category || rawMeta.category || 'Lễ hội',
+        status: a.status || rawMeta.status || 'PUBLISHED',
+        target_role: a.target_role,
+        notification_channel: a.notification_channel,
+        class_id: a.class_id,
+        created_at: a.created_at,
+        updated_at: a.updated_at,
+        is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
+        priority: Boolean(a.is_urgent || rawMeta.is_urgent) ? 'URGENT' : 'NORMAL',
+        requires_acknowledgement: Boolean(a.requires_acknowledgement || rawMeta.requires_acknowledgement),
+        has_audio: Boolean(rawMeta.has_audio !== false),
+        has_poster: Boolean(rawMeta.has_poster !== false),
+        metadata: {
+          is_urgent: Boolean(a.is_urgent || rawMeta.is_urgent),
+          has_audio: Boolean(rawMeta.has_audio !== false),
+          has_poster: Boolean(rawMeta.has_poster !== false),
+          audience: rawMeta.audience || 'Toàn trường',
+          template_id: rawMeta.template_id || 'le-hoi',
+          custom_bg_url: sanitizedBg,
+        },
         is_read: Boolean(readAt),
         read_at: readAt,
         read_count: count,
-        total_target_count: a.metadata?.total_target_count || 200,
+        total_target_count: rawMeta.total_target_count || 200,
       };
     });
 
-    const unreadCount = announcements.filter((a) => !a.is_read).length;
+    const unreadCount = announcements.filter((a: any) => !a.is_read).length;
+
+    const cacheHeaders = requestedId
+      ? {
+          'Cache-Control': 'private, max-age=15, stale-while-revalidate=60',
+          'X-Payload-Type': 'detail',
+        }
+      : {
+          'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
+          'X-Payload-Type': 'list',
+        };
 
     return NextResponse.json(
       {
         success: true,
         active_role: ctx.activeRole,
+        announcement: requestedId ? announcements[0] || null : null,
         announcements,
         unread_count: unreadCount,
       },
-      { headers: NO_CACHE_HEADERS }
+      { headers: cacheHeaders }
     );
   } catch (err: any) {
     console.error('[api/announcements] GET error:', err);
