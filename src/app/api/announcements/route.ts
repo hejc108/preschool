@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     const { ctx } = auth;
 
     const { searchParams } = new URL(request.url);
+    const requestedId = searchParams.get('id')?.trim() || '';
     const requestedTarget = searchParams.get('target_role')?.toUpperCase().trim() || '';
     const requestedCategory = searchParams.get('category')?.trim() || '';
     const requestedStatus = searchParams.get('status')?.toUpperCase().trim() || '';
@@ -59,6 +60,7 @@ export async function GET(request: Request) {
     });
 
     const filtered = (rows || []).filter((item: any) => {
+      if (requestedId && item.id !== requestedId) return false;
       if (isAdminRole(ctx.activeRole)) {
         if (requestedTarget && item.target_role !== requestedTarget) return false;
         if (requestedCategory && item.category !== requestedCategory) return false;
@@ -121,6 +123,8 @@ export async function GET(request: Request) {
         ...a,
         category: a.category || a.metadata?.category || 'Lễ hội',
         status: a.status || a.metadata?.status || 'PUBLISHED',
+        is_urgent: Boolean(a.is_urgent || a.metadata?.is_urgent),
+        requires_acknowledgement: Boolean(a.requires_acknowledgement || a.metadata?.requires_acknowledgement),
         is_read: Boolean(readAt),
         read_at: readAt,
         read_count: count,

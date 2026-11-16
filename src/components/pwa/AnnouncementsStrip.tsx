@@ -1,8 +1,17 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
-import { Bell, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Volume2,
+} from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 
@@ -10,9 +19,18 @@ interface AnnouncementItem {
   id: string;
   title: string;
   content: string;
+  category?: string;
   target_role: 'ALL' | 'TEACHER' | 'PARENT';
   notification_channel?: 'TEACHER' | 'PARENT';
   is_read?: boolean;
+  is_urgent?: boolean;
+  metadata?: {
+    is_urgent?: boolean;
+    has_audio?: boolean;
+    has_poster?: boolean;
+    template_id?: string;
+    [key: string]: any;
+  };
   created_at: string;
 }
 
@@ -20,6 +38,24 @@ const announcementsFetcher = async (url: string) => {
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) return { announcements: [], unread_count: 0 };
   return res.json();
+};
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    if (isToday) {
+      return `Hôm nay ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  } catch {
+    return '';
+  }
 };
 
 /**
@@ -123,6 +159,186 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
     }
   };
 
+  // =========================================================================
+  // PARENT PORTAL VIEW (FR-02: 375px PWA WIDGET)
+  // =========================================================================
+  const unreadUrgent = useMemo(
+    () =>
+      announcements.filter((a) => !a.is_read && Boolean(a.is_urgent || a.metadata?.is_urgent)),
+    [announcements]
+  );
+  const unreadStandard = useMemo(
+    () =>
+      announcements.filter((a) => !a.is_read && !Boolean(a.is_urgent || a.metadata?.is_urgent)),
+    [announcements]
+  );
+  const homeUnreadList = useMemo(() => {
+    return [...unreadUrgent, ...unreadStandard];
+  }, [unreadUrgent, unreadStandard]);
+
+  if (portalRole === 'PARENT') {
+    if (announcements.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="text-xs space-y-2">
+        {/* Tiêu đề khối + Xem tất cả */}
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+              Thông báo từ Nhà trường
+            </h2>
+            {homeUnreadList.length > 0 && (
+              <span className="px-1.5 py-0.2 bg-red-100 text-red-700 text-[10px] font-bold rounded-full">
+                {homeUnreadList.length} mới
+              </span>
+            )}
+          </div>
+          <Link
+            href="/parent/announcements"
+            className="text-[11px] font-semibold text-red-600 hover:text-red-700 flex items-center gap-0.5 transition"
+          >
+            <span>Xem tất cả ({announcements.length})</span>
+            <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        {/* Trạng thái 0 thông báo chưa đọc: Co thành 1 thanh thông thái tinh giản */}
+        {homeUnreadList.length === 0 ? (
+          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl px-3.5 py-2.5 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-xs font-medium text-emerald-900 truncate">
+                Đã xem hết thông báo mới từ Nhà trường
+              </span>
+            </div>
+            <Link
+              href="/parent/announcements"
+              className="text-[11px] font-bold text-emerald-700 hover:underline shrink-0 ml-2"
+            >
+              Xem lại ({announcements.length})
+            </Link>
+          </div>
+        ) : homeUnreadList.length === 1 ? (
+          /* Trạng thái 1 thông báo chưa đọc: Hiện 1 thẻ duy nhất */
+          (() => {
+            const item = homeUnreadList[0];
+            const isUrgent = Boolean(item.is_urgent || item.metadata?.is_urgent);
+            const hasAudio = Boolean(item.metadata?.has_audio !== false);
+
+            return (
+              <Link
+                href={`/parent/announcements?id=${item.id}`}
+                className={`block rounded-xl border p-3 shadow-2xs transition active:scale-[0.99] ${
+                  isUrgent
+                    ? 'bg-red-50/90 border-red-300 ring-1 ring-red-200'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    {isUrgent ? (
+                      <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded shadow-2xs">
+                        KHẨN
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-semibold rounded">
+                        {item.category || 'Thông báo'}
+                      </span>
+                    )}
+                    {!isUrgent && (
+                      <span className="px-1.5 py-0.2 bg-red-50 text-red-600 border border-red-200 text-[9px] font-bold rounded-full">
+                        MỚI
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    {hasAudio && (
+                      <span className="inline-flex items-center gap-0.5 text-indigo-600 font-medium">
+                        <Volume2 className="w-3 h-3 text-indigo-500 animate-pulse" />
+                        <span>Audio</span>
+                      </span>
+                    )}
+                    <span>•</span>
+                    <span>{formatDate(item.created_at)}</span>
+                  </div>
+                </div>
+                <p
+                  className={`text-xs font-bold leading-snug line-clamp-2 ${
+                    isUrgent ? 'text-red-950 font-extrabold' : 'text-slate-900'
+                  }`}
+                >
+                  {item.title}
+                </p>
+              </Link>
+            );
+          })()
+        ) : (
+          /* Trạng thái 2+ thông báo chưa đọc: Vuốt ngang (Horizontal Swipe Carousel) */
+          <div className="overflow-x-auto snap-x flex gap-2.5 pb-1 -mx-4 px-4 scrollbar-none">
+            {homeUnreadList.map((item) => {
+              const isUrgent = Boolean(item.is_urgent || item.metadata?.is_urgent);
+              const hasAudio = Boolean(item.metadata?.has_audio !== false);
+
+              return (
+                <Link
+                  key={item.id}
+                  href={`/parent/announcements?id=${item.id}`}
+                  className={`w-[86%] shrink-0 snap-start block rounded-xl border p-3 shadow-2xs transition active:scale-[0.99] ${
+                    isUrgent
+                      ? 'bg-red-50/90 border-red-300 ring-1 ring-red-200'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {isUrgent ? (
+                        <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded shadow-2xs">
+                          KHẨN
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-semibold rounded">
+                          {item.category || 'Thông báo'}
+                        </span>
+                      )}
+                      {!isUrgent && (
+                        <span className="px-1.5 py-0.2 bg-red-50 text-red-600 border border-red-200 text-[9px] font-bold rounded-full">
+                          MỚI
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                      {hasAudio && (
+                        <span className="inline-flex items-center gap-0.5 text-indigo-600 font-medium">
+                          <Volume2 className="w-3 h-3 text-indigo-500 animate-pulse" />
+                          <span>Audio</span>
+                        </span>
+                      )}
+                      <span>•</span>
+                      <span>{formatDate(item.created_at)}</span>
+                    </div>
+                  </div>
+                  <p
+                    className={`text-xs font-bold leading-snug line-clamp-2 ${
+                      isUrgent ? 'text-red-950 font-extrabold' : 'text-slate-900'
+                    }`}
+                  >
+                    {item.title}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // =========================================================================
+  // TEACHER / DEFAULT STRIP VIEW
+  // =========================================================================
   if (announcements.length === 0 && pushStatus !== 'default') {
     return null;
   }

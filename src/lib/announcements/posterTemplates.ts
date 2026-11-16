@@ -45,6 +45,8 @@ export interface AnnouncementMetadata {
   audio_synced?: boolean;
   has_poster?: boolean;
   has_audio?: boolean;
+  is_urgent?: boolean;
+  requires_acknowledgement?: boolean;
 }
 
 export interface AnnouncementItem {
@@ -64,6 +66,8 @@ export interface AnnouncementItem {
   read_at?: string | null;
   read_count?: number;
   total_target_count?: number;
+  is_urgent?: boolean;
+  requires_acknowledgement?: boolean;
 }
 
 export const EMBEDDED_BACKGROUNDS: Record<string, string> = {

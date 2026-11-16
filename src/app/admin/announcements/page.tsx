@@ -74,6 +74,7 @@ export default function AnnouncementsStudioPage() {
   // Dynamic cards toggles & values
   const [showTimeCard, setShowTimeCard] = useState<boolean>(true);
   const [timeValue, setTimeValue] = useState<string>('18:30 Thứ Năm, 24/09/2026 (14/08 Âm lịch)');
+  const [isUrgent, setIsUrgent] = useState<boolean>(false);
 
   const [showLocCard, setShowLocCard] = useState<boolean>(true);
   const [locValue, setLocValue] = useState<string>('Sân khấu chính - Trường Mầm non Sương Mai');
@@ -223,6 +224,13 @@ export default function AnnouncementsStudioPage() {
       if (tpl.defaultTable.row2Amt) setRow2Amt(tpl.defaultTable.row2Amt);
     }
     setIsAudioSynced(false);
+    const isUrgentTemplate =
+      tpl.id === 'khan-cap' ||
+      tpl.id === 'nghi-le' ||
+      tpl.name.toLowerCase().includes('khẩn') ||
+      tpl.name.toLowerCase().includes('lịch học') ||
+      tpl.defaultTitle.toLowerCase().includes('khẩn');
+    setIsUrgent(isUrgentTemplate);
     showToast(`Đã đồng bộ mẫu "${tpl.name}" kèm dữ liệu 3 thẻ thông tin!`);
   };
 
@@ -245,6 +253,7 @@ export default function AnnouncementsStudioPage() {
     setBodyText(ann.content);
 
     const meta = ann.metadata || {};
+    setIsUrgent(Boolean(ann.is_urgent || meta.is_urgent));
     setIsBgEnabled(meta.is_bg_enabled !== false);
     setCurrentTemplateId(meta.template_id || 'le-hoi');
     setCustomUploadedBgUrl(meta.custom_bg_url || null);
@@ -303,6 +312,7 @@ export default function AnnouncementsStudioPage() {
         audio_synced: false,
         has_poster: true,
         has_audio: true,
+        is_urgent: Boolean(ann.is_urgent || meta.is_urgent),
       };
 
       const payload = {
@@ -549,6 +559,7 @@ export default function AnnouncementsStudioPage() {
         audio_synced: isAudioSynced,
         has_poster: true,
         has_audio: true,
+        is_urgent: isUrgent,
       };
 
       const payload = {
@@ -615,6 +626,7 @@ export default function AnnouncementsStudioPage() {
         audio_synced: isAudioSynced,
         has_poster: true,
         has_audio: true,
+        is_urgent: isUrgent,
       };
 
       const payload = {
@@ -1042,9 +1054,14 @@ export default function AnnouncementsStudioPage() {
                         <td className="py-3.5 px-5">
                           <div
                             onClick={() => openAnnouncementInStudio(item)}
-                            className="font-bold text-slate-900 text-sm cursor-pointer hover:text-[#D32F2F] transition"
+                            className="font-bold text-slate-900 text-sm cursor-pointer hover:text-[#D32F2F] transition flex items-center gap-1.5 flex-wrap"
                           >
-                            {item.title}
+                            {Boolean(item.is_urgent || item.metadata?.is_urgent) && (
+                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded shadow-xs animate-pulse">
+                                KHẨN
+                              </span>
+                            )}
+                            <span>{item.title}</span>
                           </div>
                           <div className="text-slate-500 text-[11px] mt-0.5 flex items-center space-x-2">
                             <span>{item.metadata?.audience || 'Toàn trường'}</span>
@@ -1335,6 +1352,32 @@ export default function AnnouncementsStudioPage() {
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-2 focus:ring-[#D32F2F] focus:border-[#D32F2F] focus:outline-none"
                 />
+              </div>
+
+              {/* Nút gạt Đánh dấu Quan trọng / Khẩn */}
+              <div className="bg-red-50/70 p-3 rounded-lg border border-red-200 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-red-900">
+                      Đánh dấu Thông báo Quan trọng / Khẩn
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded">
+                      ƯU TIÊN
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-700">
+                    Tự động ghim vị trí đầu tiên trên cổng Phụ huynh và làm nổi bật màu cảnh báo đỏ.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                  <input
+                    type="checkbox"
+                    checked={isUrgent}
+                    onChange={(e) => setIsUrgent(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                </label>
               </div>
             </div>
 
