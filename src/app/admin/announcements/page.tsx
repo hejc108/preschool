@@ -994,8 +994,13 @@ export default function AnnouncementsStudioPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <div className="w-8 h-8 rounded-lg bg-[#D32F2F] flex items-center text-white justify-center font-bold text-sm shadow-sm shrink-0">
-            SM
+          <div className="w-8 h-8 rounded-lg bg-white p-0.5 border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/logo.png"
+              alt="Logo Sương Mai"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <div className="flex items-center space-x-2">

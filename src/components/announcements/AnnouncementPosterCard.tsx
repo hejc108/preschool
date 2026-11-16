@@ -80,15 +80,21 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
       >
         {/* TẦNG 1: HEADER TRƯỜNG MẦM NON SƯƠNG MAI (ĐỒNG BỘ 100% TOÀN HỆ THỐNG) */}
         <div className="bg-[#D32F2F]/95 backdrop-blur-xs text-white px-4 py-2.5 flex items-center justify-center space-x-2.5 relative z-10 shadow-md">
-          <div className="w-7 h-7 rounded-full bg-white text-[#D32F2F] font-extrabold text-xs flex items-center justify-center shadow-xs shrink-0">
-            SM
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white p-0.5 shadow-xs shrink-0 flex items-center justify-center overflow-hidden border border-white/80">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/logo.png"
+              alt="Logo Trường Mầm Non Sương Mai"
+              crossOrigin="anonymous"
+              className="w-full h-full object-contain rounded-full"
+            />
           </div>
           <div className="text-left">
             <h4 className="text-xs font-extrabold tracking-wide uppercase leading-none">
               Trường Mầm Non Sương Mai
             </h4>
             <p className="text-[9px] opacity-90 mt-0.5">
-              Krông Pắc, Đắk Lắk • mamnonsuongmai.edu.vn
+              Krông Pắc, Đắk Lắk • 0262.352.1234
             </p>
           </div>
         </div>
