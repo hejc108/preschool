@@ -103,7 +103,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "name": "Lễ hội",
     "defaultTitle": "Lễ Hội Trăng Rằm & Vui Tết Trung Thu",
     "defaultBody": "Trân trọng kính mời Quý Phụ huynh cùng các bé đến tham dự chương trình \"Đêm Hội Trăng Rằm\" với nhiều tiết mục múa lân, rước đèn ông sao và phá cỗ trông trăng đầy ý nghĩa.",
-    "defaultTime": "18:30 Thứ Năm, 24/09/2026 (14/08 Âm lịch)",
+    "defaultTime": "18:30 Thứ Năm, 24/09/2026\n(Tức ngày 14 tháng 08 Âm lịch)",
     "defaultLocation": "Sân khấu chính - Trường Mầm non Sương Mai",
     "defaultDeadline": "Trang phục lễ hội truyền thống • Hỗ trợ BGH: 0262.352.1234",
     "defaultAudience": "Toàn trường (200 bé)",

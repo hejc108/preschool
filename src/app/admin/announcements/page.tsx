@@ -36,6 +36,7 @@ import {
   Trash2,
   AlertTriangle,
   RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import {
@@ -45,6 +46,12 @@ import {
   AnnouncementItem,
   AnnouncementMetadata,
 } from '@/lib/announcements/posterTemplates';
+import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
+import {
+  TtsRule,
+  DEFAULT_TTS_RULES,
+  normalizeVietnameseSpeech,
+} from '@/lib/announcements/ttsDictionary';
 
 export default function AnnouncementsStudioPage() {
   // View states: 'list' | 'studio' | 'pwa'
@@ -73,7 +80,9 @@ export default function AnnouncementsStudioPage() {
 
   // Dynamic cards toggles & values
   const [showTimeCard, setShowTimeCard] = useState<boolean>(true);
-  const [timeValue, setTimeValue] = useState<string>('18:30 Thứ Năm, 24/09/2026 (14/08 Âm lịch)');
+  const [timeValue, setTimeValue] = useState<string>(
+    '07:30 - Thứ Sáu, 20/11/2026\n(Tức ngày 12 tháng 10 năm Bính Ngọ âm lịch)'
+  );
   const [isUrgent, setIsUrgent] = useState<boolean>(false);
 
   const [showLocCard, setShowLocCard] = useState<boolean>(true);
@@ -103,6 +112,15 @@ export default function AnnouncementsStudioPage() {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // TTS Dictionary & Preview states
+  const [ttsRules, setTtsRules] = useState<TtsRule[]>(DEFAULT_TTS_RULES);
+  const [isTtsDictOpen, setIsTtsDictOpen] = useState<boolean>(false);
+  const [isTtsPreviewOpen, setIsTtsPreviewOpen] = useState<boolean>(false);
+  const [newKeyword, setNewKeyword] = useState<string>('');
+  const [newSpokenText, setNewSpokenText] = useState<string>('');
+  const [newCategory, setNewCategory] = useState<string>('ACRONYM');
+  const [isSavingRule, setIsSavingRule] = useState<boolean>(false);
 
   // Mobile PWA view state: 'poster' | 'text'
   const [mobileMode, setMobileMode] = useState<'poster' | 'text'>('poster');
@@ -171,8 +189,90 @@ export default function AnnouncementsStudioPage() {
     }
   };
 
+  // Fetch danh sách từ điển phát âm AI
+  const fetchTtsRules = async () => {
+    try {
+      const res = await fetch('/api/announcements/tts-dictionary');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.rules)) {
+          setTtsRules(json.rules);
+        }
+      }
+    } catch (e) {
+      console.warn('Không thể tải từ điển phát âm:', e);
+    }
+  };
+
+  // Thêm quy tắc từ điển mới
+  const handleAddRule = async () => {
+    const kw = newKeyword.trim();
+    const spk = newSpokenText.trim();
+    if (!kw || !spk) {
+      showToast('Vui lòng điền đủ từ/số trên thông báo và cách đọc thành tiếng.');
+      return;
+    }
+    try {
+      setIsSavingRule(true);
+      const res = await fetch('/api/announcements/tts-dictionary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: kw,
+          spoken_text: spk,
+          category: newCategory,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(`Đã thêm quy tắc "${kw}" vào từ điển AI!`);
+        setNewKeyword('');
+        setNewSpokenText('');
+        fetchTtsRules();
+      } else {
+        showToast(json.error || 'Lỗi khi lưu quy tắc.');
+      }
+    } catch (err: any) {
+      showToast('Lỗi kết nối khi thêm quy tắc.');
+    } finally {
+      setIsSavingRule(false);
+    }
+  };
+
+  // Xóa quy tắc khỏi từ điển
+  const handleDeleteRule = async (rule: TtsRule) => {
+    try {
+      const param = rule.id ? `id=${rule.id}` : `keyword=${encodeURIComponent(rule.keyword)}`;
+      const res = await fetch(`/api/announcements/tts-dictionary?${param}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(`Đã xóa "${rule.keyword}" khỏi từ điển.`);
+        fetchTtsRules();
+      } else {
+        showToast(json.error || 'Lỗi khi xóa quy tắc.');
+      }
+    } catch (_) {
+      showToast('Lỗi kết nối khi xóa quy tắc.');
+    }
+  };
+
+  // Lấy văn bản lời đọc AI trước và sau khi chuẩn hóa
+  const getCurrentSpokenSpeech = () => {
+    const raw = `${title}. ${bodyText}. ${
+      showTimeCard && timeValue ? `Thời gian: ${timeValue}.` : ''
+    } ${showLocCard && locValue ? `Địa điểm: ${locValue}.` : ''} ${
+      showDeadlineCard && deadlineValue ? `Lưu ý: ${deadlineValue}.` : ''
+    } Trường Mầm non Sương Mai trân trọng thông báo.`;
+
+    const normalized = normalizeVietnameseSpeech(raw, ttsRules);
+    return { raw, normalized };
+  };
+
   useEffect(() => {
     fetchAnnouncements();
+    fetchTtsRules();
   }, []);
 
   // Cleanup speech synthesis on unmount
@@ -694,34 +794,31 @@ export default function AnnouncementsStudioPage() {
     setTimeout(() => {
       setIsGeneratingAudio(false);
       setIsAudioSynced(true);
-      showToast('Đã tổng hợp giọng đọc AI tiếng Việt sẵn sàng phát qua loa!');
-    }, 600);
+      showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và đồng bộ Audio thành công!');
+    }, 500);
   };
 
   // Toggle Audio Playback through device speakers
   const handleTogglePlayAudio = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (!win?.speechSynthesis) {
       showToast('Trình duyệt không hỗ trợ phát âm thanh Web Speech API.');
       return;
     }
 
     if (isPlayingAudio) {
-      window.speechSynthesis.cancel();
+      win.speechSynthesis.cancel();
       setIsPlayingAudio(false);
       showToast('Đã dừng phát âm thanh.');
       return;
     }
 
-    window.speechSynthesis.cancel();
+    win.speechSynthesis.cancel();
 
-    // Prepare speech text from official announcement content
-    const spokenText = `${title}. ${bodyText}. ${
-      showTimeCard && timeValue ? `Thời gian: ${timeValue}.` : ''
-    } ${showLocCard && locValue ? `Địa điểm: ${locValue}.` : ''} ${
-      showDeadlineCard && deadlineValue ? `Lưu ý: ${deadlineValue}.` : ''
-    } Trường Mầm non Sương Mai trân trọng thông báo.`;
+    // Chuẩn hóa văn bản qua Từ điển Phát âm AI tiếng Việt
+    const { normalized } = getCurrentSpokenSpeech();
 
-    const utterance = new SpeechSynthesisUtterance(spokenText);
+    const utterance = new SpeechSynthesisUtterance(normalized);
     utterance.lang = 'vi-VN';
 
     // Tone & speed adjustments according to selected voice
@@ -737,15 +834,15 @@ export default function AnnouncementsStudioPage() {
     }
 
     // Attempt to pick a Vietnamese voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const viVoice = voices.find((v) => v.lang.includes('vi') || v.lang.includes('VN'));
+    const voices = win.speechSynthesis.getVoices();
+    const viVoice = voices.find((v: any) => v.lang.includes('vi') || v.lang.includes('VN'));
     if (viVoice) {
       utterance.voice = viVoice;
     }
 
     utterance.onstart = () => {
       setIsPlayingAudio(true);
-      showToast('Đang phát giọng đọc AI của trường Sương Mai qua loa thiết bị...');
+      showToast('Đang phát giọng đọc AI (đã qua từ điển phát âm) qua loa thiết bị...');
     };
 
     utterance.onend = () => {
@@ -787,7 +884,7 @@ export default function AnnouncementsStudioPage() {
       } catch (_) {}
     }
 
-    window.speechSynthesis.speak(utterance);
+    win.speechSynthesis.speak(utterance);
   };
 
   // Open read receipt modal
@@ -1412,13 +1509,17 @@ export default function AnnouncementsStudioPage() {
                     </span>
                   </div>
                   {showTimeCard && (
-                    <div className="mt-2 pl-6">
-                      <input
-                        type="text"
+                    <div className="mt-2 pl-6 space-y-1">
+                      <textarea
+                        rows={2}
                         value={timeValue}
                         onChange={(e) => setTimeValue(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:bg-white focus:border-[#D32F2F] focus:outline-none"
+                        placeholder={'Dòng 1: Giờ, thứ, ngày dương lịch\nDòng 2: (Tức ngày... âm lịch)'}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 focus:bg-white focus:border-[#D32F2F] focus:outline-none resize-none leading-relaxed"
                       />
+                      <p className="text-[10px] text-slate-500">
+                        Hỗ trợ tối đa 2 dòng: ghi rõ ngày Dương & ngày Âm lịch (căn giữa trên Poster).
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1599,6 +1700,29 @@ export default function AnnouncementsStudioPage() {
                   </select>
                 </div>
               </div>
+
+              {/* TỪ ĐIỂN PHÁT ÂM AI & XEM TRƯỚC LỜI ĐỌC */}
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsTtsDictOpen(true)}
+                  className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
+                  title="Cấu hình quy tắc đọc viết tắt, ngày tháng, hotline"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-[#D32F2F]" />
+                  <span>Từ điển cách đọc AI ({ttsRules.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsTtsPreviewOpen(true)}
+                  className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
+                  title="Kiểm tra văn bản được AI chuẩn hóa trước khi đọc"
+                >
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Xem trước lời AI đọc</span>
+                </button>
+              </div>
+
               <div className="flex items-center justify-between pt-1">
                 <button
                   type="button"
@@ -1669,147 +1793,30 @@ export default function AnnouncementsStudioPage() {
             </div>
 
             {/* KHUNG POSTER CHÍNH THỨC (REF ĐỂ XUẤT PNG ĐỘ PHÂN GIẢI CAO) */}
-            <div
-              ref={posterRef}
-              className={`w-full max-w-[390px] aspect-[3/4.25] rounded-2xl shadow-2xl overflow-hidden flex flex-col justify-between relative border-4 select-none bg-cover bg-center transition-all duration-300 ${
-                isBgEnabled
-                  ? 'border-white bg-white'
-                  : 'border-red-200 bg-gradient-to-b from-white to-red-50/40'
-              }`}
-              style={
-                isBgEnabled && activeBgImage
-                  ? { backgroundImage: `url('${activeBgImage}')` }
-                  : undefined
-              }
-            >
-              {/* TẦNG 1: HEADER TRƯỜNG MẦM NON SƯƠNG MAI */}
-              <div className="bg-[#D32F2F]/95 backdrop-blur-xs text-white px-4 py-2.5 flex items-center justify-center space-x-2.5 relative z-10 shadow-md">
-                <div className="w-7 h-7 rounded-full bg-white text-[#D32F2F] font-extrabold text-xs flex items-center justify-center shadow-xs shrink-0">
-                  SM
-                </div>
-                <div className="text-left">
-                  <h4 className="text-xs font-extrabold tracking-wide uppercase leading-none">
-                    Trường Mầm Non Sương Mai
-                  </h4>
-                  <p className="text-[9px] opacity-90 mt-0.5">
-                    Krông Pắc, Đắk Lắk • mamnonsuongmai.edu.vn
-                  </p>
-                </div>
-              </div>
-
-              {/* VÙNG TRUNG TÂM CHỮ NỔI */}
-              <div className="px-5 py-2 my-auto flex flex-col items-center text-center relative z-10 space-y-2.5">
-                {/* TẦNG 2: RUY BĂNG TIÊU ĐỀ NỔI BẬT (TUYỆT ĐỐI CÂN ĐỐI, CĂN GIỮA, KHÔNG XOAY/NGHIÊNG) */}
-                <div
-                  id="posterRibbonBox"
-                  className={
-                    isBgEnabled
-                      ? 'text-white px-5 py-2 rounded-2xl border-2 border-[#FFCDD2] max-w-[92%] mx-auto transition-all text-center'
-                      : 'bg-red-50 text-[#D32F2F] px-5 py-2 rounded-xl border border-red-200 max-w-[95%] mx-auto transition-all text-center shadow-xs'
-                  }
-                  style={
-                    isBgEnabled
-                      ? {
-                          background: 'linear-gradient(135deg, #E53935 0%, #C62828 100%)',
-                          boxShadow: '0 8px 20px rgba(0, 0, 0, 0.25)',
-                        }
-                      : undefined
-                  }
-                >
-                  <h2
-                    className={`text-base font-extrabold leading-snug tracking-wide ${
-                      isBgEnabled ? 'text-white drop-shadow-md' : 'text-[#D32F2F]'
-                    }`}
-                    style={{
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      textShadow: isBgEnabled ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
-                    }}
-                  >
-                    {title || '(Chưa nhập tiêu đề)'}
-                  </h2>
-                </div>
-
-                {/* TẦNG 3: KHỐI THẺ THÔNG TIN ĐỘNG */}
-                <div className="w-full space-y-1.5 text-left">
-                  {showTimeCard && (
-                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
-                      <CalendarClock className="w-3.5 h-3.5 text-[#D32F2F] shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-900 leading-tight">
-                        {timeValue}
-                      </span>
-                    </div>
-                  )}
-
-                  {showLocCard && (
-                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
-                      <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-900 leading-tight">
-                        {locValue}
-                      </span>
-                    </div>
-                  )}
-
-                  {showTableCard && (
-                    <div className="bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl border border-emerald-200 shadow-xs text-[10px]">
-                      <div className="flex justify-between py-0.5 border-b border-slate-100">
-                        <span className="text-slate-700 font-medium">{row1Label}</span>
-                        <span className="font-extrabold text-slate-900">{row1Amt}</span>
-                      </div>
-                      <div className="flex justify-between py-0.5">
-                        <span className="text-slate-700 font-medium">{row2Label}</span>
-                        <span className="font-extrabold text-slate-900">{row2Amt}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {showDeadlineCard && (
-                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-sky-200/80 shadow-xs">
-                      <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                      <span className="text-[10px] font-semibold text-slate-800 leading-tight">
-                        {deadlineValue}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* TẦNG 4: LỜI NGỎ / VĂN BẢN CHÍNH THỨC (BUG 1: GIỮ NỀN TRẮNG MỜ KHÔNG BỊ MẤT TRÊN CẢ 11 MẪU) */}
-                <div
-                  id="posterBodyCard"
-                  className="w-full bg-white/92 backdrop-blur-sm border border-slate-200/80 rounded-xl px-3 py-2 shadow-xs"
-                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.94)' }}
-                >
-                  <p className="text-[10.5px] text-slate-800 font-medium leading-relaxed text-justify line-clamp-5">
-                    {bodyText || '(Chưa nhập nội dung)'}
-                  </p>
-                </div>
-              </div>
-
-              {/* TẦNG 5 & 6: PHẠM VI NHẬN & DẤU ĐỎ HIỆU TRƯỞNG */}
-              <div className="px-4 pb-3 pt-1 flex items-end justify-between relative z-10">
-                <span className="px-2 py-0.5 bg-white/90 backdrop-blur-xs rounded-md text-[9px] font-extrabold text-slate-800 shadow-xs border border-slate-200/80">
-                  Gửi: <span>{audience}</span>
-                </span>
-
-                {showSealCard && (
-                  <div className="flex items-center space-x-1.5 bg-white/90 backdrop-blur-xs px-2 py-1 rounded-xl border border-red-200 shadow-xs">
-                    <div className="text-right">
-                      <p className="text-[8px] font-bold text-slate-700 uppercase leading-none">
-                        Hiệu Trưởng
-                      </p>
-                      <p
-                        className="text-[9px] italic text-red-700 font-bold leading-tight"
-                        style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
-                      >
-                        Vũ Thị Xuân
-                      </p>
-                    </div>
-                    <div className="w-8 h-8 rounded-full border border-red-600 flex flex-col items-center justify-center text-red-600 font-extrabold text-[6px] leading-none transform -rotate-12 bg-red-50">
-                      <span>SƯƠNG MAI</span>
-                      <span className="mt-0.5">ĐÃ DUYỆT</span>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="w-full flex justify-center">
+              <AnnouncementPosterCard
+                ref={posterRef}
+                title={title}
+                bodyText={bodyText}
+                templateId={currentTemplateId}
+                customBgUrl={customUploadedBgUrl}
+                isBgEnabled={isBgEnabled}
+                audience={audience}
+                showTimeCard={showTimeCard}
+                timeValue={timeValue}
+                showLocCard={showLocCard}
+                locValue={locValue}
+                showTableCard={showTableCard}
+                tableData={{
+                  row1_label: row1Label,
+                  row1_amt: row1Amt,
+                  row2_label: row2Label,
+                  row2_amt: row2Amt,
+                }}
+                showDeadlineCard={showDeadlineCard}
+                deadlineValue={deadlineValue}
+                showSealCard={showSealCard}
+              />
             </div>
 
             {/* THANH NÚT XUẤT FILE DƯỚI CÙNG */}
@@ -1926,122 +1933,28 @@ export default function AnnouncementsStudioPage() {
               {/* CHẾ ĐỘ 1: XEM POSTER TRÊN MOBILE */}
               {mobileMode === 'poster' && (
                 <div className="space-y-2.5">
-                  <div
-                    className={`w-full aspect-[3/4.25] rounded-2xl shadow-md overflow-hidden flex flex-col justify-between relative border-2 select-none bg-cover bg-center transition-all ${
-                      isBgEnabled
-                        ? 'border-white bg-white'
-                        : 'border-red-200 bg-gradient-to-b from-white to-red-50/40'
-                    }`}
-                    style={
-                      isBgEnabled && activeBgImage
-                        ? { backgroundImage: `url('${activeBgImage}')` }
-                        : undefined
-                    }
-                  >
-                    {/* Header */}
-                    <div className="bg-[#D32F2F]/95 text-white px-3 py-2 flex items-center justify-center space-x-2 relative z-10">
-                      <div className="w-6 h-6 rounded-full bg-white text-[#D32F2F] font-extrabold text-[10px] flex items-center justify-center shrink-0">
-                        SM
-                      </div>
-                      <div className="text-left">
-                        <h4 className="text-[11px] font-extrabold tracking-wide uppercase leading-none">
-                          Trường Mầm Non Sương Mai
-                        </h4>
-                        <p className="text-[8px] opacity-90 mt-0.5">Krông Pắc, Đắk Lắk</p>
-                      </div>
-                    </div>
-
-                    {/* Tiêu đề & nội dung */}
-                    <div className="px-4 py-1.5 my-auto flex flex-col items-center text-center relative z-10 space-y-2">
-                      <div
-                        className={
-                          isBgEnabled
-                            ? 'text-white px-4 py-1.5 rounded-xl border border-[#FFCDD2] max-w-[95%] mx-auto text-center'
-                            : 'bg-red-50 text-[#D32F2F] px-4 py-1.5 rounded-lg border border-red-200 max-w-[95%] mx-auto text-center'
-                        }
-                        style={
-                          isBgEnabled
-                            ? {
-                                background:
-                                  'linear-gradient(135deg, #E53935 0%, #C62828 100%)',
-                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-                              }
-                            : undefined
-                        }
-                      >
-                        <h2
-                          className={`text-sm font-extrabold leading-snug ${
-                            isBgEnabled ? 'text-white' : 'text-[#D32F2F]'
-                          }`}
-                          style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
-                        >
-                          {title}
-                        </h2>
-                      </div>
-
-                      <div className="w-full space-y-1 text-left">
-                        {showTimeCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
-                            <CalendarClock className="w-3 h-3 text-[#D32F2F] shrink-0" />
-                            <span>{timeValue}</span>
-                          </div>
-                        )}
-                        {showLocCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
-                            <MapPin className="w-3 h-3 text-amber-600 shrink-0" />
-                            <span>{locValue}</span>
-                          </div>
-                        )}
-                        {showTableCard && (
-                          <div className="bg-white/95 px-2.5 py-1.5 rounded-lg border border-emerald-200 text-[9px]">
-                            <div className="flex justify-between py-0.5 border-b border-slate-100">
-                              <span>{row1Label}</span>
-                              <span className="font-bold">{row1Amt}</span>
-                            </div>
-                            <div className="flex justify-between py-0.5">
-                              <span>{row2Label}</span>
-                              <span className="font-bold">{row2Amt}</span>
-                            </div>
-                          </div>
-                        )}
-                        {showDeadlineCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-sky-200 text-[9px] font-semibold text-slate-800">
-                            <Info className="w-3 h-3 text-sky-600 shrink-0" />
-                            <span>{deadlineValue}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Bug 1 (Mobile body card translucent white background) */}
-                      <div
-                        className="w-full bg-white/92 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9.5px] text-slate-800 leading-relaxed text-justify line-clamp-4"
-                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.94)' }}
-                      >
-                        {bodyText}
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="px-3 pb-2 pt-1 flex items-end justify-between relative z-10">
-                      <span className="px-2 py-0.5 bg-white/90 rounded text-[8px] font-extrabold text-slate-800">
-                        Gửi: {audience}
-                      </span>
-                      {showSealCard && (
-                        <div className="flex items-center space-x-1 bg-white/90 px-1.5 py-0.5 rounded-lg border border-red-200 text-[8px]">
-                          <span
-                            className="font-bold text-red-700 italic"
-                            style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
-                          >
-                            Vũ Thị Xuân
-                          </span>
-                          <div className="w-6 h-6 rounded-full border border-red-600 flex flex-col items-center justify-center text-red-600 font-extrabold text-[5px] leading-none transform -rotate-12 bg-red-50">
-                            <span>ĐÃ</span>
-                            <span>DUYỆT</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <AnnouncementPosterCard
+                    title={title}
+                    bodyText={bodyText}
+                    templateId={currentTemplateId}
+                    customBgUrl={customUploadedBgUrl}
+                    isBgEnabled={isBgEnabled}
+                    audience={audience}
+                    showTimeCard={showTimeCard}
+                    timeValue={timeValue}
+                    showLocCard={showLocCard}
+                    locValue={locValue}
+                    showTableCard={showTableCard}
+                    tableData={{
+                      row1_label: row1Label,
+                      row1_amt: row1Amt,
+                      row2_label: row2Label,
+                      row2_amt: row2Amt,
+                    }}
+                    showDeadlineCard={showDeadlineCard}
+                    deadlineValue={deadlineValue}
+                    showSealCard={showSealCard}
+                  />
 
                   <button
                     onClick={downloadPosterPng}
@@ -2207,6 +2120,250 @@ export default function AnnouncementsStudioPage() {
                 * Tỷ lệ đọc thực tế được ghi nhận chính xác theo từng tài khoản phụ huynh đã đăng nhập
                 và mở xem thông báo trên Mobile PWA.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL TỪ ĐIỂN PHÁT ÂM AI (TTS PRONUNCIATION DICTIONARY)               */}
+      {/* ===================================================================== */}
+      {isTtsDictOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#D32F2F] text-white flex items-center justify-center">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                    Từ điển Phát âm AI Tiếng Việt
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Chuẩn hóa từ viết tắt, ngày tháng, hotline sang lời đọc sư phạm tự nhiên
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsTtsDictOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Nội dung Modal */}
+            <div className="p-4 overflow-y-auto space-y-4">
+              {/* Form thêm quy tắc mới */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+                <span className="text-xs font-bold text-slate-800">
+                  Thêm từ ngữ / chữ số cần chuẩn hóa cách đọc
+                </span>
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-4">
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                      Từ / Số trên thông báo
+                    </label>
+                    <input
+                      type="text"
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                      placeholder="VD: BGH, 20-11, STK"
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
+                    />
+                  </div>
+                  <div className="col-span-5">
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                      Cách AI đọc thành tiếng
+                    </label>
+                    <input
+                      type="text"
+                      value={newSpokenText}
+                      onChange={(e) => setNewSpokenText(e.target.value)}
+                      placeholder="VD: Ban Giám Hiệu"
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">
+                      Phân loại
+                    </label>
+                    <select
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    >
+                      <option value="ACRONYM">Viết tắt</option>
+                      <option value="DATE_TIME">Ngày giờ</option>
+                      <option value="CONTACT">Hotline</option>
+                      <option value="COMMON">Thông dụng</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddRule}
+                    disabled={isSavingRule}
+                    className="px-3.5 py-1.5 bg-[#D32F2F] hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1 transition shadow-xs disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isSavingRule ? 'Đang lưu...' : 'Thêm vào từ điển'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Danh sách quy tắc hiện có */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700 pb-1">
+                  <span>Danh mục quy tắc đang áp dụng ({ttsRules.length})</span>
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    Tự động áp dụng khi đọc Audio AI
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto bg-white">
+                  {ttsRules.map((rule, idx) => (
+                    <div
+                      key={rule.id || `${rule.keyword}-${idx}`}
+                      className="p-2.5 flex items-center justify-between hover:bg-slate-50 text-xs"
+                    >
+                      <div className="flex items-center space-x-2.5 flex-1 min-w-0 pr-2">
+                        <span
+                          className={`px-1.5 py-0.5 text-[9px] font-bold rounded uppercase shrink-0 ${
+                            rule.category === 'ACRONYM'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : rule.category === 'DATE_TIME'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : rule.category === 'CONTACT'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {rule.category === 'ACRONYM'
+                            ? 'Viết tắt'
+                            : rule.category === 'DATE_TIME'
+                            ? 'Ngày giờ'
+                            : rule.category === 'CONTACT'
+                            ? 'Liên hệ'
+                            : 'Chung'}
+                        </span>
+                        <span className="font-bold text-slate-900 shrink-0 font-mono">
+                          {rule.keyword}
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="text-emerald-800 font-medium truncate">
+                          {rule.spoken_text}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRule(rule)}
+                        className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 transition shrink-0"
+                        title="Xóa quy tắc này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsTtsDictOpen(false)}
+                className="px-4 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition"
+              >
+                Hoàn tất & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL XEM TRƯỚC LỜI AI SẼ ĐỌC (TTS PREVIEW DIALOG)                    */}
+      {/* ===================================================================== */}
+      {isTtsPreviewOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                    Xem trước Lời AI sẽ đọc thành tiếng
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    So sánh văn bản hiển thị trên poster và chuỗi phát âm thực tế qua loa
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsTtsPreviewOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3.5 text-xs">
+              <div>
+                <span className="block font-bold text-slate-700 mb-1">
+                  1. Văn bản gốc trên Poster:
+                </span>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 leading-relaxed max-h-36 overflow-y-auto">
+                  {getCurrentSpokenSpeech().raw}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-emerald-900 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    2. Lời phát âm AI (Đã qua Từ điển & Bộ chuẩn hóa):
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Sẵn sàng đọc
+                  </span>
+                </div>
+                <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-300 text-emerald-950 font-medium leading-relaxed max-h-48 overflow-y-auto">
+                  {getCurrentSpokenSpeech().normalized}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleTogglePlayAudio}
+                className="px-3.5 py-1.5 bg-[#D32F2F] hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 transition shadow-xs"
+              >
+                {isPlayingAudio ? (
+                  <>
+                    <Square className="w-3 h-3 fill-white" />
+                    <span>Dừng phát</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3 h-3 fill-white" />
+                    <span>Phát thử qua loa thiết bị</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTtsPreviewOpen(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-lg transition"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

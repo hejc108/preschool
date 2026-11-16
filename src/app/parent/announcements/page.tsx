@@ -25,6 +25,8 @@ import {
   AnnouncementItem,
   EMBEDDED_BACKGROUNDS,
 } from '@/lib/announcements/posterTemplates';
+import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
+import { normalizeVietnameseSpeech } from '@/lib/announcements/ttsDictionary';
 
 function ParentAnnouncementsSkeleton() {
   return (
@@ -236,12 +238,13 @@ function ParentAnnouncementsInner() {
     win.speechSynthesis.cancel();
 
     const meta = currentAnnouncement.metadata || {};
-    const spokenText = `${currentAnnouncement.title}. ${currentAnnouncement.content}. ${
+    const rawSpoken = `${currentAnnouncement.title}. ${currentAnnouncement.content}. ${
       meta.time_value ? `Thời gian: ${meta.time_value}.` : ''
     } ${meta.location_value ? `Địa điểm: ${meta.location_value}.` : ''} ${
       meta.deadline_value ? `Lưu ý: ${meta.deadline_value}.` : ''
     } Trường Mầm non Sương Mai trân trọng thông báo đến Quý Phụ huynh.`;
 
+    const spokenText = normalizeVietnameseSpeech(rawSpoken);
     const utterance = new SpeechSynthesisUtterance(spokenText);
     utterance.lang = 'vi-VN';
     utterance.pitch = 1.25;
@@ -567,159 +570,24 @@ function ParentAnnouncementsInner() {
                   {activeTab === 'poster' ? (
                     /* ================= TAB 1: XEM POSTER 6 TẦNG ================= */
                     <div className="flex flex-col items-center">
-                      <div
+                      <AnnouncementPosterCard
                         ref={posterRef}
-                        className={`w-full max-w-[360px] aspect-[3/4.3] rounded-2xl shadow-xl overflow-hidden flex flex-col justify-between relative border-4 select-none bg-cover bg-center transition-all ${
-                          isBgEnabled
-                            ? 'border-white bg-white'
-                            : 'border-red-200 bg-gradient-to-b from-white to-red-50/40'
-                        }`}
-                        style={
-                          isBgEnabled && bgImage
-                            ? { backgroundImage: `url('${bgImage}')` }
-                            : undefined
-                        }
-                      >
-                        {/* TẦNG 1: HEADER TRƯỜNG */}
-                        <div className="bg-[#D32F2F]/95 backdrop-blur-xs text-white px-4 py-2 flex items-center justify-center space-x-2 relative z-10 shadow-md">
-                          <div className="w-6 h-6 rounded-full bg-white text-[#D32F2F] font-extrabold text-[10px] flex items-center justify-center shadow-xs shrink-0">
-                            SM
-                          </div>
-                          <div className="text-left">
-                            <h4 className="text-[11px] font-extrabold tracking-wide uppercase leading-none">
-                              Trường Mầm Non Sương Mai
-                            </h4>
-                            <p className="text-[8px] opacity-90 mt-0.5">
-                              Krông Pắc, Đắk Lắk • 0262.352.1234
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* VÙNG TRUNG TÂM POSTER */}
-                        <div className="px-4 py-2 my-auto flex flex-col items-center text-center relative z-10 space-y-2">
-                          {/* TẦNG 2: RUY BĂNG TIÊU ĐỀ NỔI BẬT CĂN GIỮA */}
-                          <div
-                            id="posterRibbonBox"
-                            className={
-                              isBgEnabled
-                                ? 'text-white px-4 py-2 rounded-2xl border-2 border-[#FFCDD2] max-w-[94%] mx-auto transition-all text-center'
-                                : 'bg-red-50 text-[#D32F2F] px-4 py-2 rounded-xl border border-red-200 max-w-[95%] mx-auto transition-all text-center shadow-xs'
-                            }
-                            style={
-                              isBgEnabled
-                                ? {
-                                    background: 'linear-gradient(135deg, #E53935 0%, #C62828 100%)',
-                                    boxShadow: '0 8px 18px rgba(0, 0, 0, 0.25)',
-                                  }
-                                : undefined
-                            }
-                          >
-                            <h2
-                              className={`text-sm font-extrabold leading-snug tracking-wide ${
-                                isBgEnabled ? 'text-white drop-shadow-md' : 'text-[#D32F2F]'
-                              }`}
-                              style={{
-                                fontFamily: '"Playfair Display", Georgia, serif',
-                              }}
-                            >
-                              {ann.title}
-                            </h2>
-                          </div>
-
-                          {/* TẦNG 3: KHỐI THẺ THÔNG TIN ĐỘNG */}
-                          <div className="w-full space-y-1.5 text-left">
-                            {showTime && (
-                              <div className="flex items-center space-x-2 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
-                                <CalendarClock className="w-3.5 h-3.5 text-[#D32F2F] shrink-0" />
-                                <span className="text-[10.5px] font-bold text-slate-900 leading-tight">
-                                  {meta.time_value}
-                                </span>
-                              </div>
-                            )}
-
-                            {showLoc && (
-                              <div className="flex items-center space-x-2 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
-                                <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                <span className="text-[10.5px] font-bold text-slate-900 leading-tight">
-                                  {meta.location_value}
-                                </span>
-                              </div>
-                            )}
-
-                            {showTable && meta.table_data && (
-                              <div className="bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl border border-emerald-200 shadow-xs text-[9.5px]">
-                                {meta.table_data.row1_label && (
-                                  <div className="flex justify-between py-0.5 border-b border-slate-100">
-                                    <span className="text-slate-700 font-medium">
-                                      {meta.table_data.row1_label}
-                                    </span>
-                                    <span className="font-extrabold text-slate-900">
-                                      {meta.table_data.row1_amt}
-                                    </span>
-                                  </div>
-                                )}
-                                {meta.table_data.row2_label && (
-                                  <div className="flex justify-between py-0.5">
-                                    <span className="text-slate-700 font-medium">
-                                      {meta.table_data.row2_label}
-                                    </span>
-                                    <span className="font-extrabold text-slate-900">
-                                      {meta.table_data.row2_amt}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {showDeadline && (
-                              <div className="flex items-center space-x-2 bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-sky-200/80 shadow-xs">
-                                <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                                <span className="text-[9.5px] font-semibold text-slate-800 leading-tight">
-                                  {meta.deadline_value}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* TẦNG 4: LỜI NGỎ / VĂN BẢN (NỀN TRẮNG MỜ #posterBodyCard HIỂN THỊ RÕ CHỮ) */}
-                          <div
-                            id="posterBodyCard"
-                            className="w-full bg-white/94 backdrop-blur-sm border border-slate-200/80 rounded-xl px-3 py-2 shadow-xs"
-                            style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}
-                          >
-                            <p className="text-[10px] text-slate-800 font-medium leading-relaxed text-justify line-clamp-5">
-                              {ann.content}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* TẦNG 5 & 6: PHẠM VI NHẬN & DẤU ĐỎ HIỆU TRƯỞNG */}
-                        <div className="px-3.5 pb-2.5 pt-1 flex items-end justify-between relative z-10">
-                          <span className="px-2 py-0.5 bg-white/90 backdrop-blur-xs rounded-md text-[8.5px] font-extrabold text-slate-800 shadow-xs border border-slate-200/80">
-                            Gửi: <span>{meta.audience || 'Toàn trường'}</span>
-                          </span>
-
-                          {showSeal && (
-                            <div className="flex items-center space-x-1.5 bg-white/90 backdrop-blur-xs px-2 py-1 rounded-xl border border-red-200 shadow-xs">
-                              <div className="text-right">
-                                <p className="text-[7.5px] font-bold text-slate-700 uppercase leading-none">
-                                  Hiệu Trưởng
-                                </p>
-                                <p
-                                  className="text-[8.5px] italic text-red-700 font-bold leading-tight"
-                                  style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
-                                >
-                                  Vũ Thị Xuân
-                                </p>
-                              </div>
-                              <div className="w-7 h-7 rounded-full border border-red-600 flex flex-col items-center justify-center text-red-600 font-extrabold text-[5px] leading-none transform -rotate-12 bg-red-50">
-                                <span>SƯƠNG MAI</span>
-                                <span className="mt-0.5">ĐÃ DUYỆT</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                        title={ann.title}
+                        bodyText={ann.content}
+                        templateId={tplId}
+                        customBgUrl={meta.custom_bg_url}
+                        isBgEnabled={isBgEnabled}
+                        audience={meta.audience || 'Toàn trường'}
+                        showTimeCard={showTime}
+                        timeValue={meta.time_value}
+                        showLocCard={showLoc}
+                        locValue={meta.location_value}
+                        showTableCard={showTable}
+                        tableData={meta.table_data}
+                        showDeadlineCard={showDeadline}
+                        deadlineValue={meta.deadline_value}
+                        showSealCard={showSeal}
+                      />
                     </div>
                   ) : (
                     /* ================= TAB 2: VĂN BẢN GỐC ================= */
