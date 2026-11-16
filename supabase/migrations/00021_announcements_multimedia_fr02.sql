@@ -1,7 +1,7 @@
 -- ==============================================================================
 -- 00021_announcements_multimedia_fr02.sql
 -- Nâng cấp tính năng Quản lý & Tạo Thông báo Đa phương tiện (FR-02)
--- Bổ sung trường category, status, metadata và chính sách RLS UPDATE/DELETE
+-- Bổ sung trường category, status, metadata, RLS UPDATE/DELETE và Storage Bucket
 -- ==============================================================================
 
 ALTER TABLE public.announcements 
@@ -25,3 +25,21 @@ DROP POLICY IF EXISTS "Admin delete announcements" ON public.announcements;
 CREATE POLICY "Admin delete announcements" ON public.announcements
   FOR DELETE TO authenticated
   USING (public.is_admin_active());
+
+-- Khởi tạo Supabase Storage Bucket cho ảnh nền poster thông báo (nếu có schema storage)
+DO $$
+BEGIN
+  IF to_regclass('storage.buckets') IS NOT NULL THEN
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    VALUES (
+      'announcement-posters',
+      'announcement-posters',
+      true,
+      10485760, -- 10MB
+      ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      public = true,
+      file_size_limit = 10485760;
+  END IF;
+END $$;

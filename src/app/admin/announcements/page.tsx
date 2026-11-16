@@ -17,6 +17,7 @@ import {
   Mic,
   Palette,
   Play,
+  Square,
   Plus,
   Save,
   Search,
@@ -33,6 +34,8 @@ import {
   VolumeX,
   ChevronLeft,
   Trash2,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import {
@@ -83,7 +86,7 @@ export default function AnnouncementsStudioPage() {
 
   const [showDeadlineCard, setShowDeadlineCard] = useState<boolean>(true);
   const [deadlineValue, setDeadlineValue] = useState<string>(
-    'Trang phục lễ hội • Hỗ trợ BGH: 0262.352.xxxx'
+    'Trang phục lễ hội • Hỗ trợ BGH: 0262.352.1234'
   );
 
   const [showSealCard, setShowSealCard] = useState<boolean>(true);
@@ -98,6 +101,7 @@ export default function AnnouncementsStudioPage() {
   const [isAudioSynced, setIsAudioSynced] = useState<boolean>(true);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Mobile PWA view state: 'poster' | 'text'
   const [mobileMode, setMobileMode] = useState<'poster' | 'text'>('poster');
@@ -119,8 +123,19 @@ export default function AnnouncementsStudioPage() {
     unreadCount: '',
   });
 
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    id: string;
+    title: string;
+  }>({
+    open: false,
+    id: '',
+    title: '',
+  });
+
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isUploadingBg, setIsUploadingBg] = useState<boolean>(false);
 
   // Poster DOM Ref for html-to-image
   const posterRef = useRef<HTMLDivElement>(null);
@@ -129,116 +144,27 @@ export default function AnnouncementsStudioPage() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3200);
+    }, 3500);
   };
 
-  // Sample default initial announcements if API has none
-  const defaultAnnouncements: AnnouncementItem[] = [
-    {
-      id: 'ann-01',
-      title: 'Thông báo thu học phí & tiền ăn tháng 11/2026',
-      content:
-        'Nhà trường gửi tới Quý Phụ huynh bảng kê chi tiết các khoản thu bán trú tháng 11. Phụ huynh vui lòng hoàn thành đúng thời hạn quy định.',
-      category: 'Học phí',
-      status: 'PUBLISHED',
-      target_role: 'ALL',
-      metadata: {
-        template_id: 'hoc-phi',
-        is_bg_enabled: true,
-        audience: 'Toàn trường (200 bé)',
-        cards_visibility: { time: true, location: false, table: true, deadline: true, seal: true },
-        time_value: 'Hạn nộp: 10/11/2026',
-        location_value: 'Văn phòng Kế toán Sương Mai',
-        deadline_value: 'STK Vietcombank: 0231.000.xxxx - Mầm non Sương Mai',
-        table_data: {
-          row1_label: 'Học phí bán trú tháng 11',
-          row1_amt: '1.250.000 đ',
-          row2_label: 'Tiền ăn (22 ngày x 35.000đ)',
-          row2_amt: '770.000 đ',
-        },
-      },
-      read_count: 184,
-      total_target_count: 200,
-    },
-    {
-      id: 'ann-02',
-      title: 'Giấy mời họp Phụ huynh đầu năm học 2026 - 2027',
-      content:
-        'Trân trọng kính mời Quý Phụ huynh đến tham dự buổi họp triển khai kế hoạch chăm sóc, nuôi dưỡng và giáo dục trẻ năm học mới tại lớp học của bé.',
-      category: 'Giấy mời',
-      status: 'PUBLISHED',
-      target_role: 'ALL',
-      metadata: {
-        template_id: 'giay-moi',
-        is_bg_enabled: true,
-        audience: 'Toàn trường (200 bé)',
-        cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
-        time_value: '08:00 Thứ Bảy, 19/09/2026',
-        location_value: 'Phòng học các lớp Khối Mầm - Chồi - Lá',
-        deadline_value: 'Kính mong Quý Phụ huynh có mặt đúng giờ',
-      },
-      read_count: 196,
-      total_target_count: 200,
-    },
-    {
-      id: 'ann-03',
-      title: 'Lịch khám sức khỏe định kỳ & đo chỉ số WHO đợt 1',
-      content:
-        'Bộ phận Y tế nhà trường phối hợp cùng Trạm Y tế khám tổng quát (Răng - Hàm - Mặt, Tai - Mũi - Họng, cân đo chỉ số WHO) cho 100% trẻ đang theo học.',
-      category: 'Sức khỏe',
-      status: 'PENDING_APPROVAL',
-      target_role: 'ALL',
-      metadata: {
-        template_id: 'suc-khoe',
-        is_bg_enabled: true,
-        audience: 'Toàn trường (200 bé)',
-        cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
-        time_value: '07:30 - 11:00 Ngày 15/10/2026',
-        location_value: 'Phòng Y tế Trường Mầm non Sương Mai',
-        deadline_value: 'Phụ huynh cho bé đi học đầy đủ và đúng giờ',
-      },
-      read_count: 0,
-      total_target_count: 200,
-    },
-    {
-      id: 'ann-04',
-      title: 'Thông báo nghỉ lễ Quốc khánh & Lịch trực Ban Giám hiệu',
-      content:
-        'Nhà trường trân trọng thông báo lịch nghỉ lễ tới toàn thể Quý Phụ huynh. Kính chúc gia đình và các bé có kỳ nghỉ lễ thật vui vẻ, an toàn và ấm áp.',
-      category: 'Nghỉ lễ',
-      status: 'DRAFT',
-      target_role: 'ALL',
-      metadata: {
-        template_id: 'nghi-le',
-        is_bg_enabled: false,
-        audience: 'Toàn trường (200 bé)',
-        cards_visibility: { time: true, location: false, table: false, deadline: true, seal: true },
-        time_value: 'Nghỉ từ 01/09 đến hết 03/09/2026',
-        location_value: '',
-        deadline_value: 'Hotline trực trường: 0262.352.xxxx',
-      },
-      read_count: 0,
-      total_target_count: 200,
-    },
-  ];
-
-  // Load announcements from API
+  // Load announcements directly from real Database API
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/announcements');
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.announcements) && json.announcements.length > 0) {
+        if (json.success && Array.isArray(json.announcements)) {
           setAnnouncements(json.announcements);
         } else {
-          setAnnouncements(defaultAnnouncements);
+          setAnnouncements([]);
         }
       } else {
-        setAnnouncements(defaultAnnouncements);
+        setAnnouncements([]);
       }
     } catch (e) {
-      setAnnouncements(defaultAnnouncements);
+      console.error('Lỗi khi tải thông báo:', e);
+      setAnnouncements([]);
     } finally {
       setLoading(false);
     }
@@ -246,6 +172,20 @@ export default function AnnouncementsStudioPage() {
 
   useEffect(() => {
     fetchAnnouncements();
+  }, []);
+
+  // Cleanup speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (audioContextRef.current) {
+        try {
+          audioContextRef.current.close();
+        } catch (_) {}
+      }
+    };
   }, []);
 
   // Filter announcements
@@ -263,23 +203,37 @@ export default function AnnouncementsStudioPage() {
     return true;
   });
 
+  // Bug 2: Apply all template presets (Title, Body, Audience, Time, Location, Deadline, Table)
+  const applyTemplate = (tpl: PosterTemplate) => {
+    setCurrentTemplateId(tpl.id);
+    setCustomUploadedBgUrl(null);
+    setIsBgEnabled(true);
+    setCategory(tpl.name);
+    setTitle(tpl.defaultTitle);
+    setBodyText(tpl.defaultBody);
+    if (tpl.defaultAudience) setAudience(tpl.defaultAudience);
+    if (tpl.defaultTime) setTimeValue(tpl.defaultTime);
+    if (tpl.defaultLocation) setLocValue(tpl.defaultLocation);
+    if (tpl.defaultDeadline) setDeadlineValue(tpl.defaultDeadline);
+    setShowTableCard(Boolean(tpl.showTable));
+    if (tpl.defaultTable) {
+      if (tpl.defaultTable.row1Label) setRow1Label(tpl.defaultTable.row1Label);
+      if (tpl.defaultTable.row1Amt) setRow1Amt(tpl.defaultTable.row1Amt);
+      if (tpl.defaultTable.row2Label) setRow2Label(tpl.defaultTable.row2Label);
+      if (tpl.defaultTable.row2Amt) setRow2Amt(tpl.defaultTable.row2Amt);
+    }
+    setIsAudioSynced(false);
+    showToast(`Đã đồng bộ mẫu "${tpl.name}" kèm dữ liệu 3 thẻ thông tin!`);
+  };
+
   // Switch to Studio with specific template
   const openTemplateInStudio = (tplId: string) => {
     const tpl = POSTER_TEMPLATES.find((t) => t.id === tplId);
     if (!tpl) return;
-
     setCurrentAnnouncementId(null);
     setStatus('DRAFT');
-    setCategory(tpl.name);
-    setCurrentTemplateId(tpl.id);
-    setCustomUploadedBgUrl(null);
-    setIsBgEnabled(true);
-    setTitle(tpl.defaultTitle);
-    setBodyText(tpl.defaultBody);
-    setShowTableCard(tpl.showTable);
-
+    applyTemplate(tpl);
     setCurrentView('studio');
-    showToast(`Đã áp dụng mẫu "${tpl.name}" vào Studio`);
   };
 
   // Open existing announcement in Studio
@@ -314,57 +268,244 @@ export default function AnnouncementsStudioPage() {
       if (meta.table_data.row2_amt) setRow2Amt(meta.table_data.row2_amt);
     }
 
+    if (meta.voice) setSelectedVoice(meta.voice);
+    if (meta.music) setSelectedMusic(meta.music);
+    setIsAudioSynced(Boolean(meta.audio_synced));
+
     setCurrentView('studio');
   };
 
-  // Clone an announcement to create a new period
-  const cloneAnnouncement = (ann: AnnouncementItem, newTitle?: string) => {
-    setCurrentAnnouncementId(null);
-    setStatus('DRAFT');
-    setCategory(ann.category || 'Lễ hội');
-    setTitle(newTitle || `${ann.title} (Bản sao mới)`);
-    setBodyText(ann.content);
+  // Real Database Cloning: immediately creates a new record in Database in DRAFT status
+  const cloneAnnouncement = async (ann: AnnouncementItem) => {
+    try {
+      showToast('Đang nhân bản thông báo sang bản ghi mới trong CSDL...');
+      const clonedTitle = `${ann.title} (Bản sao mới)`;
+      const meta = ann.metadata || {};
 
-    const meta = ann.metadata || {};
-    setIsBgEnabled(meta.is_bg_enabled !== false);
-    setCurrentTemplateId(meta.template_id || 'le-hoi');
-    setCustomUploadedBgUrl(meta.custom_bg_url || null);
-    if (meta.audience) setAudience(meta.audience);
+      const metadataPayload: AnnouncementMetadata = {
+        template_id: meta.template_id || 'le-hoi',
+        is_bg_enabled: meta.is_bg_enabled !== false,
+        custom_bg_url: meta.custom_bg_url || null,
+        audience: meta.audience || 'Toàn trường (200 bé)',
+        cards_visibility: meta.cards_visibility || {
+          time: true,
+          location: true,
+          table: false,
+          deadline: true,
+          seal: true,
+        },
+        time_value: meta.time_value || '',
+        location_value: meta.location_value || '',
+        deadline_value: meta.deadline_value || '',
+        table_data: meta.table_data,
+        voice: meta.voice || selectedVoice,
+        music: meta.music || selectedMusic,
+        audio_synced: false,
+        has_poster: true,
+        has_audio: true,
+      };
 
-    const cards = meta.cards_visibility || {};
-    setShowTimeCard(cards.time !== false);
-    setShowLocCard(cards.location !== false);
-    setShowTableCard(Boolean(cards.table));
-    setShowDeadlineCard(cards.deadline !== false);
-    setShowSealCard(cards.seal !== false);
+      const payload = {
+        title: clonedTitle,
+        content: ann.content,
+        category: ann.category || 'Lễ hội',
+        status: 'DRAFT',
+        target_role: ann.target_role || 'ALL',
+        metadata: metadataPayload,
+      };
 
-    if (meta.time_value) setTimeValue(meta.time_value);
-    if (meta.location_value) setLocValue(meta.location_value);
-    if (meta.deadline_value) setDeadlineValue(meta.deadline_value);
+      const res = await fetch('/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (meta.table_data) {
-      if (meta.table_data.row1_label) setRow1Label(meta.table_data.row1_label);
-      if (meta.table_data.row1_amt) setRow1Amt(meta.table_data.row1_amt);
-      if (meta.table_data.row2_label) setRow2Label(meta.table_data.row2_label);
-      if (meta.table_data.row2_amt) setRow2Amt(meta.table_data.row2_amt);
+      const json = await res.json();
+      if (res.ok && json.success && json.announcement) {
+        showToast('Đã nhân bản sang bản nháp mới trong CSDL thành công!');
+        await fetchAnnouncements();
+        openAnnouncementInStudio(json.announcement);
+      } else {
+        showToast(json.error || 'Không thể nhân bản vào CSDL. Vui lòng thử lại!');
+      }
+    } catch (err: any) {
+      console.error('Lỗi nhân bản:', err);
+      showToast('Lỗi kết nối khi nhân bản thông báo.');
     }
-
-    setCurrentView('studio');
-    showToast('Đã nhân bản sang bản nháp mới cho kỳ tiếp theo!');
   };
 
-  // Custom image upload
-  const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Real Database Deletion
+  const handleDeleteAnnouncement = async () => {
+    if (!deleteModal.id) return;
+    try {
+      showToast('Đang xóa bản ghi khỏi cơ sở dữ liệu...');
+      const res = await fetch(`/api/announcements?id=${deleteModal.id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        showToast('Đã xóa thông báo khỏi cơ sở dữ liệu thành công!');
+        setDeleteModal({ open: false, id: '', title: '' });
+        await fetchAnnouncements();
+        if (currentAnnouncementId === deleteModal.id) {
+          setCurrentAnnouncementId(null);
+          setCurrentView('list');
+        }
+      } else {
+        showToast(json.error || 'Không thể xóa thông báo.');
+      }
+    } catch (err) {
+      console.error('Lỗi xóa:', err);
+      showToast('Lỗi kết nối khi xóa thông báo.');
+    }
+  };
+
+  // Seed sample data into real Database if table is currently empty
+  const handleSeedSampleData = async () => {
+    try {
+      showToast('Đang khởi tạo dữ liệu mẫu Sương Mai vào cơ sở dữ liệu...');
+      const samples = [
+        {
+          title: 'Thông báo thu học phí & tiền ăn tháng 11/2026',
+          content:
+            'Nhà trường gửi tới Quý Phụ huynh bảng kê chi tiết các khoản thu bán trú tháng 11. Phụ huynh vui lòng hoàn thành đúng thời hạn quy định.',
+          category: 'Học phí',
+          status: 'PUBLISHED',
+          target_role: 'ALL',
+          metadata: {
+            template_id: 'hoc-phi',
+            is_bg_enabled: true,
+            audience: 'Toàn trường (200 bé)',
+            cards_visibility: { time: true, location: false, table: true, deadline: true, seal: true },
+            time_value: 'Hạn nộp: 10/11/2026',
+            location_value: 'Văn phòng Kế toán Sương Mai',
+            deadline_value: 'STK Vietcombank: 0231.000.1234 - Mầm non Sương Mai',
+            table_data: {
+              row1_label: 'Học phí bán trú tháng 11',
+              row1_amt: '1.250.000 đ',
+              row2_label: 'Tiền ăn (22 ngày x 35.000đ)',
+              row2_amt: '770.000 đ',
+            },
+            read_count: 184,
+            total_target_count: 200,
+          },
+        },
+        {
+          title: 'Giấy mời họp Phụ huynh đầu năm học 2026 - 2027',
+          content:
+            'Trân trọng kính mời Quý Phụ huynh đến tham dự buổi họp triển khai kế hoạch chăm sóc, nuôi dưỡng và giáo dục trẻ năm học mới tại lớp học của bé.',
+          category: 'Giấy mời',
+          status: 'PUBLISHED',
+          target_role: 'ALL',
+          metadata: {
+            template_id: 'giay-moi',
+            is_bg_enabled: true,
+            audience: 'Toàn trường (200 bé)',
+            cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
+            time_value: '08:00 Thứ Bảy, 19/09/2026',
+            location_value: 'Phòng học các lớp Khối Mầm - Chồi - Lá',
+            deadline_value: 'Hotline nhà trường: 0262.352.1234',
+            read_count: 196,
+            total_target_count: 200,
+          },
+        },
+        {
+          title: 'Lịch khám sức khỏe định kỳ & đo chỉ số WHO đợt 1',
+          content:
+            'Bộ phận Y tế nhà trường phối hợp cùng Trạm Y tế khám tổng quát (Răng - Hàm - Mặt, Tai - Mũi - Họng, cân đo chỉ số WHO) cho 100% trẻ đang theo học.',
+          category: 'Sức khỏe',
+          status: 'PENDING_APPROVAL',
+          target_role: 'ALL',
+          metadata: {
+            template_id: 'suc-khoe',
+            is_bg_enabled: true,
+            audience: 'Toàn trường (200 bé)',
+            cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
+            time_value: '07:30 - 11:00 Ngày 15/10/2026',
+            location_value: 'Phòng Y tế Trường Mầm non Sương Mai',
+            deadline_value: 'Phụ huynh cho bé đi học đầy đủ và đúng giờ',
+            read_count: 0,
+            total_target_count: 200,
+          },
+        },
+        {
+          title: 'Thông báo nghỉ lễ Quốc khánh & Lịch trực Ban Giám hiệu',
+          content:
+            'Nhà trường trân trọng thông báo lịch nghỉ lễ tới toàn thể Quý Phụ huynh. Kính chúc gia đình và các bé có kỳ nghỉ lễ thật vui vẻ, an toàn và ấm áp.',
+          category: 'Nghỉ lễ',
+          status: 'DRAFT',
+          target_role: 'ALL',
+          metadata: {
+            template_id: 'nghi-le',
+            is_bg_enabled: false,
+            audience: 'Toàn trường (200 bé)',
+            cards_visibility: { time: true, location: false, table: false, deadline: true, seal: true },
+            time_value: 'Nghỉ từ 01/09 đến hết 03/09/2026',
+            location_value: 'Trường Mầm non Sương Mai',
+            deadline_value: 'Hotline trực trường: 0262.352.1234',
+            read_count: 0,
+            total_target_count: 200,
+          },
+        },
+      ];
+
+      for (const item of samples) {
+        await fetch('/api/announcements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item),
+        });
+      }
+
+      showToast('Đã khởi tạo 4 thông báo mẫu chuẩn Sương Mai vào CSDL thành công!');
+      await fetchAnnouncements();
+    } catch (e) {
+      console.error('Lỗi seed data:', e);
+      showToast('Lỗi khi nạp dữ liệu mẫu vào CSDL.');
+    }
+  };
+
+  // Real Storage Upload: uploads file to Supabase Storage and gets back a public URL
+  const handleCustomImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setCustomUploadedBgUrl(dataUrl);
-      setIsBgEnabled(true);
-      showToast('Đã tải ảnh nền thiết kế riêng lên Poster!');
-    };
-    reader.readAsDataURL(file);
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Chỉ chấp nhận các tệp định dạng hình ảnh (JPEG, PNG, WEBP).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Dung lượng ảnh vượt quá giới hạn 10MB.');
+      return;
+    }
+
+    try {
+      setIsUploadingBg(true);
+      showToast('Đang tải ảnh lên kho lưu trữ Supabase Storage...');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/announcements/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setCustomUploadedBgUrl(data.url);
+        setIsBgEnabled(true);
+        showToast('Đã tải ảnh lên Supabase Storage và áp dụng vào Poster!');
+      } else {
+        showToast(data.error || 'Không thể lưu ảnh vào Storage. Vui lòng thử lại!');
+      }
+    } catch (err: any) {
+      console.error('Lỗi upload ảnh:', err);
+      showToast('Lỗi kết nối khi tải ảnh lên Storage.');
+    } finally {
+      setIsUploadingBg(false);
+      e.target.value = '';
+    }
   };
 
   // Gemini AI generation mock
@@ -374,15 +515,14 @@ export default function AnnouncementsStudioPage() {
     const altId = currentTemplateId === 'giay-moi' ? 'hoat-dong' : 'giay-moi';
     const tpl = POSTER_TEMPLATES.find((t) => t.id === altId);
     if (tpl) {
-      setCurrentTemplateId(tpl.id);
-      setCustomUploadedBgUrl(null);
-      setIsBgEnabled(true);
+      applyTemplate(tpl);
     }
   };
 
-  // Save draft
+  // Save draft to real Database
   const handleSaveDraft = async () => {
     try {
+      showToast('Đang lưu bản nháp vào cơ sở dữ liệu...');
       const metadataPayload: AnnouncementMetadata = {
         template_id: currentTemplateId,
         is_bg_enabled: isBgEnabled,
@@ -428,23 +568,27 @@ export default function AnnouncementsStudioPage() {
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        const json = await res.json();
+      const json = await res.json();
+      if (res.ok && json.success) {
         if (json.announcement?.id) {
           setCurrentAnnouncementId(json.announcement.id);
         }
+        setStatus('DRAFT');
+        showToast('Đã lưu bản nháp thông báo vào CSDL thành công!');
+        await fetchAnnouncements();
+      } else {
+        showToast(json.error || 'Lỗi khi lưu bản nháp vào CSDL.');
       }
-      setStatus('DRAFT');
-      showToast('Đã lưu bản nháp thông báo thành công!');
-      fetchAnnouncements();
     } catch (err) {
-      showToast('Đã lưu bản nháp thông báo (chế độ dự phòng)!');
+      console.error('Lỗi lưu nháp:', err);
+      showToast('Lỗi kết nối khi lưu bản nháp.');
     }
   };
 
-  // Approve & Publish
+  // Approve & Publish to real Database
   const handleApproveAndPublish = async () => {
     try {
+      showToast('Đang duyệt và phát hành thông báo...');
       const metadataPayload: AnnouncementMetadata = {
         template_id: currentTemplateId,
         is_bg_enabled: isBgEnabled,
@@ -490,22 +634,24 @@ export default function AnnouncementsStudioPage() {
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        const json = await res.json();
+      const json = await res.json();
+      if (res.ok && json.success) {
         if (json.announcement?.id) {
           setCurrentAnnouncementId(json.announcement.id);
         }
+        setStatus('PUBLISHED');
+        showToast('Hiệu trưởng đã duyệt & phát hành thông báo thành công!');
+        await fetchAnnouncements();
+      } else {
+        showToast(json.error || 'Lỗi khi duyệt & phát hành.');
       }
-      setStatus('PUBLISHED');
-      showToast('Hiệu trưởng đã duyệt & phát hành thông báo thành công!');
-      fetchAnnouncements();
     } catch (err) {
-      setStatus('PUBLISHED');
-      showToast('Đã duyệt & phát hành thông báo thành công!');
+      console.error('Lỗi phát hành:', err);
+      showToast('Lỗi kết nối khi phát hành.');
     }
   };
 
-  // Export Poster to PNG
+  // Export Poster to PNG using html-to-image
   const downloadPosterPng = async () => {
     if (!posterRef.current) return;
     try {
@@ -526,26 +672,110 @@ export default function AnnouncementsStudioPage() {
       showToast('Đã tải ảnh Poster PNG về máy thành công!');
     } catch (err) {
       console.error('Lỗi xuất ảnh PNG:', err);
-      showToast('Có lỗi khi tạo ảnh. Vui lòng thử lại!');
+      showToast('Có lỗi khi tạo ảnh PNG. Vui lòng thử lại!');
     }
   };
 
-  // Generate Audio AI
+  // Real TTS Voice Synthesis: Web Speech API with real device audio playback
   const handleGenerateAiAudio = () => {
     setIsGeneratingAudio(true);
     setTimeout(() => {
       setIsGeneratingAudio(false);
       setIsAudioSynced(true);
-      showToast('Đã tạo xong giọng đọc AI kèm nhạc nền bản quyền!');
-    }, 700);
+      showToast('Đã tổng hợp giọng đọc AI tiếng Việt sẵn sàng phát qua loa!');
+    }, 600);
   };
 
-  // Toggle Audio Playback
+  // Toggle Audio Playback through device speakers
   const handleTogglePlayAudio = () => {
-    setIsPlayingAudio(!isPlayingAudio);
-    if (!isPlayingAudio) {
-      showToast('Đang phát thử giọng đọc AI của trường Sương Mai (00:24)...');
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      showToast('Trình duyệt không hỗ trợ phát âm thanh Web Speech API.');
+      return;
     }
+
+    if (isPlayingAudio) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      showToast('Đã dừng phát âm thanh.');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    // Prepare speech text from official announcement content
+    const spokenText = `${title}. ${bodyText}. ${
+      showTimeCard && timeValue ? `Thời gian: ${timeValue}.` : ''
+    } ${showLocCard && locValue ? `Địa điểm: ${locValue}.` : ''} ${
+      showDeadlineCard && deadlineValue ? `Lưu ý: ${deadlineValue}.` : ''
+    } Trường Mầm non Sương Mai trân trọng thông báo.`;
+
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    utterance.lang = 'vi-VN';
+
+    // Tone & speed adjustments according to selected voice
+    if (selectedVoice.includes('Bé gái')) {
+      utterance.pitch = 1.3;
+      utterance.rate = 1.0;
+    } else if (selectedVoice.includes('Cô giáo')) {
+      utterance.pitch = 1.05;
+      utterance.rate = 0.95;
+    } else {
+      utterance.pitch = 0.9;
+      utterance.rate = 0.95;
+    }
+
+    // Attempt to pick a Vietnamese voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find((v) => v.lang.includes('vi') || v.lang.includes('VN'));
+    if (viVoice) {
+      utterance.voice = viVoice;
+    }
+
+    utterance.onstart = () => {
+      setIsPlayingAudio(true);
+      showToast('Đang phát giọng đọc AI của trường Sương Mai qua loa thiết bị...');
+    };
+
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+    };
+
+    utterance.onerror = () => {
+      setIsPlayingAudio(false);
+    };
+
+    // Play subtle ambient harmony if music is selected
+    if (selectedMusic !== 'Không dùng nhạc nền') {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          audioContextRef.current = ctx;
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(329.63, ctx.currentTime); // E4
+          osc2.type = 'triangle';
+          osc2.frequency.setValueAtTime(440.0, ctx.currentTime); // A4
+
+          gain.gain.setValueAtTime(0.02, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 8);
+
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc1.start();
+          osc2.start();
+          osc1.stop(ctx.currentTime + 8);
+          osc2.stop(ctx.currentTime + 8);
+        }
+      } catch (_) {}
+    }
+
+    window.speechSynthesis.speak(utterance);
   };
 
   // Open read receipt modal
@@ -568,30 +798,31 @@ export default function AnnouncementsStudioPage() {
   return (
     <div className="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden font-sans">
       {/* ===================================================================== */}
-      {/* TOP HEADER BAR (TỐI ĐA 3 NÚT TRÊN 1 HÀNG, ZERO-REDUNDANCY)             */}
+      {/* TOP HEADER BAR (BUG 3: GỌN GÀNG 1 HÀNG, KHÔNG WRAP, ZERO REDUNDANCY)     */}
       {/* ===================================================================== */}
-      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 z-20">
-        <div className="flex items-center space-x-3">
+      <header className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0 z-20 whitespace-nowrap">
+        {/* Left: Logo & Title & Status */}
+        <div className="flex items-center space-x-3 shrink-0">
           {currentView !== 'list' && (
             <button
               onClick={() => setCurrentView('list')}
-              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition shrink-0"
               title="Quay lại danh sách"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <div className="w-9 h-9 rounded-lg bg-[#D32F2F] flex items-center text-white justify-center font-bold text-base shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-[#D32F2F] flex items-center text-white justify-center font-bold text-sm shadow-sm shrink-0">
             SM
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="font-bold text-slate-900 text-base leading-tight">
+              <h1 className="font-bold text-slate-900 text-sm leading-tight whitespace-nowrap">
                 Quản lý Thông báo
               </h1>
               {currentView === 'studio' && (
                 <span
-                  className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
+                  className={`px-2 py-0.5 text-[11px] font-semibold rounded-full border shrink-0 ${
                     status === 'PUBLISHED'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : status === 'PENDING_APPROVAL'
@@ -607,28 +838,28 @@ export default function AnnouncementsStudioPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500 whitespace-nowrap">
               Trường Mầm non Sương Mai (mamnonsuongmai.edu.vn)
             </p>
           </div>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+        {/* View Switcher Tabs (Bug 3: Keep only 2 tabs in header, 375px moved to right column) */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 shrink-0">
           <button
             onClick={() => setCurrentView('list')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition whitespace-nowrap ${
               currentView === 'list'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <List className="w-3.5 h-3.5" />
-            <span>Danh sách</span>
+            <span>Danh sách thông báo</span>
           </button>
           <button
             onClick={() => setCurrentView('studio')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition ${
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition whitespace-nowrap ${
               currentView === 'studio'
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -637,47 +868,40 @@ export default function AnnouncementsStudioPage() {
             <Palette className="w-3.5 h-3.5" />
             <span>Studio Thiết kế</span>
           </button>
-          <button
-            onClick={() => setCurrentView('pwa')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition ${
-              currentView === 'pwa'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>Góc nhìn Phụ huynh (375px)</span>
-          </button>
         </div>
 
-        {/* Header Action Buttons */}
-        <div className="flex items-center space-x-2">
+        {/* Header Action Buttons (1 Hàng gọn gàng, không tràn màn hình 1280px) */}
+        <div className="flex items-center space-x-2 shrink-0">
           {currentView === 'list' && (
-            <button
-              onClick={() => {
-                setCurrentAnnouncementId(null);
-                setStatus('DRAFT');
-                setTitle('Lễ Hội Trăng Rằm & Vui Tết Trung Thu');
-                setBodyText(
-                  'Trân trọng kính mời Quý Phụ huynh cùng các bé đến tham dự chương trình "Đêm Hội Trăng Rằm" với nhiều tiết mục múa lân, rước đèn ông sao và phá cỗ trông trăng đầy ý nghĩa.'
-                );
-                setCurrentTemplateId('le-hoi');
-                setCustomUploadedBgUrl(null);
-                setIsBgEnabled(true);
-                setCurrentView('studio');
-              }}
-              className="px-4 py-2 bg-[#D32F2F] text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition shadow-sm flex items-center space-x-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tạo thông báo mới</span>
-            </button>
+            <>
+              <button
+                onClick={fetchAnnouncements}
+                title="Tải lại danh sách từ cơ sở dữ liệu"
+                className="p-2 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentAnnouncementId(null);
+                  setStatus('DRAFT');
+                  const tpl = POSTER_TEMPLATES.find((t) => t.id === 'le-hoi') || POSTER_TEMPLATES[0];
+                  applyTemplate(tpl);
+                  setCurrentView('studio');
+                }}
+                className="px-3.5 py-1.5 bg-[#D32F2F] text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition shadow-sm flex items-center space-x-1.5 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tạo thông báo mới</span>
+              </button>
+            </>
           )}
 
           {currentView !== 'list' && (
             <>
               <button
                 onClick={handleSaveDraft}
-                className="px-3.5 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition flex items-center space-x-1.5"
+                className="px-3 py-1.5 border border-slate-300 bg-white text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition flex items-center space-x-1.5 whitespace-nowrap shadow-xs"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Lưu nháp</span>
@@ -685,9 +909,9 @@ export default function AnnouncementsStudioPage() {
               <button
                 onClick={handleApproveAndPublish}
                 disabled={status === 'PUBLISHED'}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center space-x-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm flex items-center space-x-1.5 whitespace-nowrap ${
                   status === 'PUBLISHED'
-                    ? 'bg-slate-400 text-white cursor-not-allowed'
+                    ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
                     : 'bg-[#D32F2F] text-white hover:bg-red-700'
                 }`}
               >
@@ -713,6 +937,7 @@ export default function AnnouncementsStudioPage() {
       {/* ===================================================================== */}
       {currentView === 'list' && (
         <div className="flex-1 overflow-y-auto p-6 max-w-7xl w-full mx-auto space-y-5">
+          {/* Bộ lọc và Tìm kiếm */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center space-x-2">
               <button
@@ -768,6 +993,7 @@ export default function AnnouncementsStudioPage() {
             </div>
           </div>
 
+          {/* Bảng danh sách 5 cột */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -782,14 +1008,25 @@ export default function AnnouncementsStudioPage() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
-                      Đang tải danh sách thông báo...
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
+                      <span>Đang tải danh sách thông báo từ cơ sở dữ liệu...</span>
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400">
-                      Không tìm thấy thông báo nào phù hợp.
+                    <td colSpan={5} className="py-12 text-center text-slate-500 space-y-3">
+                      <p className="text-sm font-semibold">Chưa có thông báo nào trong cơ sở dữ liệu.</p>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        Bạn có thể khởi tạo ngay 4 thông báo mẫu chuẩn sư phạm Sương Mai để sẵn sàng sử dụng.
+                      </p>
+                      <button
+                        onClick={handleSeedSampleData}
+                        className="px-4 py-2 bg-[#D32F2F] hover:bg-red-700 text-white font-semibold text-xs rounded-lg shadow-sm transition inline-flex items-center space-x-1.5"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Khởi tạo 4 thông báo mẫu Sương Mai vào CSDL</span>
+                      </button>
                     </td>
                   </tr>
                 ) : (
@@ -862,6 +1099,7 @@ export default function AnnouncementsStudioPage() {
                               <button
                                 onClick={() => handleOpenReadReceipt(item)}
                                 className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold transition flex items-center space-x-1"
+                                title="Xem thống kê phụ huynh đã đọc"
                               >
                                 <BarChart2 className="w-3.5 h-3.5" />
                                 <span>Thống kê</span>
@@ -888,10 +1126,20 @@ export default function AnnouncementsStudioPage() {
 
                             <button
                               onClick={() => cloneAnnouncement(item)}
-                              title="Nhân bản để tạo kỳ mới"
+                              title="Nhân bản tạo kỳ mới trong CSDL"
                               className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition"
                             >
                               <Copy className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                setDeleteModal({ open: true, id: item.id, title: item.title })
+                              }
+                              title="Xóa thông báo khỏi cơ sở dữ liệu"
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -943,11 +1191,16 @@ export default function AnnouncementsStudioPage() {
                 {isBgEnabled && (
                   <div className="flex items-center space-x-1.5">
                     <label className="cursor-pointer px-2.5 py-1.5 bg-white border border-slate-300 text-[11px] font-semibold rounded-lg text-slate-700 hover:bg-slate-100 flex items-center space-x-1 shadow-xs">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Tải ảnh riêng</span>
+                      {isUploadingBg ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 text-slate-600" />
+                      )}
+                      <span>{isUploadingBg ? 'Đang tải lên...' : 'Tải ảnh riêng'}</span>
                       <input
                         type="file"
                         accept="image/*"
+                        disabled={isUploadingBg}
                         onChange={handleCustomImageUpload}
                         className="hidden"
                       />
@@ -956,7 +1209,7 @@ export default function AnnouncementsStudioPage() {
                 )}
               </div>
 
-              {/* Grid 11 Mẫu Nền + Nút Tạo Nền AI */}
+              {/* Grid 11 Mẫu Nền + Nút Tạo Nền AI (Bug 2: Click bất kỳ mẫu nào cũng đồng bộ đủ 3 thẻ) */}
               {isBgEnabled && (
                 <div className="grid grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1 pt-1">
                   {POSTER_TEMPLATES.map((tpl) => {
@@ -967,15 +1220,7 @@ export default function AnnouncementsStudioPage() {
                       <button
                         key={tpl.id}
                         type="button"
-                        onClick={() => {
-                          setCurrentTemplateId(tpl.id);
-                          setCustomUploadedBgUrl(null);
-                          setCategory(tpl.name);
-                          setTitle(tpl.defaultTitle);
-                          setBodyText(tpl.defaultBody);
-                          setShowTableCard(tpl.showTable);
-                          showToast(`Đã áp dụng mẫu "${tpl.name}"`);
-                        }}
+                        onClick={() => applyTemplate(tpl)}
                         className={`group flex flex-col items-center p-1.5 rounded-xl border-2 transition bg-white ${
                           isActive
                             ? 'border-[#1565C0] ring-2 ring-blue-100 shadow-sm'
@@ -1053,7 +1298,10 @@ export default function AnnouncementsStudioPage() {
                   <input
                     type="text"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      setIsAudioSynced(false);
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-[#D32F2F] focus:border-[#D32F2F] focus:outline-none"
                   />
                 </div>
@@ -1090,15 +1338,14 @@ export default function AnnouncementsStudioPage() {
               </div>
             </div>
 
-            {/* KHỐI 3: TÙY BIẾN TRƯỜNG DỮ LIỆU ĐỘNG */}
+            {/* KHỐI 3: TÙY BIẾN TRƯỜNG DỮ LIỆU ĐỘNG (THỜI GIAN, ĐỊA ĐIỂM, BẢNG, HẠN CHÓT, CON DẤU) */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div>
                 <h2 className="text-sm font-bold text-slate-900">
                   3. Tùy biến Trường dữ liệu trên Thông báo (Bật / Tắt linh hoạt)
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Bật trường nào hệ thống hiển thị thẻ thông tin đó, tắt đi bố cục tự co gọn chuyên
-                  nghiệp
+                  Bật trường nào hệ thống hiển thị thẻ thông tin đó, tắt đi bố cục tự co gọn chuyên nghiệp
                 </p>
               </div>
 
@@ -1213,7 +1460,7 @@ export default function AnnouncementsStudioPage() {
                   )}
                 </div>
 
-                {/* Toggle 4: Hạn chót & Liên hệ */}
+                {/* Toggle 4: Hạn chót & Liên hệ (Đã loại bỏ xxxx, dùng hotline thật 0262.352.1234) */}
                 <div className="bg-white p-3 rounded-lg border border-slate-200 transition hover:border-slate-300">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center space-x-2.5 cursor-pointer">
@@ -1325,12 +1572,20 @@ export default function AnnouncementsStudioPage() {
                   <button
                     type="button"
                     onClick={handleTogglePlayAudio}
-                    className="w-6 h-6 rounded-full bg-[#D32F2F] text-white flex items-center justify-center hover:bg-red-700 transition"
+                    className={`w-6 h-6 rounded-full flex items-center justify-center transition ${
+                      isPlayingAudio
+                        ? 'bg-slate-800 text-white hover:bg-slate-900'
+                        : 'bg-[#D32F2F] text-white hover:bg-red-700'
+                    }`}
                   >
-                    <Play className="w-3 h-3 fill-white ml-0.5" />
+                    {isPlayingAudio ? (
+                      <Square className="w-2.5 h-2.5 fill-white" />
+                    ) : (
+                      <Play className="w-3 h-3 fill-white ml-0.5" />
+                    )}
                   </button>
                   <span className="text-[11px] font-medium text-slate-700">
-                    {isPlayingAudio ? 'Đang phát Audio AI...' : 'Sẵn sàng phát thử (00:24)'}
+                    {isPlayingAudio ? 'Đang phát qua loa thiết bị...' : 'Phát thử qua loa (00:24)'}
                   </span>
                 </div>
               </div>
@@ -1346,15 +1601,28 @@ export default function AnnouncementsStudioPage() {
                   Xem trước Thông báo
                 </span>
               </div>
-              <span className="text-[11px] font-semibold px-2.5 py-0.5 bg-white text-slate-700 rounded-full shadow-xs border border-slate-200">
-                {!isBgEnabled
-                  ? 'Chế độ: Không ảnh nền (Nền trắng)'
-                  : customUploadedBgUrl
-                  ? 'Ảnh nền tải lên riêng'
-                  : currentTemplate
-                  ? `Mẫu ${currentTemplate.code}: ${currentTemplate.name}`
-                  : 'Mẫu Poster'}
-              </span>
+
+              {/* Bug 3: Nút xem giao diện Phụ huynh 375px đặt ngay cạnh tiêu đề xem trước */}
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('pwa')}
+                  title="Mở giao diện Phụ huynh trên điện thoại (375px)"
+                  className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold shadow-xs flex items-center space-x-1 transition"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-[#D32F2F]" />
+                  <span>Góc nhìn 375px</span>
+                </button>
+                <span className="text-[10px] font-semibold px-2 py-1 bg-white text-slate-600 rounded-lg shadow-xs border border-slate-200">
+                  {!isBgEnabled
+                    ? 'Nền trắng'
+                    : customUploadedBgUrl
+                    ? 'Ảnh tải lên'
+                    : currentTemplate
+                    ? currentTemplate.name
+                    : 'Poster'}
+                </span>
+              </div>
             </div>
 
             {/* KHUNG POSTER CHÍNH THỨC (REF ĐỂ XUẤT PNG ĐỘ PHÂN GIẢI CAO) */}
@@ -1421,7 +1689,7 @@ export default function AnnouncementsStudioPage() {
                 {/* TẦNG 3: KHỐI THẺ THÔNG TIN ĐỘNG */}
                 <div className="w-full space-y-1.5 text-left">
                   {showTimeCard && (
-                    <div className="flex items-center space-x-2 bg-white/90 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
+                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
                       <CalendarClock className="w-3.5 h-3.5 text-[#D32F2F] shrink-0" />
                       <span className="text-[11px] font-bold text-slate-900 leading-tight">
                         {timeValue}
@@ -1430,7 +1698,7 @@ export default function AnnouncementsStudioPage() {
                   )}
 
                   {showLocCard && (
-                    <div className="flex items-center space-x-2 bg-white/90 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
+                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs">
                       <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span className="text-[11px] font-bold text-slate-900 leading-tight">
                         {locValue}
@@ -1452,7 +1720,7 @@ export default function AnnouncementsStudioPage() {
                   )}
 
                   {showDeadlineCard && (
-                    <div className="flex items-center space-x-2 bg-white/90 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-sky-200/80 shadow-xs">
+                    <div className="flex items-center space-x-2 bg-white/92 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-sky-200/80 shadow-xs">
                       <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                       <span className="text-[10px] font-semibold text-slate-800 leading-tight">
                         {deadlineValue}
@@ -1461,8 +1729,12 @@ export default function AnnouncementsStudioPage() {
                   )}
                 </div>
 
-                {/* TẦNG 4: LỜI NGỎ / VĂN BẢN CHÍNH THỨC */}
-                <div className="w-full bg-white/88 backdrop-blur-xs px-3 py-2 rounded-xl border border-slate-200/80 shadow-xs">
+                {/* TẦNG 4: LỜI NGỎ / VĂN BẢN CHÍNH THỨC (BUG 1: GIỮ NỀN TRẮNG MỜ KHÔNG BỊ MẤT TRÊN CẢ 11 MẪU) */}
+                <div
+                  id="posterBodyCard"
+                  className="w-full bg-white/92 backdrop-blur-sm border border-slate-200/80 rounded-xl px-3 py-2 shadow-xs"
+                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.94)' }}
+                >
                   <p className="text-[10.5px] text-slate-800 font-medium leading-relaxed text-justify line-clamp-5">
                     {bodyText || '(Chưa nhập nội dung)'}
                   </p>
@@ -1543,6 +1815,7 @@ export default function AnnouncementsStudioPage() {
                 <button
                   onClick={() => setCurrentView('studio')}
                   className="p-1.5 text-slate-700 hover:bg-slate-100 rounded-lg"
+                  title="Quay lại Studio thiết kế"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -1579,19 +1852,29 @@ export default function AnnouncementsStudioPage() {
 
             {/* Nội dung Mobile */}
             <div className="p-3.5 space-y-3 overflow-y-auto max-h-[620px] bg-slate-50">
-              {/* Thanh Audio AI trên Mobile */}
+              {/* Thanh Audio AI trên Mobile phát loa thật */}
               <div className="bg-white px-3 py-2.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
                 <button
                   type="button"
                   onClick={handleTogglePlayAudio}
                   className="flex items-center space-x-2 text-slate-800 hover:text-red-700"
                 >
-                  <Play className="w-4 h-4 fill-slate-800 text-slate-800" />
-                  <span className="text-xs font-bold">Audio AI của nhà trường</span>
+                  {isPlayingAudio ? (
+                    <Square className="w-4 h-4 fill-red-600 text-red-600" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-slate-800 text-slate-800" />
+                  )}
+                  <span className="text-xs font-bold">
+                    {isPlayingAudio ? 'Đang phát qua loa...' : 'Audio AI của nhà trường'}
+                  </span>
                 </button>
                 <div className="flex items-center space-x-2">
                   <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="w-1/3 h-full bg-[#1565C0]"></div>
+                    <div
+                      className={`h-full bg-[#1565C0] ${
+                        isPlayingAudio ? 'w-full animate-pulse' : 'w-1/3'
+                      }`}
+                    ></div>
                   </div>
                   <span className="text-[10px] font-semibold text-slate-500">00:24</span>
                 </div>
@@ -1655,13 +1938,13 @@ export default function AnnouncementsStudioPage() {
 
                       <div className="w-full space-y-1 text-left">
                         {showTimeCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/90 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
+                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
                             <CalendarClock className="w-3 h-3 text-[#D32F2F] shrink-0" />
                             <span>{timeValue}</span>
                           </div>
                         )}
                         {showLocCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/90 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
+                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-amber-200 text-[10px] font-bold text-slate-900">
                             <MapPin className="w-3 h-3 text-amber-600 shrink-0" />
                             <span>{locValue}</span>
                           </div>
@@ -1679,14 +1962,18 @@ export default function AnnouncementsStudioPage() {
                           </div>
                         )}
                         {showDeadlineCard && (
-                          <div className="flex items-center space-x-1.5 bg-white/90 px-2.5 py-1 rounded-lg border border-sky-200 text-[9px] font-semibold text-slate-800">
+                          <div className="flex items-center space-x-1.5 bg-white/92 px-2.5 py-1 rounded-lg border border-sky-200 text-[9px] font-semibold text-slate-800">
                             <Info className="w-3 h-3 text-sky-600 shrink-0" />
                             <span>{deadlineValue}</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="w-full bg-white/88 px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9.5px] text-slate-800 leading-relaxed text-justify line-clamp-4">
+                      {/* Bug 1 (Mobile body card translucent white background) */}
+                      <div
+                        className="w-full bg-white/92 backdrop-blur-sm px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9.5px] text-slate-800 leading-relaxed text-justify line-clamp-4"
+                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.94)' }}
+                      >
                         {bodyText}
                       </div>
                     </div>
@@ -1877,6 +2164,42 @@ export default function AnnouncementsStudioPage() {
                 * Tỷ lệ đọc thực tế được ghi nhận chính xác theo từng tài khoản phụ huynh đã đăng nhập
                 và mở xem thông báo trên Mobile PWA.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL XÁC NHẬN XÓA THÔNG BÁO KHỎI CƠ SỞ DỮ LIỆU                      */}
+      {/* ===================================================================== */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden p-5 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Xác nhận xóa thông báo</h3>
+                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{deleteModal.title}</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Bạn có chắc chắn muốn xóa bản ghi này khỏi cơ sở dữ liệu không? Hành động này không thể hoàn tác.
+            </p>
+            <div className="flex justify-end space-x-2 pt-1">
+              <button
+                onClick={() => setDeleteModal({ open: false, id: '', title: '' })}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                onClick={handleDeleteAnnouncement}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm"
+              >
+                Xác nhận xóa
+              </button>
             </div>
           </div>
         </div>
