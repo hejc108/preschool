@@ -443,13 +443,13 @@ export default function AnnouncementsStudioPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok && json.success && json.announcement) {
         showToast('Đã nhân bản sang bản nháp mới trong CSDL thành công!');
         await fetchAnnouncements();
         openAnnouncementInStudio(json.announcement);
       } else {
-        showToast(json.error || 'Không thể nhân bản vào CSDL. Vui lòng thử lại!');
+        showToast(json.error || json.message || 'Không thể nhân bản vào CSDL. Vui lòng thử lại!');
       }
     } catch (err: any) {
       console.error('Lỗi nhân bản:', err);
@@ -465,7 +465,7 @@ export default function AnnouncementsStudioPage() {
       const res = await fetch(`/api/announcements?id=${deleteModal.id}`, {
         method: 'DELETE',
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         showToast('Đã xóa thông báo khỏi cơ sở dữ liệu thành công!');
         setDeleteModal({ open: false, id: '', title: '' });
@@ -475,7 +475,7 @@ export default function AnnouncementsStudioPage() {
           setCurrentView('list');
         }
       } else {
-        showToast(json.error || 'Không thể xóa thông báo.');
+        showToast(json.error || json.message || 'Không thể xóa thông báo.');
       }
     } catch (err) {
       console.error('Lỗi xóa:', err);
@@ -644,6 +644,15 @@ export default function AnnouncementsStudioPage() {
 
   // Save draft to real Database
   const handleSaveDraft = async () => {
+    if (!title.trim()) {
+      showToast('Vui lòng nhập tiêu đề thông báo trước khi lưu.');
+      return;
+    }
+    if (!bodyText.trim()) {
+      showToast('Vui lòng nhập nội dung văn bản thông báo trước khi lưu.');
+      return;
+    }
+
     try {
       showToast('Đang lưu bản nháp vào cơ sở dữ liệu...');
       const metadataPayload: AnnouncementMetadata = {
@@ -680,8 +689,8 @@ export default function AnnouncementsStudioPage() {
 
       const payload = {
         id: currentAnnouncementId || undefined,
-        title,
-        content: bodyText,
+        title: title.trim(),
+        content: bodyText.trim(),
         category,
         status: 'DRAFT',
         target_role: 'ALL',
@@ -698,7 +707,7 @@ export default function AnnouncementsStudioPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         if (json.announcement?.id) {
           setCurrentAnnouncementId(json.announcement.id);
@@ -707,16 +716,26 @@ export default function AnnouncementsStudioPage() {
         showToast('Đã lưu bản nháp thông báo vào CSDL thành công!');
         await fetchAnnouncements();
       } else {
-        showToast(json.error || 'Lỗi khi lưu bản nháp vào CSDL.');
+        const errorMsg = json.error || json.message || `Lỗi khi lưu bản nháp (Mã lỗi ${res.status})`;
+        showToast(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi lưu nháp:', err);
-      showToast('Lỗi kết nối khi lưu bản nháp.');
+      showToast(err?.message ? `Lỗi kết nối: ${err.message}` : 'Lỗi kết nối khi lưu bản nháp.');
     }
   };
 
   // Approve & Publish to real Database
   const handleApproveAndPublish = async () => {
+    if (!title.trim()) {
+      showToast('Vui lòng nhập tiêu đề thông báo trước khi phát hành.');
+      return;
+    }
+    if (!bodyText.trim()) {
+      showToast('Vui lòng nhập nội dung văn bản thông báo trước khi phát hành.');
+      return;
+    }
+
     try {
       showToast('Đang duyệt và phát hành thông báo...');
       const metadataPayload: AnnouncementMetadata = {
@@ -753,8 +772,8 @@ export default function AnnouncementsStudioPage() {
 
       const payload = {
         id: currentAnnouncementId || undefined,
-        title,
-        content: bodyText,
+        title: title.trim(),
+        content: bodyText.trim(),
         category,
         status: 'PUBLISHED',
         target_role: 'ALL',
@@ -771,7 +790,7 @@ export default function AnnouncementsStudioPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         if (json.announcement?.id) {
           setCurrentAnnouncementId(json.announcement.id);
@@ -779,12 +798,17 @@ export default function AnnouncementsStudioPage() {
         setStatus('PUBLISHED');
         showToast('Hiệu trưởng đã duyệt & phát hành thông báo thành công!');
         await fetchAnnouncements();
+        // Tự động chuyển về danh sách sau 1.2s để xem ngay thông báo vừa tạo
+        setTimeout(() => {
+          setCurrentView('list');
+        }, 1200);
       } else {
-        showToast(json.error || 'Lỗi khi duyệt & phát hành.');
+        const errorMsg = json.error || json.message || `Lỗi khi duyệt & phát hành (Mã lỗi ${res.status})`;
+        showToast(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi phát hành:', err);
-      showToast('Lỗi kết nối khi phát hành.');
+      showToast(err?.message ? `Lỗi kết nối: ${err.message}` : 'Lỗi kết nối khi phát hành.');
     }
   };
 
