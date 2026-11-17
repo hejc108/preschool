@@ -55,8 +55,13 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
     },
     ref
   ) => {
-    // Resolve background image
-    const bgUrl = customBgUrl || EMBEDDED_BACKGROUNDS[templateId] || '';
+    // Resolve background image with safe fallback
+    const resolvedTemplateId =
+      templateId && EMBEDDED_BACKGROUNDS[templateId] ? templateId : 'le-hoi';
+    const bgUrl =
+      customBgUrl ||
+      EMBEDDED_BACKGROUNDS[resolvedTemplateId] ||
+      '/images/announcements/le-hoi.jpg';
 
     // Normalize table data fallback
     const r1Label = tableData?.row1_label || 'Học phí & Bán trú';
@@ -67,6 +72,7 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
     return (
       <div
         ref={ref}
+        id="posterCanvas"
         className={`w-full max-w-[390px] aspect-[3/4.25] rounded-2xl shadow-xl overflow-hidden flex flex-col justify-between relative border-4 select-none bg-cover bg-center transition-all duration-300 ${
           isBgEnabled
             ? 'border-white bg-white'
@@ -75,7 +81,7 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
         style={
           isBgEnabled && bgUrl
             ? { backgroundImage: `url('${bgUrl}')` }
-            : undefined
+            : { backgroundImage: 'none' }
         }
       >
         {/* TẦNG 1: HEADER TRƯỜNG MẦM NON SƯƠNG MAI (ĐỒNG BỘ 100% TOÀN HỆ THỐNG) */}

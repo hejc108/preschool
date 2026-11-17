@@ -88,6 +88,11 @@ export const EMBEDDED_BACKGROUNDS: Record<string, string> = {
   "suc-khoe": "/images/announcements/suc-khoe.jpg",
   "khan-cap": "/images/announcements/khan-cap.jpg",
   "noi-bo": "/images/announcements/noi-bo.jpg",
+  // Khóa ánh xạ dự phòng cho ngày 20/11 & các sự kiện lễ hội
+  "20-11": "/images/announcements/le-hoi.jpg",
+  "20/11": "/images/announcements/le-hoi.jpg",
+  "nha-giao": "/images/announcements/le-hoi.jpg",
+  "ngay-nha-giao": "/images/announcements/le-hoi.jpg",
 };
 
 export const POSTER_TEMPLATES: PosterTemplate[] = [

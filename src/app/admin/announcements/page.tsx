@@ -343,6 +343,22 @@ export default function AnnouncementsStudioPage() {
     showToast(`Đã đồng bộ mẫu "${tpl.name}" kèm dữ liệu 3 thẻ thông tin!`);
   };
 
+  // Hàm xử lý Bật / Tắt ảnh nền Poster (Hotfix: bảo toàn trạng thái ảnh nền hiện tại)
+  const togglePosterBackground = (isChecked: boolean) => {
+    setIsBgEnabled(isChecked);
+    if (isChecked) {
+      // Khi bật lại: Khôi phục ảnh nền từ mẫu đang chọn hoặc ảnh tải lên gần nhất
+      // Tuyệt đối không xóa hoặc gán rỗng customUploadedBgUrl hoặc currentTemplateId
+      if (!currentTemplateId) {
+        setCurrentTemplateId('le-hoi');
+      }
+      showToast('Đã bật ảnh nền đồ họa Poster!');
+    } else {
+      // Khi tắt: Chuyển sang nền trắng chuẩn hành chính, giữ nguyên biến lưu trạng thái ảnh nền
+      showToast('Đã tắt ảnh nền Poster — Chuyển sang nền trắng chuẩn hành chính.');
+    }
+  };
+
   // Switch to Studio with specific template
   const openTemplateInStudio = (tplId: string) => {
     const tpl = POSTER_TEMPLATES.find((t) => t.id === tplId);
@@ -1389,56 +1405,55 @@ export default function AnnouncementsStudioPage() {
                 <label className="flex items-center space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
+                    id="chkPosterBg"
                     checked={isBgEnabled}
-                    onChange={(e) => {
-                      setIsBgEnabled(e.target.checked);
-                      showToast(
-                        e.target.checked
-                          ? 'Đã bật ảnh nền đồ họa Poster!'
-                          : 'Đã tắt ảnh nền Poster — Chuyển sang nền trắng chuẩn hành chính.'
-                      );
-                    }}
-                    className="w-4 h-4 accent-[#D32F2F] rounded"
+                    onChange={(e) => togglePosterBackground(e.target.checked)}
+                    className="w-4 h-4 accent-[#D32F2F] rounded cursor-pointer"
                   />
                   <div>
                     <h2 className="text-sm font-bold text-slate-900">
                       1. Sử dụng Ảnh Nền Đồ Họa Poster (Bật / Tắt)
                     </h2>
-                    <p className="text-[11px] text-slate-500">
+                    <p id="bgToggleHint" className="text-[11px] text-slate-500">
                       {isBgEnabled
                         ? 'Đang bật: Chọn ảnh nền minh họa bên dưới hoặc dùng AI / tải ảnh riêng'
                         : 'Đang tắt: Thông báo hiển thị trên nền trắng trang trọng (không dùng ảnh minh họa)'}
                     </p>
                   </div>
                 </label>
-                {isBgEnabled && (
-                  <div className="flex items-center space-x-1.5">
-                    <label className="cursor-pointer px-2.5 py-1.5 bg-white border border-slate-300 text-[11px] font-semibold rounded-lg text-slate-700 hover:bg-slate-100 flex items-center space-x-1 shadow-xs">
-                      {isUploadingBg ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
-                      ) : (
-                        <Upload className="w-3.5 h-3.5 text-slate-600" />
-                      )}
-                      <span>{isUploadingBg ? 'Đang tải lên...' : 'Tải ảnh riêng'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={isUploadingBg}
-                        onChange={handleCustomImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
+                <div
+                  id="customUploadBox"
+                  className={isBgEnabled ? 'flex items-center space-x-1.5' : 'hidden'}
+                >
+                  <label className="cursor-pointer px-2.5 py-1.5 bg-white border border-slate-300 text-[11px] font-semibold rounded-lg text-slate-700 hover:bg-slate-100 flex items-center space-x-1 shadow-xs">
+                    {isUploadingBg ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5 text-slate-600" />
+                    )}
+                    <span>{isUploadingBg ? 'Đang tải lên...' : 'Tải ảnh riêng'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isUploadingBg}
+                      onChange={handleCustomImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
 
-              {/* Grid 11 Mẫu Nền + Nút Tạo Nền AI (Bug 2: Click bất kỳ mẫu nào cũng đồng bộ đủ 3 thẻ) */}
-              {isBgEnabled && (
+              {/* Grid 11 Mẫu Nền + Nút Tạo Nền AI (templateGalleryWrapper luôn giữ DOM, ẩn/hiện bằng hidden để không mất ảnh & tránh chớp giật) */}
+              <div
+                id="templateGalleryWrapper"
+                className={isBgEnabled ? 'block' : 'hidden'}
+              >
                 <div className="grid grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1 pt-1">
                   {POSTER_TEMPLATES.map((tpl) => {
                     const isActive =
                       !customUploadedBgUrl && tpl.id === currentTemplateId;
-                    const bgThumb = EMBEDDED_BACKGROUNDS[tpl.id];
+                    const bgThumb =
+                      EMBEDDED_BACKGROUNDS[tpl.id] || EMBEDDED_BACKGROUNDS['le-hoi'];
                     return (
                       <button
                         key={tpl.id}
@@ -1490,21 +1505,26 @@ export default function AnnouncementsStudioPage() {
                     </span>
                   </button>
                 </div>
-              )}
+              </div>
 
               {/* Thông báo khi tắt ảnh nền */}
-              {!isBgEnabled && (
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs text-slate-600 flex items-center space-x-2.5">
-                  <FileText className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>
-                    Đã tắt ảnh nền đồ họa. Hệ thống tự chuyển sang mẫu{' '}
-                    <strong>
-                      Thiệp / Thông báo Văn bản Chuẩn Hành Chính (Nền trắng viền trang trọng)
-                    </strong>
-                    .
-                  </span>
-                </div>
-              )}
+              <div
+                id="noBgNoticeBox"
+                className={
+                  !isBgEnabled
+                    ? 'bg-white p-3 rounded-lg border border-slate-200 text-xs text-slate-600 flex items-center space-x-2.5'
+                    : 'hidden'
+                }
+              >
+                <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+                <span>
+                  Đã tắt ảnh nền đồ họa. Hệ thống tự chuyển sang mẫu{' '}
+                  <strong>
+                    Thiệp / Thông báo Văn bản Chuẩn Hành Chính (Nền trắng viền trang trọng)
+                  </strong>
+                  .
+                </span>
+              </div>
             </div>
 
             {/* KHỐI 2: NỘI DUNG CỐT LÕI */}
@@ -1920,14 +1940,17 @@ export default function AnnouncementsStudioPage() {
                   <Smartphone className="w-3.5 h-3.5 text-[#D32F2F]" />
                   <span>Góc nhìn 375px</span>
                 </button>
-                <span className="text-[10px] font-semibold px-2 py-1 bg-white text-slate-600 rounded-lg shadow-xs border border-slate-200">
+                <span
+                  id="previewTemplateName"
+                  className="text-[10px] font-semibold px-2 py-1 bg-white text-slate-600 rounded-lg shadow-xs border border-slate-200"
+                >
                   {!isBgEnabled
-                    ? 'Nền trắng'
+                    ? 'Chế độ: Không ảnh nền (Nền trắng)'
                     : customUploadedBgUrl
-                    ? 'Ảnh tải lên'
+                    ? 'Ảnh nền tải lên riêng'
                     : currentTemplate
-                    ? currentTemplate.name
-                    : 'Poster'}
+                    ? `Mẫu ${currentTemplate.code}: ${currentTemplate.name}`
+                    : 'Poster đồ họa'}
                 </span>
               </div>
             </div>
