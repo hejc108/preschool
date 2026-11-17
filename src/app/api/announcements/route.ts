@@ -28,6 +28,74 @@ import {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+export const SYSTEM_DELETED_REGISTRY_ID = '00000000-0000-0000-0000-000000000001';
+export const SYSTEM_DELETED_TITLE = '__SYSTEM_DELETED_ANNOUNCEMENT_IDS__';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __SUONGMAI_DELETED_ANNOUNCEMENT_IDS__: Set<string> | undefined;
+}
+
+if (!globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__) {
+  globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ = new Set<string>();
+}
+
+export async function getPersistentDeletedIds(ctx: any): Promise<Set<string>> {
+  const deletedSet = new Set<string>(globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ || []);
+
+  try {
+    const { data: regRow } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('announcements')
+        .select('id, content')
+        .eq('id', SYSTEM_DELETED_REGISTRY_ID)
+        .maybeSingle()
+    );
+
+    if (regRow?.content) {
+      const parsed = JSON.parse(regRow.content);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((did) => {
+          deletedSet.add(String(did));
+          globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__?.add(String(did));
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[announcements] getPersistentDeletedIds warning:', err);
+  }
+
+  return deletedSet;
+}
+
+export async function recordDeletedAnnouncementId(ctx: any, id: string): Promise<void> {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return;
+
+  globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ =
+    globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ || new Set<string>();
+  globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__.add(cleanId);
+
+  try {
+    const existingSet = await getPersistentDeletedIds(ctx);
+    existingSet.add(cleanId);
+
+    const payload = {
+      id: SYSTEM_DELETED_REGISTRY_ID,
+      title: SYSTEM_DELETED_TITLE,
+      content: JSON.stringify(Array.from(existingSet)),
+      target_role: 'ALL',
+      notification_channel: 'PARENT',
+    };
+
+    await executeWithContextFallback(ctx, async (sb) =>
+      await sb.from('announcements').upsert(payload, { onConflict: 'id' })
+    );
+  } catch (err) {
+    console.warn('[announcements] recordDeletedAnnouncementId warning:', err);
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const auth = await requireActiveRole(request, [
@@ -48,6 +116,8 @@ export async function GET(request: Request) {
     const isFullRequested =
       searchParams.get('full') === 'true' || Boolean(requestedId) || isAdminRole(ctx.activeRole);
 
+    const persistentDeletedIds = await getPersistentDeletedIds(ctx);
+
     // 1. Fetch from Supabase PostgreSQL (select('*') safely queries all columns)
     const { data: dbRows, error: dbError } = await executeWithContextFallback(ctx, async (sb) => {
       if (requestedId) {
@@ -56,6 +126,7 @@ export async function GET(request: Request) {
       const query = sb
         .from('announcements')
         .select('*')
+        .neq('id', SYSTEM_DELETED_REGISTRY_ID)
         .order('created_at', { ascending: false })
         .limit(60);
 
@@ -64,9 +135,14 @@ export async function GET(request: Request) {
 
     let rawList: any[] = [];
     if (!dbError && Array.isArray(dbRows)) {
-      rawList = dbRows;
+      rawList = dbRows.filter(
+        (r: any) => r.id !== SYSTEM_DELETED_REGISTRY_ID && r.title !== SYSTEM_DELETED_TITLE
+      );
     } else if (!dbError && dbRows) {
-      rawList = [dbRows];
+      const singleRow = dbRows as any;
+      if (singleRow.id !== SYSTEM_DELETED_REGISTRY_ID && singleRow.title !== SYSTEM_DELETED_TITLE) {
+        rawList = [singleRow];
+      }
     }
 
     // 2. Fallback / Merge with local persistent store to ensure Zero Data Loss
@@ -74,7 +150,7 @@ export async function GET(request: Request) {
     if (localList.length > 0) {
       const existingIds = new Set(rawList.map((x) => x.id));
       for (const locItem of localList) {
-        if (!existingIds.has(locItem.id)) {
+        if (!existingIds.has(locItem.id) && !persistentDeletedIds.has(locItem.id)) {
           rawList.push(locItem);
         }
       }
@@ -99,6 +175,10 @@ export async function GET(request: Request) {
 
     // 4. Role-based scoping & filtering
     const filtered = rawList.filter((item: any) => {
+      // 4.1 Bỏ qua bản ghi hệ thống hoặc bản ghi đã bị đánh dấu xóa vĩnh viễn
+      if (item.id === SYSTEM_DELETED_REGISTRY_ID || item.title === SYSTEM_DELETED_TITLE) return false;
+      if (persistentDeletedIds.has(item.id)) return false;
+
       if (requestedId && item.id !== requestedId) return false;
 
       // Extract unpacked metadata to check status, audience and target
@@ -1064,10 +1144,10 @@ export async function DELETE(request: Request) {
     let dbErrorMsg: string | null = null;
 
     // 1. Xử lý xóa trên Database (Supabase) nếu ID là UUID
-    if (isUuid) {
+    if (isUuid && id !== SYSTEM_DELETED_REGISTRY_ID) {
       try {
         const delResult = await executeWithContextFallback(ctx, async (sb) => {
-          // 1.1 Xóa sạch các bản ghi phụ thuộc khóa ngoại ở bảng announcement_reads trước
+          // 1.1 Xóa sạch các bản ghi phụ thuộc khóa ngoại ở bảng announcement_reads trước (CASCADE DELETE)
           try {
             await sb.from('announcement_reads').delete().eq('announcement_id', id);
           } catch (readErr) {
@@ -1076,17 +1156,6 @@ export async function DELETE(request: Request) {
 
           // 1.2 Thực hiện xóa cứng bản ghi chính trong bảng announcements
           const delRes = await sb.from('announcements').delete().eq('id', id);
-          if (delRes?.error) {
-            console.warn('[api/announcements] Xóa cứng DB lỗi, chuyển sang soft delete (ARCHIVED):', delRes.error);
-            const softRes = await sb
-              .from('announcements')
-              .update({
-                status: 'ARCHIVED',
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', id);
-            return softRes;
-          }
           return delRes;
         });
 
@@ -1101,17 +1170,16 @@ export async function DELETE(request: Request) {
       }
     }
 
-    // 2. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
+    // 2. Ghi nhận vĩnh viễn ID đã xóa vào Persistent Deleted Registry trên Database Supabase
+    try {
+      await recordDeletedAnnouncementId(ctx, id);
+    } catch (regErr) {
+      console.warn('[api/announcements] Ghi nhận Deleted Registry warning:', regErr);
+    }
+
+    // 3. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
     const localDeleted = deleteLocalAnnouncement(id);
     removeAnnouncementReadsLocally(id);
-
-    // 3. Nếu là UUID trong DB nhưng xóa DB thất bại và bản ghi cũng không có trong local
-    if (isUuid && dbErrorMsg && !localDeleted) {
-      return NextResponse.json(
-        { success: false, error: `Không thể xóa thông báo: ${dbErrorMsg}` },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      );
-    }
 
     return NextResponse.json(
       {

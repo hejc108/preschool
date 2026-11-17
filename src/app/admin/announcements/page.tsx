@@ -2692,14 +2692,31 @@ export default function AnnouncementsStudioPage() {
       )}
 
       {/* ===================================================================== */}
-      {/* TOAST THÔNG BÁO THAO TÁC                                              */}
+      {/* TOAST THÔNG BÁO THAO TÁC (TỰ ĐỘNG PHÂN BIỆT THÀNH CÔNG HOẶC LỖI ĐỎ)   */}
       {/* ===================================================================== */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-medium flex items-center space-x-2.5 z-50 transition-all animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+      {toastMessage && (() => {
+        const isErrorToast =
+          toastMessage.toLowerCase().includes('lỗi') ||
+          toastMessage.toLowerCase().includes('không thể') ||
+          toastMessage.toLowerCase().includes('thất bại');
+
+        return (
+          <div
+            className={`fixed bottom-5 right-5 px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center space-x-2.5 z-50 transition-all ${
+              isErrorToast
+                ? 'bg-red-700 text-white border-2 border-red-500 shadow-red-900/30'
+                : 'bg-slate-900 text-white border border-slate-700'
+            }`}
+          >
+            {isErrorToast ? (
+              <AlertTriangle className="w-4.5 h-4.5 text-white shrink-0 animate-pulse" />
+            ) : (
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
+            )}
+            <span className="leading-relaxed">{toastMessage}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
