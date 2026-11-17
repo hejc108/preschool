@@ -105,7 +105,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "08:00 Thứ Bảy, 19/09/2026",
     "defaultLocation": "Phòng học các lớp Khối Mầm - Chồi - Lá",
     "defaultDeadline": "Kính mong Quý Phụ huynh có mặt đúng giờ • Hotline BGH: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -117,7 +117,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "18:30 Thứ Năm, 24/09/2026\n(Tức ngày 14 tháng 08 Âm lịch)",
     "defaultLocation": "Sân khấu chính - Trường Mầm non Sương Mai",
     "defaultDeadline": "Trang phục lễ hội truyền thống • Hỗ trợ BGH: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -129,7 +129,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "Nghỉ từ 01/09 đến hết ngày 03/09/2026",
     "defaultLocation": "Toàn thể học sinh đi học lại: Thứ Năm, 04/09/2026",
     "defaultDeadline": "Hotline trực ban BGH nhà trường: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -141,7 +141,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "Đón trẻ: 07:15 - 08:00 • Trả trẻ: 16:30 - 17:15",
     "defaultLocation": "Khu vực sảnh đón chính và các lớp học",
     "defaultDeadline": "Áp dụng từ Thứ Hai, 02/11/2026 • BGH: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -153,7 +153,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "Thời hạn thanh toán: Từ 01/11 đến hết 10/11/2026",
     "defaultLocation": "Văn phòng Kế toán hoặc Chuyển khoản ngân hàng",
     "defaultDeadline": "STK Vietcombank: 0231.000.6789 - Mầm non Sương Mai",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": true,
     "defaultTable": {
       "row1Label": "Học phí bán trú tháng 11",
@@ -171,7 +171,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "Áp dụng tuần 2 (Từ 09/11 đến 13/11/2026)",
     "defaultLocation": "Bếp ăn một chiều đạt chuẩn ATTP Sương Mai",
     "defaultDeadline": "Bé ăn sáng: 07:30 • Trưa: 10:45 • Xế chiều: 14:15",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": true,
     "defaultTable": {
       "row1Label": "Bữa chính trưa",
@@ -213,7 +213,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "08:00 - 11:00 Ngày 15/10/2026",
     "defaultLocation": "Phòng Y tế Trường Mầm non Sương Mai",
     "defaultDeadline": "Phụ huynh cho bé đi học đầy đủ và đúng giờ • BGH: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -225,7 +225,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "Nghỉ học từ ngày mai cho đến khi có thông báo mới",
     "defaultLocation": "Học sinh ở nhà cùng phụ huynh để đảm bảo an toàn",
     "defaultDeadline": "Đường dây nóng hỗ trợ khẩn cấp 24/7: 0262.352.1234",
-    "defaultAudience": "Toàn trường (200 bé)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {

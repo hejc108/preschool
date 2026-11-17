@@ -79,7 +79,7 @@ export default function AnnouncementsStudioPage() {
 
   // Content fields
   const [title, setTitle] = useState<string>('Lễ Hội Trăng Rằm & Vui Tết Trung Thu');
-  const [audience, setAudience] = useState<string>('Toàn trường (200 bé)');
+  const [audience, setAudience] = useState<string>('Toàn trường');
   const [bodyText, setBodyText] = useState<string>(
     'Trân trọng kính mời Quý Phụ huynh cùng các bé đến tham dự chương trình "Đêm Hội Trăng Rằm" với nhiều tiết mục múa lân, rước đèn ông sao và phá cỗ trông trăng đầy ý nghĩa.'
   );
@@ -424,7 +424,7 @@ export default function AnnouncementsStudioPage() {
         template_id: meta.template_id || 'le-hoi',
         is_bg_enabled: meta.is_bg_enabled !== false,
         custom_bg_url: meta.custom_bg_url || null,
-        audience: meta.audience || 'Toàn trường (200 bé)',
+        audience: meta.audience === 'Toàn trường (200 bé)' ? 'Toàn trường' : (meta.audience || 'Toàn trường'),
         cards_visibility: meta.cards_visibility || {
           time: true,
           location: true,
@@ -514,7 +514,7 @@ export default function AnnouncementsStudioPage() {
           metadata: {
             template_id: 'hoc-phi',
             is_bg_enabled: true,
-            audience: 'Toàn trường (200 bé)',
+            audience: 'Toàn trường',
             cards_visibility: { time: true, location: false, table: true, deadline: true, seal: true },
             time_value: 'Hạn nộp: 10/11/2026',
             location_value: 'Văn phòng Kế toán Sương Mai',
@@ -525,8 +525,8 @@ export default function AnnouncementsStudioPage() {
               row2_label: 'Tiền ăn (22 ngày x 35.000đ)',
               row2_amt: '770.000 đ',
             },
-            read_count: 184,
-            total_target_count: 200,
+            read_count: 0,
+            total_target_count: 170,
           },
         },
         {
@@ -539,13 +539,13 @@ export default function AnnouncementsStudioPage() {
           metadata: {
             template_id: 'giay-moi',
             is_bg_enabled: true,
-            audience: 'Toàn trường (200 bé)',
+            audience: 'Toàn trường',
             cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
             time_value: '08:00 Thứ Bảy, 19/09/2026',
             location_value: 'Phòng học các lớp Khối Mầm - Chồi - Lá',
             deadline_value: 'Hotline nhà trường: 0262.352.1234',
-            read_count: 196,
-            total_target_count: 200,
+            read_count: 0,
+            total_target_count: 170,
           },
         },
         {
@@ -558,13 +558,13 @@ export default function AnnouncementsStudioPage() {
           metadata: {
             template_id: 'suc-khoe',
             is_bg_enabled: true,
-            audience: 'Toàn trường (200 bé)',
+            audience: 'Toàn trường',
             cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
             time_value: '07:30 - 11:00 Ngày 15/10/2026',
             location_value: 'Phòng Y tế Trường Mầm non Sương Mai',
             deadline_value: 'Phụ huynh cho bé đi học đầy đủ và đúng giờ',
             read_count: 0,
-            total_target_count: 200,
+            total_target_count: 170,
           },
         },
         {
@@ -577,13 +577,13 @@ export default function AnnouncementsStudioPage() {
           metadata: {
             template_id: 'nghi-le',
             is_bg_enabled: false,
-            audience: 'Toàn trường (200 bé)',
+            audience: 'Toàn trường',
             cards_visibility: { time: true, location: false, table: false, deadline: true, seal: true },
             time_value: 'Nghỉ từ 01/09 đến hết 03/09/2026',
             location_value: 'Trường Mầm non Sương Mai',
             deadline_value: 'Hotline trực trường: 0262.352.1234',
             read_count: 0,
-            total_target_count: 200,
+            total_target_count: 170,
           },
         },
       ];
@@ -1002,8 +1002,8 @@ export default function AnnouncementsStudioPage() {
 
   // Open read receipt modal
   const handleOpenReadReceipt = (item: AnnouncementItem) => {
-    const read = item.read_count ?? (item.status === 'PUBLISHED' ? 184 : 0);
-    const total = item.total_target_count ?? 200;
+    const read = item.read_count ?? 0;
+    const total = item.total_target_count ?? 170;
     const unread = Math.max(0, total - read);
     setReadReceiptModal({
       open: true,
@@ -1258,11 +1258,10 @@ export default function AnnouncementsStudioPage() {
                   </tr>
                 ) : (
                   filteredList.map((item) => {
-                    const readCount =
-                      item.read_count ?? (item.status === 'PUBLISHED' ? 184 : 0);
-                    const totalCount = item.total_target_count ?? 200;
+                    const readCount = item.read_count ?? 0;
+                    const totalCount = item.total_target_count ?? 170;
                     const percent =
-                      totalCount > 0 ? Math.round((readCount / totalCount) * 100) : 0;
+                      totalCount > 0 ? Math.min(100, Math.round((readCount / totalCount) * 100)) : 0;
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50/80 transition">
@@ -1557,10 +1556,12 @@ export default function AnnouncementsStudioPage() {
                     onChange={(e) => setAudience(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none bg-white"
                   >
-                    <option value="Toàn trường (200 bé)">Toàn trường (200 bé)</option>
+                    <option value="Toàn trường">Toàn trường</option>
                     <option value="Khối Lá (5-6 tuổi)">Khối Lá (5-6 tuổi)</option>
                     <option value="Khối Chồi (4-5 tuổi)">Khối Chồi (4-5 tuổi)</option>
                     <option value="Khối Mầm (3-4 tuổi)">Khối Mầm (3-4 tuổi)</option>
+                    <option value="Nhà trẻ (18-36 tháng)">Nhà trẻ (18-36 tháng)</option>
+                    <option value="Cán bộ & Giáo viên">Cán bộ & Giáo viên</option>
                   </select>
                 </div>
               </div>

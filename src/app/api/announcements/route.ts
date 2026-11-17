@@ -137,6 +137,21 @@ export async function GET(request: Request) {
     const readMap = new Map<string, string>();
     const readCountMap = new Map<string, number>();
 
+    // Calculate total active students in school (from DB or fallback 170)
+    let totalEnrolledStudents = 170;
+    try {
+      const studentRes = (await executeWithContextFallback(ctx, async (sb) =>
+        await sb.from('students').select('id', { count: 'exact' }).eq('status', 'ACTIVE')
+      )) as any;
+      if (typeof studentRes?.count === 'number' && studentRes.count > 0) {
+        totalEnrolledStudents = studentRes.count;
+      } else if (Array.isArray(studentRes?.data) && studentRes.data.length > 0) {
+        totalEnrolledStudents = studentRes.data.length;
+      }
+    } catch {
+      // Fallback 170
+    }
+
     if (filtered.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
       const annIds = filtered.map((a: any) => a.id).filter(Boolean);
       if (annIds.length > 0) {
@@ -153,14 +168,70 @@ export async function GET(request: Request) {
         });
 
         if (isAdminRole(ctx.activeRole)) {
+          // Fetch all read log entries for these announcements
           const { data: allReads } = await executeWithContextFallback(ctx, async (sb) =>
             await sb
               .from('announcement_reads')
-              .select('announcement_id, user_id')
+              .select('announcement_id, user_id, role_context')
               .in('announcement_id', annIds)
           );
+
+          // Group by announcement_id -> Set of distinct user_ids
+          const distinctUsersByAnn = new Map<string, Set<string>>();
+          const allParentUserIds = new Set<string>();
+
           (allReads || []).forEach((r: any) => {
-            readCountMap.set(r.announcement_id, (readCountMap.get(r.announcement_id) || 0) + 1);
+            if (!r.announcement_id || !r.user_id) return;
+            if (!distinctUsersByAnn.has(r.announcement_id)) {
+              distinctUsersByAnn.set(r.announcement_id, new Set<string>());
+            }
+            distinctUsersByAnn.get(r.announcement_id)!.add(r.user_id);
+            if (r.role_context === 'PARENT') {
+              allParentUserIds.add(r.user_id);
+            }
+          });
+
+          // Lookup student_parents for parents to calculate distinct student_id
+          const parentToStudentsMap = new Map<string, string[]>();
+          if (allParentUserIds.size > 0) {
+            try {
+              const { data: spRows } = await executeWithContextFallback(ctx, async (sb) =>
+                await sb
+                  .from('student_parents')
+                  .select('student_id, parent_user_id')
+                  .in('parent_user_id', Array.from(allParentUserIds))
+              );
+              (spRows || []).forEach((sp: any) => {
+                if (!sp.parent_user_id || !sp.student_id) return;
+                const list = parentToStudentsMap.get(sp.parent_user_id) || [];
+                list.push(sp.student_id);
+                parentToStudentsMap.set(sp.parent_user_id, list);
+              });
+            } catch (spErr) {
+              console.warn('[api/announcements] student_parents lookup warning:', spErr);
+            }
+          }
+
+          // Calculate deduplicated count for each announcement
+          annIds.forEach((aid: string) => {
+            const userSet = distinctUsersByAnn.get(aid);
+            if (!userSet || userSet.size === 0) {
+              readCountMap.set(aid, 0);
+              return;
+            }
+
+            // Count distinct student_ids reached
+            const distinctStudents = new Set<string>();
+            userSet.forEach((uid) => {
+              const children = parentToStudentsMap.get(uid);
+              if (children && children.length > 0) {
+                children.forEach((sid) => distinctStudents.add(sid));
+              }
+            });
+
+            // Distinct count: either distinct students reached or distinct user accounts that viewed
+            const distinctCount = distinctStudents.size > 0 ? distinctStudents.size : userSet.size;
+            readCountMap.set(aid, distinctCount);
           });
         }
       }
@@ -171,14 +242,44 @@ export async function GET(request: Request) {
       const readAt = readMap.get(a.id) || null;
       const { bodyText, envelope } = unpackAnnouncementContent(a.content);
 
-      const count =
-        readCountMap.get(a.id) ??
-        (a.metadata?.read_count ?? (a.status === 'PUBLISHED' || envelope?.status === 'PUBLISHED' ? 184 : 0));
+      // Real read count (never default to mock 184/196)
+      let count = readCountMap.get(a.id);
+      if (count === undefined) {
+        const metaCount = a.metadata?.read_count;
+        count = typeof metaCount === 'number' && metaCount !== 184 && metaCount !== 196 ? metaCount : 0;
+      }
 
       const rawMeta = {
         ...(envelope?.metadata || {}),
         ...(a.metadata || {}),
       };
+
+      // Clean up legacy mock audience string
+      const sanitizedAudience =
+        rawMeta.audience === 'Toàn trường (200 bé)' ? 'Toàn trường' : rawMeta.audience || 'Toàn trường';
+
+      // Dynamic total target count based on target scope (default to actual 170 students, never 200)
+      const audienceStr = String(sanitizedAudience || a.audience || '').toLowerCase();
+      let totalTargetCount = totalEnrolledStudents;
+      if (a.class_id) {
+        if (a.class_id === 'c-nhatre' || a.class_id.includes('14ccdb7e')) totalTargetCount = 24;
+        else if (a.class_id === 'c-mam' || a.class_id.includes('5b61ec3a')) totalTargetCount = 38;
+        else if (a.class_id === 'c-choi' || a.class_id.includes('9d953115')) totalTargetCount = 38;
+        else if (a.class_id === 'c-la1' || a.class_id.includes('ebe8ec4d')) totalTargetCount = 40;
+        else if (a.class_id === 'c-la2' || a.class_id.includes('86b1e783')) totalTargetCount = 30;
+      } else if (audienceStr.includes('lá')) {
+        totalTargetCount = 70;
+      } else if (audienceStr.includes('chồi')) {
+        totalTargetCount = 38;
+      } else if (audienceStr.includes('mầm')) {
+        totalTargetCount = 38;
+      } else if (audienceStr.includes('nhà trẻ')) {
+        totalTargetCount = 24;
+      } else if (a.target_role === 'TEACHER' || audienceStr.includes('giáo viên')) {
+        totalTargetCount = 18;
+      } else if (rawMeta.total_target_count && rawMeta.total_target_count !== 200) {
+        totalTargetCount = rawMeta.total_target_count;
+      }
 
       const category = a.category || envelope?.category || rawMeta.category || 'Lễ hội';
       const status = a.status || envelope?.status || rawMeta.status || 'PUBLISHED';
@@ -194,6 +295,8 @@ export async function GET(request: Request) {
 
       const mergedMeta = {
         ...rawMeta,
+        audience: sanitizedAudience,
+        total_target_count: totalTargetCount,
         audio_url: audioUrl,
         voice_type: voiceType,
         background_music: bgMusic,
@@ -225,7 +328,7 @@ export async function GET(request: Request) {
           is_read: Boolean(readAt),
           read_at: readAt,
           read_count: count,
-          total_target_count: rawMeta.total_target_count || 200,
+          total_target_count: totalTargetCount,
         };
       }
 
@@ -256,7 +359,7 @@ export async function GET(request: Request) {
           is_urgent: isUrgent,
           has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
           has_poster: Boolean(rawMeta.has_poster !== false),
-          audience: rawMeta.audience || 'Toàn trường',
+          audience: sanitizedAudience,
           template_id: rawMeta.template_id || 'le-hoi',
           custom_bg_url: sanitizedBg,
           is_bg_enabled: rawMeta.is_bg_enabled !== false,
@@ -265,11 +368,12 @@ export async function GET(request: Request) {
           deadline_value: rawMeta.deadline_value || '',
           cards_visibility: rawMeta.cards_visibility || {},
           table_data: rawMeta.table_data || null,
+          total_target_count: totalTargetCount,
         },
         is_read: Boolean(readAt),
         read_at: readAt,
         read_count: count,
-        total_target_count: rawMeta.total_target_count || 200,
+        total_target_count: totalTargetCount,
       };
     });
 
