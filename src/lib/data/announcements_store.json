@@ -8,11 +8,11 @@
     "target_role": "ALL",
     "notification_channel": "PARENT",
     "is_urgent": true,
-    "audio_url": "/audio/audio_20_11_suongmai.wav",
+    "audio_url": "/audio/audio_20_11_suongmai.mp3",
     "voice_type": "vn_north_female_teacher",
     "background_music": "Nhạc Lễ hội Thiếu nhi (Không bản quyền)",
-    "created_at": "2026-11-17T04:23:19.018Z",
-    "updated_at": "2026-11-17T04:53:18.995Z",
+    "created_at": "2026-11-17T04:47:01.652Z",
+    "updated_at": "2026-11-17T05:17:01.629Z",
     "metadata": {
       "template_id": "le-hoi",
       "is_bg_enabled": true,
@@ -31,7 +31,7 @@
       "total_target_count": 170,
       "is_urgent": true,
       "voice_type": "vn_north_female_teacher",
-      "audio_url": "/audio/audio_20_11_suongmai.wav"
+      "audio_url": "/audio/audio_20_11_suongmai.mp3"
     }
   },
   {
@@ -43,8 +43,8 @@
     "target_role": "ALL",
     "notification_channel": "PARENT",
     "is_urgent": false,
-    "created_at": "2026-11-17T02:53:19.018Z",
-    "updated_at": "2026-11-17T04:53:18.995Z",
+    "created_at": "2026-11-17T03:17:01.652Z",
+    "updated_at": "2026-11-17T05:17:01.629Z",
     "metadata": {
       "template_id": "hoc-phi",
       "is_bg_enabled": true,
@@ -78,8 +78,8 @@
     "target_role": "ALL",
     "notification_channel": "PARENT",
     "is_urgent": false,
-    "created_at": "2026-11-16T04:53:19.018Z",
-    "updated_at": "2026-11-17T04:53:18.995Z",
+    "created_at": "2026-11-16T05:17:01.652Z",
+    "updated_at": "2026-11-17T05:17:01.629Z",
     "metadata": {
       "template_id": "giay-moi",
       "is_bg_enabled": true,
@@ -107,8 +107,8 @@
     "target_role": "ALL",
     "notification_channel": "PARENT",
     "is_urgent": false,
-    "created_at": "2026-11-15T04:53:19.018Z",
-    "updated_at": "2026-11-17T04:53:18.995Z",
+    "created_at": "2026-11-15T05:17:01.652Z",
+    "updated_at": "2026-11-17T05:17:01.629Z",
     "metadata": {
       "template_id": "suc-khoe",
       "is_bg_enabled": true,
@@ -136,8 +136,8 @@
     "target_role": "ALL",
     "notification_channel": "PARENT",
     "is_urgent": false,
-    "created_at": "2026-11-14T04:53:19.018Z",
-    "updated_at": "2026-11-17T04:53:18.995Z",
+    "created_at": "2026-11-14T05:17:01.652Z",
+    "updated_at": "2026-11-17T05:17:01.629Z",
     "metadata": {
       "template_id": "nghi-le",
       "is_bg_enabled": false,

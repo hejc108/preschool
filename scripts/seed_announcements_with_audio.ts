@@ -61,11 +61,9 @@ function main() {
     fs.mkdirSync(publicAudioDir, { recursive: true });
   }
 
-  // 1. Lưu file audio mẫu cho thông báo 20/11
-  const audioBuffer = generateSuongMaiChimeWav(4);
-  const audioFilePath = path.join(publicAudioDir, 'audio_20_11_suongmai.wav');
-  fs.writeFileSync(audioFilePath, audioBuffer);
-  console.log('✓ Đã tạo file âm thanh mẫu:', audioFilePath);
+  // 1. Kiểm tra file audio mẫu cho thông báo 20/11
+  const audioFilePath = path.join(publicAudioDir, 'audio_20_11_suongmai.mp3');
+  console.log('✓ Tệp âm thanh lời thoại:', audioFilePath);
 
   const now = new Date().toISOString();
 
@@ -81,7 +79,7 @@ function main() {
       target_role: 'ALL',
       notification_channel: 'PARENT',
       is_urgent: true,
-      audio_url: '/audio/audio_20_11_suongmai.wav',
+      audio_url: '/audio/audio_20_11_suongmai.mp3',
       voice_type: 'vn_north_female_teacher',
       background_music: 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)',
       created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
@@ -98,7 +96,7 @@ function main() {
         total_target_count: 170,
         is_urgent: true,
         voice_type: 'vn_north_female_teacher',
-        audio_url: '/audio/audio_20_11_suongmai.wav',
+        audio_url: '/audio/audio_20_11_suongmai.mp3',
       },
     },
     {

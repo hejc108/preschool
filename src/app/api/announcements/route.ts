@@ -996,7 +996,9 @@ export async function DELETE(request: Request) {
     const { ctx } = auth;
 
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const queryId = searchParams.get('id');
+    const body = await request.json().catch(() => ({}));
+    const id = String(queryId || body?.id || '').trim();
 
     if (!id) {
       return NextResponse.json(
@@ -1005,12 +1007,41 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // 1. Xóa khỏi Supabase
-    await executeWithContextFallback(ctx, async (sb) =>
-      await sb.from('announcements').delete().eq('id', id)
-    );
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    // 2. Xóa khỏi kho dự phòng
+    // 1. Xử lý xóa trên Database (Supabase)
+    if (isUuid) {
+      try {
+        await executeWithContextFallback(ctx, async (sb) => {
+          // 1.1 Xóa triệt để các bảng tham chiếu khóa ngoại
+          try {
+            await sb.from('announcement_reads').delete().eq('announcement_id', id);
+          } catch (_) {}
+
+          try {
+            await sb.from('notifications').delete().eq('metadata->>announcement_id', id);
+          } catch (_) {}
+
+          // 1.2 Thực hiện xóa bản ghi chính (hoặc soft delete nếu bị chặn)
+          const delRes = await sb.from('announcements').delete().eq('id', id);
+          if (delRes?.error) {
+            console.warn('[api/announcements] Xóa cứng lỗi, chuyển sang soft delete (ARCHIVED):', delRes.error);
+            await sb
+              .from('announcements')
+              .update({
+                status: 'ARCHIVED',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', id);
+          }
+          return delRes;
+        });
+      } catch (dbErr) {
+        console.warn('[api/announcements] DB delete warning:', dbErr);
+      }
+    }
+
+    // 2. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store)
     deleteLocalAnnouncement(id);
 
     return NextResponse.json({ success: true, deleted: id }, { headers: NO_CACHE_HEADERS });

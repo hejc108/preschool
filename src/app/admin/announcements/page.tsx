@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Bell,
@@ -116,10 +117,13 @@ export default function AnnouncementsStudioPage() {
   );
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioSynced, setIsAudioSynced] = useState<boolean>(true);
+  const router = useRouter();
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const [playingRowId, setPlayingRowId] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const rowAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // TTS Dictionary & Preview states
   const [ttsRules, setTtsRules] = useState<TtsRule[]>(DEFAULT_TTS_RULES);
@@ -473,29 +477,37 @@ export default function AnnouncementsStudioPage() {
     }
   };
 
-  // Real Database Deletion
+  // Real Database Deletion (xóa triệt để cả DB, khóa ngoại và local persistent store)
   const handleDeleteAnnouncement = async () => {
-    if (!deleteModal.id) return;
+    const targetId = deleteModal.id;
+    if (!targetId) return;
     try {
       showToast('Đang xóa bản ghi khỏi cơ sở dữ liệu...');
-      const res = await fetch(`/api/announcements?id=${deleteModal.id}`, {
+      // Cập nhật giao diện tức thì (Optimistic UI update)
+      setAnnouncements((prev) => prev.filter((a) => a.id !== targetId));
+      setDeleteModal({ open: false, id: '', title: '' });
+
+      const res = await fetch(`/api/announcements?id=${targetId}`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         showToast('Đã xóa thông báo khỏi cơ sở dữ liệu thành công!');
-        setDeleteModal({ open: false, id: '', title: '' });
         await fetchAnnouncements();
-        if (currentAnnouncementId === deleteModal.id) {
+        router.refresh();
+        if (currentAnnouncementId === targetId) {
           setCurrentAnnouncementId(null);
           setCurrentView('list');
         }
       } else {
         showToast(json.error || json.message || 'Không thể xóa thông báo.');
+        await fetchAnnouncements();
       }
     } catch (err) {
       console.error('Lỗi xóa:', err);
       showToast('Lỗi kết nối khi xóa thông báo.');
+      await fetchAnnouncements();
     }
   };
 
@@ -512,7 +524,7 @@ export default function AnnouncementsStudioPage() {
           status: 'PUBLISHED',
           target_role: 'ALL',
           is_urgent: true,
-          audio_url: '/audio/audio_20_11_suongmai.wav',
+          audio_url: '/audio/audio_20_11_suongmai.mp3',
           voice_type: 'vn_north_female_teacher',
           background_music: 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)',
           metadata: {
@@ -527,7 +539,7 @@ export default function AnnouncementsStudioPage() {
             total_target_count: 170,
             is_urgent: true,
             voice_type: 'vn_north_female_teacher',
-            audio_url: '/audio/audio_20_11_suongmai.wav',
+            audio_url: '/audio/audio_20_11_suongmai.mp3',
           },
         },
         {
@@ -1026,6 +1038,46 @@ export default function AnnouncementsStudioPage() {
     playSpeechSynthesisPreview();
   };
 
+  // Nghe thử file âm thanh AI trực tiếp ngay trên danh sách thông báo
+  const handlePreviewRowAudio = (item: AnnouncementItem) => {
+    const url = item.audio_url || item.metadata?.audio_url;
+    if (!url) {
+      showToast('Thông báo này chưa có tệp âm thanh AI.');
+      return;
+    }
+
+    if (playingRowId === item.id) {
+      if (rowAudioRef.current) {
+        rowAudioRef.current.pause();
+        rowAudioRef.current.currentTime = 0;
+      }
+      setPlayingRowId(null);
+      showToast('Đã dừng phát âm thanh.');
+      return;
+    }
+
+    if (rowAudioRef.current) {
+      rowAudioRef.current.pause();
+    }
+
+    const audio = new Audio(url);
+    rowAudioRef.current = audio;
+    setPlayingRowId(item.id);
+    showToast(`Đang nghe thử Audio AI: "${item.title.slice(0, 32)}..."`);
+
+    audio.onended = () => {
+      setPlayingRowId(null);
+    };
+    audio.onerror = () => {
+      setPlayingRowId(null);
+      showToast('Không thể phát tệp âm thanh này.');
+    };
+    audio.play().catch(() => {
+      setPlayingRowId(null);
+      showToast('Trình duyệt chặn tự động phát. Vui lòng bấm lại.');
+    });
+  };
+
   // Open read receipt modal
   const handleOpenReadReceipt = (item: AnnouncementItem) => {
     const read = item.read_count ?? 0;
@@ -1314,10 +1366,26 @@ export default function AnnouncementsStudioPage() {
                             {item.audio_url || item.metadata?.audio_url ? (
                               <>
                                 <span>•</span>
-                                <span className="text-blue-700 font-semibold flex items-center gap-0.5">
-                                  <Volume2 className="w-3 h-3 text-blue-600" />
-                                  <span>Audio AI</span>
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePreviewRowAudio(item);
+                                  }}
+                                  className={`text-[11px] font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition cursor-pointer shadow-2xs ${
+                                    playingRowId === item.id
+                                      ? 'bg-red-600 text-white animate-pulse'
+                                      : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                                  }`}
+                                  title={
+                                    playingRowId === item.id
+                                      ? 'Bấm để dừng phát'
+                                      : 'Nghe thử trực tiếp tệp giọng đọc AI của thông báo này'
+                                  }
+                                >
+                                  <Volume2 className="w-3.5 h-3.5 text-current" />
+                                  <span>{playingRowId === item.id ? 'Đang phát...' : 'Nghe Audio AI'}</span>
+                                </button>
                               </>
                             ) : null}
                           </div>
@@ -1926,25 +1994,33 @@ export default function AnnouncementsStudioPage() {
                   <button
                     type="button"
                     onClick={handleTogglePlayAudio}
-                    className={`w-6 h-6 rounded-full flex items-center justify-center transition ${
+                    className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer shadow-2xs ${
                       isPlayingAudio
-                        ? 'bg-slate-800 text-white hover:bg-slate-900'
+                        ? 'bg-slate-800 text-white hover:bg-slate-900 animate-pulse'
                         : 'bg-[#D32F2F] text-white hover:bg-red-700'
                     }`}
+                    title={isPlayingAudio ? 'Tạm dừng phát' : 'Nghe thử lời đọc thông báo qua loa'}
                   >
                     {isPlayingAudio ? (
                       <Square className="w-2.5 h-2.5 fill-white" />
                     ) : (
-                      <Play className="w-3 h-3 fill-white ml-0.5" />
+                      <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
                     )}
                   </button>
-                  <span className="text-[11px] font-medium text-slate-700">
-                    {isPlayingAudio
-                      ? 'Đang phát qua loa...'
-                      : audioUrl
-                      ? 'Phát file Audio đã lưu (00:24)'
-                      : 'Phát thử qua loa (00:24)'}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-slate-800">
+                      {isPlayingAudio
+                        ? 'Đang phát qua loa...'
+                        : audioUrl
+                        ? 'Nghe thử Audio của thông báo'
+                        : 'Nghe thử giọng AI (Web Speech)'}
+                    </span>
+                    {audioUrl && (
+                      <span className="text-[9px] text-emerald-700 font-mono truncate max-w-[140px]" title={audioUrl}>
+                        ✓ {audioUrl.split('/').pop()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

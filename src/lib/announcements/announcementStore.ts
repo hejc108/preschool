@@ -158,11 +158,9 @@ export function upsertLocalAnnouncement(item: any): any {
  * Xóa 1 thông báo khỏi kho dự phòng
  */
 export function deleteLocalAnnouncement(id: string): boolean {
+  const targetId = String(id || '').trim();
   const current = readLocalAnnouncementsStore();
-  const filtered = current.filter((x) => x.id !== id);
-  if (filtered.length !== current.length) {
-    writeLocalAnnouncementsStore(filtered);
-    return true;
-  }
-  return false;
+  const filtered = current.filter((x) => String(x.id || '').trim() !== targetId);
+  writeLocalAnnouncementsStore(filtered);
+  return filtered.length !== current.length;
 }

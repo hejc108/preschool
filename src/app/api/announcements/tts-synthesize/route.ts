@@ -11,6 +11,12 @@ import { requireActiveRole, executeWithContextFallback, isAdminRole } from '@/li
 import { getSupabaseAdminClient, NO_CACHE_HEADERS, isAuthOrRlsError } from '@/lib/supabase/server';
 import { normalizeVietnameseSpeech, DEFAULT_TTS_RULES, TtsRule } from '@/lib/announcements/ttsDictionary';
 import { getVoiceOption } from '@/lib/announcements/ttsVoices';
+import {
+  readLocalAnnouncementsStore,
+  writeLocalAnnouncementsStore,
+  packAnnouncementContent,
+  unpackAnnouncementContent,
+} from '@/lib/announcements/announcementStore';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -175,9 +181,12 @@ export async function POST(request: Request) {
       contentType = 'audio/wav';
     }
 
-    // 4. Tải file âm thanh lên Supabase Storage
+    // 4. Tải file âm thanh lên Supabase Storage (bắt buộc tên file unique theo announcement_id + timestamp)
     const supabase = getSupabaseAdminClient(false);
-    const fileName = `audio_${Date.now()}_${announcementId ? announcementId.slice(0, 8) : 'notice'}.${fileExt}`;
+    const safeAnnId = announcementId ? announcementId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'notice';
+    const timestamp = Date.now();
+    const randomSalt = Math.random().toString(36).substring(2, 7);
+    const fileName = `audio_${safeAnnId}_${timestamp}_${randomSalt}.${fileExt}`;
     const bucketsToTry = ['announcement-audios', 'announcement-posters', 'school-documents'];
     let uploadedUrl: string | null = null;
     let lastError: any = null;
@@ -226,26 +235,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. Nếu có announcementId, cập nhật trực tiếp vào cơ sở dữ liệu
+    // 5. Nếu có announcementId, cập nhật trực tiếp vào cả Cơ sở dữ liệu và Kho lưu trữ cục bộ
     if (announcementId) {
+      // 5.1 Cập nhật Database (Supabase)
       try {
         await executeWithContextFallback(ctx, async (sb) => {
-          // Lấy metadata hiện có để merge
+          // Lấy bản ghi hiện có
           const { data: existing } = await sb
             .from('announcements')
-            .select('metadata')
+            .select('id, content, metadata')
             .eq('id', announcementId)
             .single();
 
+          const existingMeta = existing?.metadata || {};
           const updatedMetadata = {
-            ...(existing?.metadata || {}),
+            ...existingMeta,
             audio_url: uploadedUrl,
             voice_type: voiceType,
             background_music: backgroundMusic,
             audio_synced: true,
           };
 
-          return await sb
+          const updateRes = await sb
             .from('announcements')
             .update({
               audio_url: uploadedUrl,
@@ -255,9 +266,50 @@ export async function POST(request: Request) {
               updated_at: new Date().toISOString(),
             })
             .eq('id', announcementId);
+
+          // Nếu DB chưa có cột audio_url, fallback đóng gói vào content envelope
+          if (updateRes?.error && existing) {
+            const { bodyText, envelope } = unpackAnnouncementContent(existing.content);
+            const newEnvelope = {
+              ...(envelope || { category: 'Thông báo', status: 'PUBLISHED', metadata: {} }),
+              audio_url: uploadedUrl,
+              voice_type: voiceType,
+              background_music: backgroundMusic,
+              metadata: updatedMetadata,
+              updated_at: new Date().toISOString(),
+            };
+            const packed = packAnnouncementContent(bodyText, newEnvelope);
+            await sb.from('announcements').update({ content: packed }).eq('id', announcementId);
+          }
+
+          return updateRes;
         });
       } catch (dbErr) {
         console.warn('Lỗi cập nhật audio_url vào database:', dbErr);
+      }
+
+      // 5.2 Cập nhật Kho lưu trữ cục bộ (Local Store Fallback)
+      try {
+        const localList = readLocalAnnouncementsStore();
+        const itemIdx = localList.findIndex(
+          (x) => x.id === announcementId || (x.title && rawText.includes(x.title))
+        );
+        if (itemIdx >= 0) {
+          localList[itemIdx].audio_url = uploadedUrl;
+          localList[itemIdx].voice_type = voiceType;
+          localList[itemIdx].background_music = backgroundMusic;
+          localList[itemIdx].updated_at = new Date().toISOString();
+          localList[itemIdx].metadata = {
+            ...(localList[itemIdx].metadata || {}),
+            audio_url: uploadedUrl,
+            voice_type: voiceType,
+            background_music: backgroundMusic,
+            audio_synced: true,
+          };
+          writeLocalAnnouncementsStore(localList);
+        }
+      } catch (storeErr) {
+        console.warn('Lỗi cập nhật audio_url vào local store:', storeErr);
       }
     }
 
