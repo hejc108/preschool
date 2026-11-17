@@ -14,12 +14,15 @@ export interface AnnouncementPosterCardProps {
   bodyText: string;
   templateId?: string;
   customBgUrl?: string | null;
+  backgroundUrl?: string | null;
   isBgEnabled?: boolean;
   audience?: string;
   showTimeCard?: boolean;
   timeValue?: string;
+  eventTime?: string;
   showLocCard?: boolean;
   locValue?: string;
+  location?: string;
   showTableCard?: boolean;
   tableData?: {
     row1_label?: string;
@@ -27,9 +30,17 @@ export interface AnnouncementPosterCardProps {
     row2_label?: string;
     row2_amt?: string;
   } | null;
+  tableRows?: {
+    row1_label?: string;
+    row1_amt?: string;
+    row2_label?: string;
+    row2_amt?: string;
+  } | null;
   showDeadlineCard?: boolean;
   deadlineValue?: string;
+  note?: string;
   showSealCard?: boolean;
+  showSeal?: boolean;
   className?: string;
 }
 
@@ -40,17 +51,23 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
       bodyText,
       templateId = 'le-hoi',
       customBgUrl,
+      backgroundUrl,
       isBgEnabled = true,
       audience = 'Toàn trường',
       showTimeCard = true,
-      timeValue = '07:30 - Thứ Sáu, 20/11/2026\n(Tức ngày 12 tháng 10 năm Bính Ngọ âm lịch)',
+      timeValue,
+      eventTime,
       showLocCard = true,
-      locValue = 'Hội trường Lớn - Trường Mầm non Sương Mai',
+      locValue,
+      location,
       showTableCard = false,
       tableData,
+      tableRows,
       showDeadlineCard = true,
-      deadlineValue = 'Quý PH vui lòng đưa bé đến trường trước 07:15 • Hotline: 0262.352.1234',
-      showSealCard = true,
+      deadlineValue,
+      note,
+      showSealCard,
+      showSeal,
       className = '',
     },
     ref
@@ -60,14 +77,44 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
       templateId && EMBEDDED_BACKGROUNDS[templateId] ? templateId : 'le-hoi';
     const bgUrl =
       customBgUrl ||
+      backgroundUrl ||
       EMBEDDED_BACKGROUNDS[resolvedTemplateId] ||
       '/images/announcements/le-hoi.jpg';
 
-    // Normalize table data fallback
-    const r1Label = tableData?.row1_label || 'Học phí & Bán trú';
-    const r1Amt = tableData?.row1_amt || '1.850.000 đ';
-    const r2Label = tableData?.row2_label || 'Quỹ Hội Phụ huynh';
-    const r2Amt = tableData?.row2_amt || '200.000 đ';
+    // Normalize values with fallback
+    const effectiveTime =
+      timeValue !== undefined && timeValue !== null && timeValue !== ''
+        ? timeValue
+        : eventTime !== undefined && eventTime !== null && eventTime !== ''
+        ? eventTime
+        : '07:30 - Thứ Sáu, 20/11/2026\n(Tức ngày 12 tháng 10 năm Bính Ngọ âm lịch)';
+
+    const effectiveLoc =
+      locValue !== undefined && locValue !== null && locValue !== ''
+        ? locValue
+        : location !== undefined && location !== null && location !== ''
+        ? location
+        : 'Hội trường Lớn - Trường Mầm non Sương Mai';
+
+    const effectiveDeadline =
+      deadlineValue !== undefined && deadlineValue !== null && deadlineValue !== ''
+        ? deadlineValue
+        : note !== undefined && note !== null && note !== ''
+        ? note
+        : 'Quý PH vui lòng đưa bé đến trường trước 07:15 • Hotline: 0262.352.1234';
+
+    const effectiveTable = tableData || tableRows;
+    const r1Label = effectiveTable?.row1_label || 'Học phí & Bán trú';
+    const r1Amt = effectiveTable?.row1_amt || '1.850.000 đ';
+    const r2Label = effectiveTable?.row2_label || 'Quỹ Hội Phụ huynh';
+    const r2Amt = effectiveTable?.row2_amt || '200.000 đ';
+
+    const resolvedShowSeal =
+      showSealCard !== undefined
+        ? showSealCard
+        : showSeal !== undefined
+        ? showSeal
+        : true;
 
     return (
       <div
@@ -140,21 +187,21 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
           {/* TẦNG 3: KHỐI THẺ THÔNG TIN ĐỘNG */}
           <div className="w-full max-w-[94%] mx-auto space-y-1.5">
             {/* THẺ 1: THỜI GIAN DIỄN RA (HỖ TRỢ 2 DÒNG DƯƠNG & ÂM LỊCH, CĂN GIỮA TUYỆT ĐỐI) */}
-            {showTimeCard && timeValue && (
+            {showTimeCard && effectiveTime && (
               <div className="flex items-center justify-center space-x-2 bg-white/94 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs text-center">
                 <CalendarClock className="w-3.5 h-3.5 text-[#D32F2F] shrink-0" />
                 <span className="text-[10.5px] font-bold text-slate-900 leading-tight whitespace-pre-line text-center">
-                  {timeValue}
+                  {effectiveTime}
                 </span>
               </div>
             )}
 
             {/* THẺ 2: ĐỊA ĐIỂM TỔ CHỨC (CĂN GIỮA) */}
-            {showLocCard && locValue && (
+            {showLocCard && effectiveLoc && (
               <div className="flex items-center justify-center space-x-2 bg-white/94 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-200/80 shadow-xs text-center">
                 <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span className="text-[10.5px] font-bold text-slate-900 leading-tight text-center">
-                  {locValue}
+                  {effectiveLoc}
                 </span>
               </div>
             )}
@@ -174,11 +221,11 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
             )}
 
             {/* THẺ 3: LƯU Ý / HẠN CHÓT / HOTLINE LIÊN HỆ */}
-            {showDeadlineCard && deadlineValue && (
+            {showDeadlineCard && effectiveDeadline && (
               <div className="flex items-center justify-center space-x-2 bg-white/94 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-sky-200/80 shadow-xs text-center">
                 <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                 <span className="text-[10px] font-semibold text-slate-800 leading-tight text-center">
-                  {deadlineValue}
+                  {effectiveDeadline}
                 </span>
               </div>
             )}
@@ -190,7 +237,7 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
             className="w-full max-w-[94%] mx-auto bg-white/94 backdrop-blur-sm border border-slate-200/80 rounded-xl px-3.5 py-2 shadow-xs"
             style={{ backgroundColor: 'rgba(255, 255, 255, 0.94)' }}
           >
-            <p className="text-[10.5px] text-slate-800 font-medium leading-relaxed text-justify line-clamp-5">
+            <p className="text-[10.5px] text-slate-800 font-medium leading-relaxed text-justify line-clamp-5 whitespace-pre-line">
               {bodyText || '(Chưa nhập nội dung)'}
             </p>
           </div>
@@ -202,7 +249,7 @@ export const AnnouncementPosterCard = forwardRef<HTMLDivElement, AnnouncementPos
             Gửi: <span>{audience}</span>
           </span>
 
-          {showSealCard && (
+          {resolvedShowSeal && (
             <div className="flex items-center space-x-1.5 bg-white/90 backdrop-blur-xs px-2 py-1 rounded-xl border border-red-200 shadow-xs">
               <div className="text-right">
                 <p className="text-[8px] font-bold text-slate-700 uppercase leading-none">

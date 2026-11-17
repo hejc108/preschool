@@ -326,19 +326,55 @@ export async function GET(request: Request) {
       const bgMusic = a.background_music || envelope?.background_music || rawMeta.background_music || rawMeta.music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
       const isUrgent = Boolean(a.is_urgent ?? envelope?.is_urgent ?? rawMeta.is_urgent);
 
-      let sanitizedBg = rawMeta.custom_bg_url;
+      const templateId =
+        rawMeta.template_id || a.template_id || envelope?.metadata?.template_id || 'le-hoi';
+
+      let sanitizedBg = rawMeta.custom_bg_url || rawMeta.background_url || a.custom_bg_url || a.background_url;
       if (sanitizedBg && typeof sanitizedBg === 'string' && sanitizedBg.startsWith('data:image')) {
-        sanitizedBg = EMBEDDED_BACKGROUNDS[rawMeta.template_id] || '/images/announcements/le-hoi.jpg';
+        sanitizedBg = EMBEDDED_BACKGROUNDS[templateId] || '/images/announcements/le-hoi.jpg';
       }
+      const effectiveBg =
+        sanitizedBg || EMBEDDED_BACKGROUNDS[templateId] || '/images/announcements/le-hoi.jpg';
+
+      const eventTime =
+        rawMeta.event_time || rawMeta.time_value || a.event_time || a.time_value || '';
+      const locationVal =
+        rawMeta.location || rawMeta.location_value || a.location || a.location_value || '';
+      const noteVal =
+        rawMeta.note || rawMeta.deadline_value || a.note || a.deadline_value || '';
+      const tableRowsVal =
+        rawMeta.table_rows || rawMeta.table_data || a.table_rows || a.table_data || null;
+      const isBgEnabledVal =
+        rawMeta.is_bg_enabled !== false && a.is_bg_enabled !== false;
+      const showSealVal =
+        rawMeta.show_seal !== false &&
+        rawMeta.cards_visibility?.seal !== false &&
+        a.show_seal !== false;
 
       const mergedMeta = {
         ...rawMeta,
+        template_id: templateId,
+        background_url: effectiveBg,
+        custom_bg_url: effectiveBg,
+        event_time: eventTime,
+        time_value: eventTime,
+        location: locationVal,
+        location_value: locationVal,
+        note: noteVal,
+        deadline_value: noteVal,
+        table_rows: tableRowsVal,
+        table_data: tableRowsVal,
+        show_seal: showSealVal,
         audience: sanitizedAudience,
+        is_bg_enabled: isBgEnabledVal,
+        cards_visibility: {
+          ...(rawMeta.cards_visibility || {}),
+          seal: showSealVal,
+        },
         total_target_count: totalTargetCount,
         audio_url: audioUrl,
         voice_type: voiceType,
         background_music: bgMusic,
-        custom_bg_url: sanitizedBg,
         is_urgent: isUrgent,
       };
 
@@ -362,6 +398,21 @@ export async function GET(request: Request) {
           requires_acknowledgement: Boolean(a.requires_acknowledgement || envelope?.requires_acknowledgement || rawMeta.requires_acknowledgement),
           has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
           has_poster: Boolean(rawMeta.has_poster !== false),
+          template_id: templateId,
+          background_url: effectiveBg,
+          custom_bg_url: effectiveBg,
+          event_time: eventTime,
+          time_value: eventTime,
+          location: locationVal,
+          location_value: locationVal,
+          note: noteVal,
+          deadline_value: noteVal,
+          table_rows: tableRowsVal,
+          table_data: tableRowsVal,
+          show_seal: showSealVal,
+          audience: sanitizedAudience,
+          is_bg_enabled: isBgEnabledVal,
+          cards_visibility: mergedMeta.cards_visibility,
           metadata: mergedMeta,
           is_read: Boolean(readAt),
           read_at: readAt,
@@ -390,24 +441,22 @@ export async function GET(request: Request) {
         background_music: bgMusic,
         has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
         has_poster: Boolean(rawMeta.has_poster !== false),
-        metadata: {
-          audio_url: audioUrl,
-          voice_type: voiceType,
-          background_music: bgMusic,
-          is_urgent: isUrgent,
-          has_audio: Boolean(audioUrl || rawMeta.has_audio !== false),
-          has_poster: Boolean(rawMeta.has_poster !== false),
-          audience: sanitizedAudience,
-          template_id: rawMeta.template_id || 'le-hoi',
-          custom_bg_url: sanitizedBg,
-          is_bg_enabled: rawMeta.is_bg_enabled !== false,
-          time_value: rawMeta.time_value || '',
-          location_value: rawMeta.location_value || '',
-          deadline_value: rawMeta.deadline_value || '',
-          cards_visibility: rawMeta.cards_visibility || {},
-          table_data: rawMeta.table_data || null,
-          total_target_count: totalTargetCount,
-        },
+        template_id: templateId,
+        background_url: effectiveBg,
+        custom_bg_url: effectiveBg,
+        event_time: eventTime,
+        time_value: eventTime,
+        location: locationVal,
+        location_value: locationVal,
+        note: noteVal,
+        deadline_value: noteVal,
+        table_rows: tableRowsVal,
+        table_data: tableRowsVal,
+        show_seal: showSealVal,
+        audience: sanitizedAudience,
+        is_bg_enabled: isBgEnabledVal,
+        cards_visibility: mergedMeta.cards_visibility,
+        metadata: mergedMeta,
         is_read: Boolean(readAt),
         read_at: readAt,
         read_count: count,
@@ -489,8 +538,45 @@ export async function POST(request: Request) {
     const backgroundMusic =
       body.background_music || metadata.background_music || metadata.music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
 
+    const templateId = body.template_id || metadata.template_id || 'le-hoi';
+    const bgUrl =
+      body.background_url ||
+      metadata.background_url ||
+      body.custom_bg_url ||
+      metadata.custom_bg_url ||
+      EMBEDDED_BACKGROUNDS[templateId] ||
+      '/images/announcements/le-hoi.jpg';
+    const eventTime = body.event_time || metadata.event_time || body.time_value || metadata.time_value || '';
+    const locationVal = body.location || metadata.location || body.location_value || metadata.location_value || '';
+    const noteVal = body.note || metadata.note || body.deadline_value || metadata.deadline_value || '';
+    const tableRowsVal = body.table_rows || metadata.table_rows || body.table_data || metadata.table_data || null;
+    const audienceVal = body.audience || metadata.audience || 'Toàn trường';
+    const isBgEnabledVal = body.is_bg_enabled ?? metadata.is_bg_enabled ?? true;
+    const showSealVal =
+      body.show_seal ??
+      metadata.show_seal ??
+      (metadata.cards_visibility?.seal !== false);
+
     const mergedMetadata = {
       ...metadata,
+      template_id: templateId,
+      background_url: bgUrl,
+      custom_bg_url: bgUrl,
+      event_time: eventTime,
+      time_value: eventTime,
+      location: locationVal,
+      location_value: locationVal,
+      note: noteVal,
+      deadline_value: noteVal,
+      table_rows: tableRowsVal,
+      table_data: tableRowsVal,
+      show_seal: showSealVal,
+      audience: audienceVal,
+      is_bg_enabled: isBgEnabledVal,
+      cards_visibility: {
+        ...(metadata.cards_visibility || {}),
+        seal: showSealVal,
+      },
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
@@ -596,6 +682,21 @@ export async function POST(request: Request) {
       requires_acknowledgement: Boolean(mergedMetadata.requires_acknowledgement),
       has_audio: Boolean(audioUrl),
       has_poster: true,
+      template_id: templateId,
+      background_url: bgUrl,
+      custom_bg_url: bgUrl,
+      event_time: eventTime,
+      time_value: eventTime,
+      location: locationVal,
+      location_value: locationVal,
+      note: noteVal,
+      deadline_value: noteVal,
+      table_rows: tableRowsVal,
+      table_data: tableRowsVal,
+      show_seal: showSealVal,
+      audience: audienceVal,
+      is_bg_enabled: isBgEnabledVal,
+      cards_visibility: mergedMetadata.cards_visibility,
       metadata: mergedMetadata,
       read_count: 0,
       is_read: true,
@@ -664,8 +765,45 @@ export async function PUT(request: Request) {
     const backgroundMusic = body.background_music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
     const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
 
+    const templateId = body.template_id || metadata.template_id || 'le-hoi';
+    const bgUrl =
+      body.background_url ||
+      metadata.background_url ||
+      body.custom_bg_url ||
+      metadata.custom_bg_url ||
+      EMBEDDED_BACKGROUNDS[templateId] ||
+      '/images/announcements/le-hoi.jpg';
+    const eventTime = body.event_time || metadata.event_time || body.time_value || metadata.time_value || '';
+    const locationVal = body.location || metadata.location || body.location_value || metadata.location_value || '';
+    const noteVal = body.note || metadata.note || body.deadline_value || metadata.deadline_value || '';
+    const tableRowsVal = body.table_rows || metadata.table_rows || body.table_data || metadata.table_data || null;
+    const audienceVal = body.audience || metadata.audience || 'Toàn trường';
+    const isBgEnabledVal = body.is_bg_enabled ?? metadata.is_bg_enabled ?? true;
+    const showSealVal =
+      body.show_seal ??
+      metadata.show_seal ??
+      (metadata.cards_visibility?.seal !== false);
+
     const mergedMetadata = {
       ...metadata,
+      template_id: templateId,
+      background_url: bgUrl,
+      custom_bg_url: bgUrl,
+      event_time: eventTime,
+      time_value: eventTime,
+      location: locationVal,
+      location_value: locationVal,
+      note: noteVal,
+      deadline_value: noteVal,
+      table_rows: tableRowsVal,
+      table_data: tableRowsVal,
+      show_seal: showSealVal,
+      audience: audienceVal,
+      is_bg_enabled: isBgEnabledVal,
+      cards_visibility: {
+        ...(metadata.cards_visibility || {}),
+        seal: showSealVal,
+      },
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
@@ -740,6 +878,21 @@ export async function PUT(request: Request) {
       priority: Boolean(mergedMetadata.is_urgent) ? 'URGENT' : 'NORMAL',
       has_audio: Boolean(audioUrl),
       has_poster: true,
+      template_id: templateId,
+      background_url: bgUrl,
+      custom_bg_url: bgUrl,
+      event_time: eventTime,
+      time_value: eventTime,
+      location: locationVal,
+      location_value: locationVal,
+      note: noteVal,
+      deadline_value: noteVal,
+      table_rows: tableRowsVal,
+      table_data: tableRowsVal,
+      show_seal: showSealVal,
+      audience: audienceVal,
+      is_bg_enabled: isBgEnabledVal,
+      cards_visibility: mergedMetadata.cards_visibility,
       metadata: mergedMetadata,
     };
 

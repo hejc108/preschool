@@ -101,7 +101,10 @@ function ParentAnnouncementsInner() {
   const fetchAnnouncements = async () => {
     try {
       setLoadingList(true);
-      const res = await fetch('/api/announcements', { cache: 'no-store' });
+      let res = await fetch('/api/pwa/announcements', { cache: 'no-store' });
+      if (!res.ok) {
+        res = await fetch('/api/announcements', { cache: 'no-store' });
+      }
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {
@@ -131,28 +134,47 @@ function ParentAnnouncementsInner() {
       return;
     }
 
-    // Check if current list item already has full detail fields (e.g. time_value)
+    // Luôn mở mặc định ở chế độ Xem Poster (chuẩn hóa trải nghiệm thị giác di động)
+    setActiveTab('poster');
+
+    // Hiển thị ngay bản nháp từ danh sách nếu có (Fast Initial Render)
     const existing = announcements.find((a) => a.id === requestedId);
-    if (existing && existing.metadata?.time_value !== undefined) {
+    if (existing) {
       setDetailAnnouncement(existing);
-      return;
     }
 
     let isCancelled = false;
     const fetchDetail = async () => {
       try {
-        setLoadingDetail(true);
-        const res = await fetch(`/api/announcements?id=${requestedId}`, { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          const item = json.announcement || json.announcements?.[0];
-          if (item && !isCancelled) {
-            setDetailAnnouncement(item);
-            // Merge into local list state
-            setAnnouncements((prev) =>
-              prev.map((a) => (a.id === item.id ? { ...a, ...item } : a))
-            );
+        if (!existing) setLoadingDetail(true);
+        let item: any = null;
+
+        // Ưu tiên gọi API chuyên dụng PWA Chi tiết Thông báo (/api/pwa/announcements/[id])
+        try {
+          const resPwa = await fetch(`/api/pwa/announcements/${requestedId}`, {
+            cache: 'no-store',
+          });
+          if (resPwa.ok) {
+            const jsonPwa = await resPwa.json();
+            item = jsonPwa.announcement || jsonPwa;
           }
+        } catch (_) {}
+
+        // Fallback gọi /api/announcements?id=... nếu route dynamic gặp sự cố
+        if (!item || !item.id) {
+          const res = await fetch(`/api/announcements?id=${requestedId}`, { cache: 'no-store' });
+          if (res.ok) {
+            const json = await res.json();
+            item = json.announcement || json.announcements?.[0];
+          }
+        }
+
+        if (item && !isCancelled) {
+          setDetailAnnouncement(item);
+          // Đồng bộ lại vào danh sách thông báo cục bộ
+          setAnnouncements((prev) =>
+            prev.map((a) => (a.id === item.id ? { ...a, ...item } : a))
+          );
         }
       } catch (err) {
         console.error('Lỗi khi tải chi tiết thông báo:', err);
@@ -406,16 +428,53 @@ function ParentAnnouncementsInner() {
             const ann = currentAnnouncement;
             const meta = ann.metadata || {};
             const isUrgent = Boolean(ann.is_urgent || meta.is_urgent);
-            const tplId = meta.template_id || 'le-hoi';
-            const bgImage = meta.custom_bg_url || EMBEDDED_BACKGROUNDS[tplId] || '';
-            const isBgEnabled = meta.is_bg_enabled !== false;
+            const tplId = meta.template_id || (ann as any).template_id || 'le-hoi';
+            const customBg =
+              meta.custom_bg_url ||
+              (ann as any).custom_bg_url ||
+              meta.background_url ||
+              (ann as any).background_url ||
+              null;
+            const bgImage = customBg || EMBEDDED_BACKGROUNDS[tplId] || '';
+            const isBgEnabled =
+              meta.is_bg_enabled !== false && (ann as any).is_bg_enabled !== false;
 
-            const cards = meta.cards_visibility || {};
-            const showTime = cards.time !== false && Boolean(meta.time_value);
-            const showLoc = cards.location !== false && Boolean(meta.location_value);
-            const showTable = Boolean(cards.table) && Boolean(meta.table_data);
-            const showDeadline = cards.deadline !== false && Boolean(meta.deadline_value);
-            const showSeal = cards.seal !== false;
+            const timeVal =
+              meta.time_value ||
+              (ann as any).time_value ||
+              meta.event_time ||
+              (ann as any).event_time ||
+              '';
+            const locVal =
+              meta.location_value ||
+              (ann as any).location_value ||
+              meta.location ||
+              (ann as any).location ||
+              '';
+            const deadlineVal =
+              meta.deadline_value ||
+              (ann as any).deadline_value ||
+              meta.note ||
+              (ann as any).note ||
+              '';
+            const tableVal =
+              meta.table_data ||
+              (ann as any).table_data ||
+              meta.table_rows ||
+              (ann as any).table_rows ||
+              null;
+            const audienceVal =
+              meta.audience || (ann as any).audience || 'Toàn trường';
+
+            const cards = meta.cards_visibility || (ann as any).cards_visibility || {};
+            const showTime = cards.time !== false && Boolean(timeVal);
+            const showLoc = cards.location !== false && Boolean(locVal);
+            const showTable = Boolean(cards.table || tableVal) && Boolean(tableVal);
+            const showDeadline = cards.deadline !== false && Boolean(deadlineVal);
+            const showSeal =
+              cards.seal !== false &&
+              (ann as any).show_seal !== false &&
+              meta.show_seal !== false;
 
             // Check if this notice needs RSVP confirmation button
             const categoryLower = (ann.category || '').toLowerCase();
@@ -575,107 +634,124 @@ function ParentAnnouncementsInner() {
 
                 {/* Nội dung chi tiết theo Tab */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {activeTab === 'poster' ? (
-                    /* ================= TAB 1: XEM POSTER 6 TẦNG ================= */
-                    <div className="flex flex-col items-center">
-                      <AnnouncementPosterCard
-                        ref={posterRef}
-                        title={ann.title}
-                        bodyText={ann.content}
-                        templateId={tplId}
-                        customBgUrl={meta.custom_bg_url}
-                        isBgEnabled={isBgEnabled}
-                        audience={meta.audience || 'Toàn trường'}
-                        showTimeCard={showTime}
-                        timeValue={meta.time_value}
-                        showLocCard={showLoc}
-                        locValue={meta.location_value}
-                        showTableCard={showTable}
-                        tableData={meta.table_data}
-                        showDeadlineCard={showDeadline}
-                        deadlineValue={meta.deadline_value}
-                        showSealCard={showSeal}
-                      />
+                  {/* ================= TAB 1: XEM POSTER 6 TẦNG (SINGLE SOURCE OF TRUTH) ================= */}
+                  <div
+                    className={
+                      activeTab === 'poster'
+                        ? 'flex flex-col items-center w-full'
+                        : 'hidden'
+                    }
+                  >
+                    <AnnouncementPosterCard
+                      ref={posterRef}
+                      title={ann.title}
+                      bodyText={ann.content}
+                      templateId={tplId}
+                      customBgUrl={customBg}
+                      backgroundUrl={customBg}
+                      isBgEnabled={isBgEnabled}
+                      audience={audienceVal}
+                      showTimeCard={showTime}
+                      timeValue={timeVal}
+                      eventTime={timeVal}
+                      showLocCard={showLoc}
+                      locValue={locVal}
+                      location={locVal}
+                      showTableCard={showTable}
+                      tableData={tableVal}
+                      tableRows={tableVal}
+                      showDeadlineCard={showDeadline}
+                      deadlineValue={deadlineVal}
+                      note={deadlineVal}
+                      showSealCard={showSeal}
+                      showSeal={showSeal}
+                      className="w-full max-w-[390px] mx-auto aspect-[3/4.25]"
+                    />
+                  </div>
+
+                  {/* ================= TAB 2: VĂN BẢN GỐC ================= */}
+                  <div
+                    className={
+                      activeTab === 'text'
+                        ? 'bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4'
+                        : 'hidden'
+                    }
+                  >
+                    <div className="border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[10px] font-bold">
+                          {ann.category || 'Thông báo'}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          {new Date(ann.created_at || '').toLocaleDateString('vi-VN')}
+                        </span>
+                      </div>
+                      <h1 className="text-base font-bold text-slate-900 leading-snug">
+                        {ann.title}
+                      </h1>
                     </div>
-                  ) : (
-                    /* ================= TAB 2: VĂN BẢN GỐC ================= */
-                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
-                      <div className="border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[10px] font-bold">
-                            {ann.category || 'Thông báo'}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            {new Date(ann.created_at || '').toLocaleDateString('vi-VN')}
-                          </span>
+
+                    <div className="space-y-2 text-xs leading-relaxed text-slate-700 text-justify">
+                      <p className="whitespace-pre-line">{ann.content}</p>
+                    </div>
+
+                    {/* Khối thông tin chi tiết */}
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs">
+                      {timeVal && (
+                        <div className="flex items-start gap-2">
+                          <CalendarClock className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold text-slate-900">Thời gian: </span>
+                            <span className="text-slate-700 whitespace-pre-line">{timeVal}</span>
+                          </div>
                         </div>
-                        <h1 className="text-base font-bold text-slate-900 leading-snug">
-                          {ann.title}
-                        </h1>
-                      </div>
-
-                      <div className="space-y-2 text-xs leading-relaxed text-slate-700 text-justify">
-                        <p>{ann.content}</p>
-                      </div>
-
-                      {/* Khối thông tin chi tiết */}
-                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs">
-                        {meta.time_value && (
-                          <div className="flex items-start gap-2">
-                            <CalendarClock className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold text-slate-900">Thời gian: </span>
-                              <span className="text-slate-700">{meta.time_value}</span>
+                      )}
+                      {locVal && (
+                        <div className="flex items-start gap-2">
+                          <MapPin className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold text-slate-900">Địa điểm: </span>
+                            <span className="text-slate-700">{locVal}</span>
+                          </div>
+                        </div>
+                      )}
+                      {deadlineVal && (
+                        <div className="flex items-start gap-2">
+                          <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold text-slate-900">Lưu ý: </span>
+                            <span className="text-slate-700">{deadlineVal}</span>
+                          </div>
+                        </div>
+                      )}
+                      {tableVal && (
+                        <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
+                          <span className="font-bold text-slate-900 block">Bảng chi tiết:</span>
+                          {tableVal.row1_label && (
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-slate-600">{tableVal.row1_label}</span>
+                              <span className="font-bold text-slate-900">
+                                {tableVal.row1_amt}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                        {meta.location_value && (
-                          <div className="flex items-start gap-2">
-                            <MapPin className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold text-slate-900">Địa điểm: </span>
-                              <span className="text-slate-700">{meta.location_value}</span>
+                          )}
+                          {tableVal.row2_label && (
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-slate-600">{tableVal.row2_label}</span>
+                              <span className="font-bold text-slate-900">
+                                {tableVal.row2_amt}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                        {meta.deadline_value && (
-                          <div className="flex items-start gap-2">
-                            <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold text-slate-900">Lưu ý: </span>
-                              <span className="text-slate-700">{meta.deadline_value}</span>
-                            </div>
-                          </div>
-                        )}
-                        {meta.table_data && (
-                          <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
-                            <span className="font-bold text-slate-900 block">Bảng chi tiết:</span>
-                            {meta.table_data.row1_label && (
-                              <div className="flex justify-between py-0.5">
-                                <span className="text-slate-600">{meta.table_data.row1_label}</span>
-                                <span className="font-bold text-slate-900">
-                                  {meta.table_data.row1_amt}
-                                </span>
-                              </div>
-                            )}
-                            {meta.table_data.row2_label && (
-                              <div className="flex justify-between py-0.5">
-                                <span className="text-slate-600">{meta.table_data.row2_label}</span>
-                                <span className="font-bold text-slate-900">
-                                  {meta.table_data.row2_amt}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="pt-2 text-[11px] text-slate-500 flex items-center justify-between">
-                        <span>Phạm vi nhận: {meta.audience || 'Toàn trường'}</span>
-                        <span className="font-semibold text-slate-700">Ban Giám Hiệu Sương Mai</span>
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    <div className="pt-2 text-[11px] text-slate-500 flex items-center justify-between">
+                      <span>Phạm vi nhận: {audienceVal}</span>
+                      <span className="font-semibold text-slate-700">Ban Giám Hiệu Sương Mai</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Nút xác nhận hành động cuối trang (Chỉ hiển thị cho thông báo cần phản hồi) */}

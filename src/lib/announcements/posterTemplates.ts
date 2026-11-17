@@ -23,6 +23,7 @@ export interface AnnouncementMetadata {
   template_id?: string;
   is_bg_enabled?: boolean;
   custom_bg_url?: string | null;
+  background_url?: string | null;
   audience?: string;
   cards_visibility?: {
     time?: boolean;
@@ -32,14 +33,24 @@ export interface AnnouncementMetadata {
     seal?: boolean;
   };
   time_value?: string;
+  event_time?: string;
   location_value?: string;
+  location?: string;
   deadline_value?: string;
+  note?: string;
   table_data?: {
     row1_label?: string;
     row1_amt?: string;
     row2_label?: string;
     row2_amt?: string;
   };
+  table_rows?: {
+    row1_label?: string;
+    row1_amt?: string;
+    row2_label?: string;
+    row2_amt?: string;
+  };
+  show_seal?: boolean;
   voice?: string;
   voice_type?: string;
   music?: string;
@@ -50,6 +61,11 @@ export interface AnnouncementMetadata {
   has_audio?: boolean;
   is_urgent?: boolean;
   requires_acknowledgement?: boolean;
+  read_count?: number;
+  total_target_count?: number;
+  status?: string;
+  category?: string;
+  target_role?: string;
 }
 
 export interface AnnouncementItem {
@@ -70,10 +86,28 @@ export interface AnnouncementItem {
   read_count?: number;
   total_target_count?: number;
   is_urgent?: boolean;
+  priority?: "URGENT" | "NORMAL";
   requires_acknowledgement?: boolean;
   audio_url?: string | null;
   voice_type?: string;
   background_music?: string;
+  has_audio?: boolean;
+  has_poster?: boolean;
+  template_id?: string;
+  background_url?: string | null;
+  custom_bg_url?: string | null;
+  event_time?: string;
+  time_value?: string;
+  location?: string;
+  location_value?: string;
+  note?: string;
+  deadline_value?: string;
+  table_rows?: any;
+  table_data?: any;
+  show_seal?: boolean;
+  audience?: string;
+  is_bg_enabled?: boolean;
+  cards_visibility?: any;
 }
 
 export const EMBEDDED_BACKGROUNDS: Record<string, string> = {
