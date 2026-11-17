@@ -101,7 +101,7 @@ function ParentAnnouncementsInner() {
   const fetchAnnouncements = async () => {
     try {
       setLoadingList(true);
-      const res = await fetch('/api/announcements');
+      const res = await fetch('/api/announcements', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {
@@ -142,7 +142,7 @@ function ParentAnnouncementsInner() {
     const fetchDetail = async () => {
       try {
         setLoadingDetail(true);
-        const res = await fetch(`/api/announcements?id=${requestedId}`);
+        const res = await fetch(`/api/announcements?id=${requestedId}`, { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
           const item = json.announcement || json.announcements?.[0];

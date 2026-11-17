@@ -76,7 +76,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
       if (!aligned) return { announcements: [], unread_count: 0 };
       return announcementsFetcher('/api/announcements');
     },
-    { revalidateOnMount: true, keepPreviousData: true, refreshInterval: 45000 }
+    { revalidateOnMount: true, keepPreviousData: true, revalidateOnFocus: true, refreshInterval: 15000 }
   );
 
   const announcements: AnnouncementItem[] = useMemo(
@@ -127,6 +127,13 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
               // Ignore restricted notification contexts (e.g., iOS Safari non-PWA tab)
             }
           }
+        },
+      },
+      {
+        table: 'announcements',
+        event: 'UPDATE',
+        onEvent: () => {
+          mutate();
         },
       },
     ],

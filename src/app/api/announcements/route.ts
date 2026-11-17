@@ -45,23 +45,17 @@ export async function GET(request: Request) {
     const isFullRequested =
       searchParams.get('full') === 'true' || Boolean(requestedId) || isAdminRole(ctx.activeRole);
 
-    // 1. Fetch from Supabase PostgreSQL (select('*') safely queries only existing columns)
+    // 1. Fetch from Supabase PostgreSQL (select('*') safely queries all columns)
     const { data: dbRows, error: dbError } = await executeWithContextFallback(ctx, async (sb) => {
       if (requestedId) {
         return (await sb.from('announcements').select('*').eq('id', requestedId).limit(1)) as any;
       }
-      let query = sb
+      const query = sb
         .from('announcements')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(60);
 
-      if (!isAdminRole(ctx.activeRole)) {
-        // If status column doesn't exist, this eq might fail, so we filter in-memory as well
-        try {
-          query = query.eq('status', 'PUBLISHED');
-        } catch (_) {}
-      }
       return (await query) as any;
     });
 
@@ -104,11 +98,19 @@ export async function GET(request: Request) {
     const filtered = rawList.filter((item: any) => {
       if (requestedId && item.id !== requestedId) return false;
 
-      // Extract unpacked metadata to check status and target
+      // Extract unpacked metadata to check status, audience and target
       const { envelope } = unpackAnnouncementContent(item.content);
-      const effectiveStatus = item.status || envelope?.status || 'PUBLISHED';
-      const effectiveCategory = item.category || envelope?.category || 'Lễ hội';
-      const effectiveTargetRole = item.target_role || 'ALL';
+      const rawMeta = {
+        ...(envelope?.metadata || {}),
+        ...(item.metadata || {}),
+      };
+
+      const rawStatus = item.status || envelope?.status || rawMeta.status || 'PUBLISHED';
+      const effectiveStatus = String(rawStatus).toUpperCase().trim();
+      const effectiveCategory = item.category || envelope?.category || rawMeta.category || 'Lễ hội';
+      const rawTargetRole = item.target_role || (envelope as any)?.target_role || rawMeta.target_role || 'ALL';
+      const effectiveTargetRole = String(rawTargetRole).toUpperCase().trim();
+      const audienceStr = String(rawMeta.audience || envelope?.metadata?.audience || item.audience || '').toLowerCase();
 
       if (isAdminRole(ctx.activeRole)) {
         if (requestedTarget && effectiveTargetRole !== requestedTarget) return false;
@@ -117,19 +119,46 @@ export async function GET(request: Request) {
         return true;
       }
 
-      // Non-admins only see PUBLISHED
+      // Non-admins only see PUBLISHED announcements (case-insensitive: 'PUBLISHED' or 'published')
       if (effectiveStatus !== 'PUBLISHED') return false;
 
+      // TEACHER SCOPE
       if (ctx.activeRole === 'TEACHER') {
-        if (effectiveTargetRole !== 'ALL' && effectiveTargetRole !== 'TEACHER') return false;
-        if (item.class_id && !ctx.assignedClassIds.includes(item.class_id)) return false;
+        if (effectiveTargetRole === 'PARENT' && audienceStr.includes('phụ huynh')) return false;
+        if (item.class_id && ctx.assignedClassIds?.length > 0 && !ctx.assignedClassIds.includes(item.class_id)) {
+          return false;
+        }
         return true;
       }
+
+      // PARENT SCOPE
       if (ctx.activeRole === 'PARENT') {
-        if (effectiveTargetRole !== 'ALL' && effectiveTargetRole !== 'PARENT') return false;
-        if (item.class_id && !parentChildClassIds.has(item.class_id)) return false;
+        // Exclude teacher/staff internal announcements
+        const isStaffOnly =
+          effectiveTargetRole === 'TEACHER' ||
+          effectiveTargetRole === 'STAFF' ||
+          audienceStr.includes('cán bộ') ||
+          audienceStr.includes('giáo viên') ||
+          audienceStr.includes('nội bộ');
+        if (isStaffOnly) return false;
+
+        // If targeted to a specific class_id, filter only if parent has known child class IDs
+        if (item.class_id && parentChildClassIds.size > 0) {
+          if (!parentChildClassIds.has(item.class_id)) return false;
+        }
+
+        // If targeted to a specific grade/khối via audience string
+        if (parentChildClassIds.size > 0 && !audienceStr.includes('toàn trường') && audienceStr !== '') {
+          const parentClassNames = Array.from(parentChildClassIds).join(' ').toLowerCase();
+          if (audienceStr.includes('lá') && !parentClassNames.includes('lá') && !parentClassNames.includes('la')) return false;
+          if (audienceStr.includes('chồi') && !parentClassNames.includes('chồi') && !parentClassNames.includes('choi')) return false;
+          if (audienceStr.includes('mầm') && !parentClassNames.includes('mầm') && !parentClassNames.includes('mam')) return false;
+          if (audienceStr.includes('nhà trẻ') && !parentClassNames.includes('nhà trẻ') && !parentClassNames.includes('nhatre')) return false;
+        }
+
         return true;
       }
+
       return effectiveTargetRole === 'ALL';
     });
 
@@ -388,16 +417,6 @@ export async function GET(request: Request) {
 
     const unreadCount = announcements.filter((a: any) => !a.is_read).length;
 
-    const cacheHeaders = requestedId
-      ? {
-          'Cache-Control': 'private, max-age=15, stale-while-revalidate=60',
-          'X-Payload-Type': 'detail',
-        }
-      : {
-          'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
-          'X-Payload-Type': 'list',
-        };
-
     return NextResponse.json(
       {
         success: true,
@@ -406,7 +425,7 @@ export async function GET(request: Request) {
         announcements,
         unread_count: unreadCount,
       },
-      { headers: cacheHeaders }
+      { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {
     console.error('[api/announcements] GET error:', err);
@@ -707,7 +726,7 @@ export async function PUT(request: Request) {
     const updatedItem = {
       id,
       title: title || data?.title,
-      content: content || data?.content,
+      content: packedContent || content || data?.content,
       category,
       status,
       target_role: body.target_role || data?.target_role || 'ALL',
