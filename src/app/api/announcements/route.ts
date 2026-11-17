@@ -30,6 +30,7 @@ export const revalidate = 0;
 
 export const SYSTEM_DELETED_REGISTRY_ID = '00000000-0000-0000-0000-000000000001';
 export const SYSTEM_DELETED_TITLE = '__SYSTEM_DELETED_ANNOUNCEMENT_IDS__';
+export const TOMBSTONE_DELETED_TITLE = '__DELETED_ANNOUNCEMENT__';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -44,22 +45,34 @@ export async function getPersistentDeletedIds(ctx: any): Promise<Set<string>> {
   const deletedSet = new Set<string>(globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ || []);
 
   try {
-    const { data: regRow } = await executeWithContextFallback(ctx, async (sb) =>
+    const { data: rows } = await executeWithContextFallback(ctx, async (sb) =>
       await sb
         .from('announcements')
-        .select('id, content')
-        .eq('id', SYSTEM_DELETED_REGISTRY_ID)
-        .maybeSingle()
+        .select('id, title, content')
+        .in('title', [SYSTEM_DELETED_TITLE, TOMBSTONE_DELETED_TITLE])
     );
 
-    if (regRow?.content) {
-      const parsed = JSON.parse(regRow.content);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((did) => {
-          deletedSet.add(String(did));
-          globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__?.add(String(did));
-        });
-      }
+    if (Array.isArray(rows)) {
+      rows.forEach((row: any) => {
+        if (!row?.content) return;
+        try {
+          const parsed = JSON.parse(row.content);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((did) => {
+              deletedSet.add(String(did));
+              globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__?.add(String(did));
+            });
+          } else if (parsed && typeof parsed === 'object' && parsed.deleted_id) {
+            deletedSet.add(String(parsed.deleted_id));
+            globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__?.add(String(parsed.deleted_id));
+          }
+        } catch {
+          if (typeof row.content === 'string' && row.content.trim()) {
+            deletedSet.add(row.content.trim());
+            globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__?.add(row.content.trim());
+          }
+        }
+      });
     }
   } catch (err) {
     console.warn('[announcements] getPersistentDeletedIds warning:', err);
@@ -68,15 +81,36 @@ export async function getPersistentDeletedIds(ctx: any): Promise<Set<string>> {
   return deletedSet;
 }
 
-export async function recordDeletedAnnouncementId(ctx: any, id: string): Promise<void> {
+export async function recordDeletedAnnouncementId(ctx: any, id: string): Promise<boolean> {
   const cleanId = String(id || '').trim();
-  if (!cleanId) return;
+  if (!cleanId) return false;
 
   globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ =
     globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ || new Set<string>();
   globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__.add(cleanId);
 
+  let persisted = false;
+
   try {
+    // 1. Immutable Tombstone INSERT: Đảm bảo luôn ghi được vào Postgres ngay cả khi RLS chặn UPDATE
+    const tombstonePayload = {
+      title: TOMBSTONE_DELETED_TITLE,
+      content: JSON.stringify({ deleted_id: cleanId, deleted_at: new Date().toISOString() }),
+      target_role: 'ALL',
+      notification_channel: 'PARENT',
+    };
+
+    const { error: insertErr } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb.from('announcements').insert(tombstonePayload)
+    );
+
+    if (!insertErr) {
+      persisted = true;
+    } else {
+      console.warn('[announcements] tombstone insert warning:', insertErr);
+    }
+
+    // 2. Aggregate Registry Upsert (lưu trữ tập trung)
     const existingSet = await getPersistentDeletedIds(ctx);
     existingSet.add(cleanId);
 
@@ -88,12 +122,18 @@ export async function recordDeletedAnnouncementId(ctx: any, id: string): Promise
       notification_channel: 'PARENT',
     };
 
-    await executeWithContextFallback(ctx, async (sb) =>
+    const { error: upsertErr } = await executeWithContextFallback(ctx, async (sb) =>
       await sb.from('announcements').upsert(payload, { onConflict: 'id' })
     );
+
+    if (!upsertErr) {
+      persisted = true;
+    }
   } catch (err) {
     console.warn('[announcements] recordDeletedAnnouncementId warning:', err);
   }
+
+  return persisted;
 }
 
 export async function GET(request: Request) {
@@ -136,11 +176,18 @@ export async function GET(request: Request) {
     let rawList: any[] = [];
     if (!dbError && Array.isArray(dbRows)) {
       rawList = dbRows.filter(
-        (r: any) => r.id !== SYSTEM_DELETED_REGISTRY_ID && r.title !== SYSTEM_DELETED_TITLE
+        (r: any) =>
+          r.id !== SYSTEM_DELETED_REGISTRY_ID &&
+          r.title !== SYSTEM_DELETED_TITLE &&
+          r.title !== TOMBSTONE_DELETED_TITLE
       );
     } else if (!dbError && dbRows) {
       const singleRow = dbRows as any;
-      if (singleRow.id !== SYSTEM_DELETED_REGISTRY_ID && singleRow.title !== SYSTEM_DELETED_TITLE) {
+      if (
+        singleRow.id !== SYSTEM_DELETED_REGISTRY_ID &&
+        singleRow.title !== SYSTEM_DELETED_TITLE &&
+        singleRow.title !== TOMBSTONE_DELETED_TITLE
+      ) {
         rawList = [singleRow];
       }
     }
@@ -176,7 +223,11 @@ export async function GET(request: Request) {
     // 4. Role-based scoping & filtering
     const filtered = rawList.filter((item: any) => {
       // 4.1 Bỏ qua bản ghi hệ thống hoặc bản ghi đã bị đánh dấu xóa vĩnh viễn
-      if (item.id === SYSTEM_DELETED_REGISTRY_ID || item.title === SYSTEM_DELETED_TITLE) return false;
+      if (
+        item.id === SYSTEM_DELETED_REGISTRY_ID ||
+        item.title === SYSTEM_DELETED_TITLE ||
+        item.title === TOMBSTONE_DELETED_TITLE
+      ) return false;
       if (persistentDeletedIds.has(item.id)) return false;
 
       if (requestedId && item.id !== requestedId) return false;
@@ -1171,13 +1222,26 @@ export async function DELETE(request: Request) {
     }
 
     // 2. Ghi nhận vĩnh viễn ID đã xóa vào Persistent Deleted Registry trên Database Supabase
+    let regSuccess = false;
     try {
-      await recordDeletedAnnouncementId(ctx, id);
-    } catch (regErr) {
+      regSuccess = await recordDeletedAnnouncementId(ctx, id);
+    } catch (regErr: any) {
       console.warn('[api/announcements] Ghi nhận Deleted Registry warning:', regErr);
     }
 
-    // 3. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
+    // 3. Báo lỗi công khai nếu thao tác xóa cơ sở dữ liệu thất bại triệt để (Zero Silent Errors)
+    if (!dbDeleted && !regSuccess && isUuid) {
+      console.error('[api/announcements] Xóa thông báo DB thất bại:', dbErrorMsg);
+      return NextResponse.json(
+        {
+          success: false,
+          error: dbErrorMsg || 'Không thể xóa thông báo khỏi cơ sở dữ liệu. Vui lòng kiểm tra quyền hạn hoặc thử lại.',
+        },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // 4. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
     const localDeleted = deleteLocalAnnouncement(id);
     removeAnnouncementReadsLocally(id);
 
@@ -1186,6 +1250,7 @@ export async function DELETE(request: Request) {
         success: true,
         deleted: id,
         db_deleted: dbDeleted,
+        tombstone_registered: regSuccess,
         local_deleted: localDeleted,
         message: 'Đã xóa thông báo thành công khỏi hệ thống.',
       },
