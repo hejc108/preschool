@@ -505,18 +505,26 @@ export default function AnnouncementsStudioPage() {
     }
   };
 
-  // Real Database Deletion (xóa triệt để cả DB, khóa ngoại và local persistent store)
+  // Real Database Deletion (xóa cascade triệt để cả DB, khóa ngoại, file storage và local persistent store)
   const handleDeleteAnnouncement = async () => {
     const targetId = deleteModal.id;
     if (!targetId || isDeletingAnnouncement) return;
     try {
       setIsDeletingAnnouncement(true);
-      showToast('Đang tiến hành xóa thông báo khỏi cơ sở dữ liệu...');
+      showToast('Đang tiến hành xóa thông báo và dữ liệu liên quan khỏi cơ sở dữ liệu...');
 
-      const res = await fetch(`/api/announcements?id=${targetId}`, {
+      let res = await fetch(`/api/admin/announcements/${targetId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
+
+      if (res.status === 404) {
+        res = await fetch(`/api/announcements?id=${targetId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       const json = await res.json().catch(() => ({}));
 
       if (res.ok && json.success) {

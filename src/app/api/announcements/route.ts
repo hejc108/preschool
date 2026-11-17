@@ -129,6 +129,45 @@ export async function recordPersistentAnnouncementReads(
   }
 }
 
+export async function removeAnnouncementFromReadsRegistry(
+  ctx: any,
+  announcementId: string
+): Promise<void> {
+  const cleanId = String(announcementId || '').trim();
+  if (!cleanId) return;
+
+  try {
+    const { data: regRow } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('announcements')
+        .select('id, content')
+        .eq('id', SYSTEM_READS_REGISTRY_ID)
+        .maybeSingle()
+    );
+
+    if (regRow?.content) {
+      try {
+        const currentMap = JSON.parse(regRow.content) || {};
+        if (currentMap[cleanId]) {
+          delete currentMap[cleanId];
+          const payload = {
+            id: SYSTEM_READS_REGISTRY_ID,
+            title: SYSTEM_READS_TITLE,
+            content: JSON.stringify(currentMap),
+            target_role: 'ALL',
+            notification_channel: 'PARENT',
+          };
+          await executeWithContextFallback(ctx, async (sb) =>
+            await sb.from('announcements').upsert(payload, { onConflict: 'id' })
+          );
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[announcements] removeAnnouncementFromReadsRegistry warning:', err);
+  }
+}
+
 export async function getPersistentDeletedIds(ctx: any): Promise<Set<string>> {
   const deletedSet = new Set<string>(globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ || []);
 
@@ -1351,17 +1390,30 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+function extractStoragePath(url: string | null | undefined, bucket: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const clean = url.trim();
+  const bucketPrefix = `/${bucket}/`;
+  const idx = clean.indexOf(bucketPrefix);
+  if (idx !== -1) {
+    const sub = clean.slice(idx + bucketPrefix.length);
+    const queryIdx = sub.indexOf('?');
+    const pathOnly = queryIdx !== -1 ? sub.slice(0, queryIdx) : sub;
+    return decodeURIComponent(pathOnly);
+  }
+  if (bucket === 'announcement-audios' && (clean.startsWith('tts_') || clean.endsWith('.mp3'))) {
+    if (!clean.includes('/') && !clean.includes('..')) return clean;
+  }
+  return null;
+}
+
+export async function deleteAnnouncementHandler(request: Request, rawId: string) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN']);
     if ('response' in auth) return auth.response;
     const { ctx } = auth;
 
-    const { searchParams } = new URL(request.url);
-    const queryId = searchParams.get('id');
-    const body = await request.json().catch(() => ({}));
-    const id = String(queryId || body?.id || '').trim();
-
+    const id = String(rawId || '').trim();
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'Thiếu mã định danh (ID) thông báo cần xóa.' },
@@ -1369,61 +1421,120 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-    let dbDeleted = false;
-    let dbErrorMsg: string | null = null;
-
-    // 1. Xử lý xóa trên Database (Supabase) nếu ID là UUID
-    if (isUuid && id !== SYSTEM_DELETED_REGISTRY_ID) {
-      try {
-        const delResult = await executeWithContextFallback(ctx, async (sb) => {
-          // 1.1 Xóa sạch các bản ghi phụ thuộc khóa ngoại ở bảng announcement_reads trước (CASCADE DELETE)
-          try {
-            await sb.from('announcement_reads').delete().eq('announcement_id', id);
-          } catch (readErr) {
-            console.warn('[api/announcements] Xóa announcement_reads warning:', readErr);
-          }
-
-          // 1.2 Thực hiện xóa cứng bản ghi chính trong bảng announcements
-          const delRes = await sb.from('announcements').delete().eq('id', id);
-          return delRes;
-        });
-
-        if (delResult?.error) {
-          dbErrorMsg = delResult.error.message || 'Lỗi cơ sở dữ liệu khi xóa thông báo.';
-        } else {
-          dbDeleted = true;
-        }
-      } catch (dbErr: any) {
-        console.error('[api/announcements] DB delete fatal error:', dbErr);
-        dbErrorMsg = dbErr?.message || 'Lỗi kết nối cơ sở dữ liệu khi xóa thông báo.';
-      }
-    }
-
-    // 2. Ghi nhận vĩnh viễn ID đã xóa vào Persistent Deleted Registry trên Database Supabase
-    let regSuccess = false;
-    try {
-      regSuccess = await recordDeletedAnnouncementId(ctx, id);
-    } catch (regErr: any) {
-      console.warn('[api/announcements] Ghi nhận Deleted Registry warning:', regErr);
-    }
-
-    // 3. Báo lỗi công khai nếu thao tác xóa cơ sở dữ liệu thất bại triệt để (Zero Silent Errors)
-    if (!dbDeleted && !regSuccess && isUuid) {
-      console.error('[api/announcements] Xóa thông báo DB thất bại:', dbErrorMsg);
+    if (id === SYSTEM_DELETED_REGISTRY_ID || id === SYSTEM_READS_REGISTRY_ID) {
       return NextResponse.json(
-        {
-          success: false,
-          error: dbErrorMsg || 'Không thể xóa thông báo khỏi cơ sở dữ liệu. Vui lòng kiểm tra quyền hạn hoặc thử lại.',
-        },
-        { status: 500, headers: NO_CACHE_HEADERS }
+        { success: false, error: 'Không thể xóa bản ghi hệ thống.' },
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
-    // 4. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
-    const localDeleted = deleteLocalAnnouncement(id);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // 1. Thu thập thông tin thông báo trước khi xóa để xử lý cascade (audio, ảnh nền)
+    let targetAudioUrl: string | null = null;
+    let targetCustomBgUrl: string | null = null;
+    let existingInDb = false;
+
+    if (isUuid) {
+      try {
+        const { data: dbItem } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb.from('announcements').select('*').eq('id', id).maybeSingle()
+        );
+        if (dbItem) {
+          existingInDb = true;
+          const { envelope } = unpackAnnouncementContent(dbItem.content);
+          targetAudioUrl = dbItem.audio_url || envelope?.audio_url || dbItem.metadata?.audio_url || null;
+          targetCustomBgUrl = envelope?.metadata?.custom_bg_url || dbItem.metadata?.custom_bg_url || null;
+        }
+      } catch (chkErr) {
+        console.warn('[deleteAnnouncementHandler] Kiểm tra DB item warning:', chkErr);
+      }
+    }
+
+    const localItem = readLocalAnnouncementsStore().find((a) => a.id === id);
+    if (localItem) {
+      if (!targetAudioUrl) targetAudioUrl = localItem.audio_url || localItem.metadata?.audio_url || null;
+      if (!targetCustomBgUrl) targetCustomBgUrl = localItem.metadata?.custom_bg_url || null;
+    }
+
+    // 2. CASCADE BƯỚC 1: Xóa các tệp phụ thuộc trên Supabase Storage (audio, ảnh poster)
+    if (targetAudioUrl) {
+      const audioPath = extractStoragePath(targetAudioUrl, 'announcement-audios');
+      if (audioPath) {
+        try {
+          await executeWithContextFallback(ctx, async (sb) =>
+            await sb.storage.from('announcement-audios').remove([audioPath])
+          );
+        } catch (stAudioErr) {
+          console.warn('[deleteAnnouncementHandler] Xóa storage audio warning:', stAudioErr);
+        }
+      }
+    }
+
+    if (targetCustomBgUrl) {
+      const bgPath = extractStoragePath(targetCustomBgUrl, 'announcement-posters');
+      if (bgPath) {
+        try {
+          await executeWithContextFallback(ctx, async (sb) =>
+            await sb.storage.from('announcement-posters').remove([bgPath])
+          );
+        } catch (stBgErr) {
+          console.warn('[deleteAnnouncementHandler] Xóa storage poster warning:', stBgErr);
+        }
+      }
+    }
+
+    // 3. CASCADE BƯỚC 2: Xóa các bản ghi lượt đọc phụ thuộc (Foreign Key announcement_reads)
+    if (isUuid) {
+      try {
+        await executeWithContextFallback(ctx, async (sb) =>
+          await sb.from('announcement_reads').delete().eq('announcement_id', id)
+        );
+      } catch (readsErr) {
+        console.warn('[deleteAnnouncementHandler] Xóa announcement_reads warning:', readsErr);
+      }
+    }
+
+    // Dọn dẹp trong registry đọc hệ thống và cache lượt đọc
+    await removeAnnouncementFromReadsRegistry(ctx, id);
     removeAnnouncementReadsLocally(id);
+
+    // 4. CASCADE BƯỚC 3: Xóa bản ghi chính trong bảng public.announcements
+    let dbDeleted = false;
+    if (isUuid && existingInDb) {
+      const { data: deletedRows, error: delErr } = await executeWithContextFallback(ctx, async (sb) =>
+        await sb.from('announcements').delete().eq('id', id).select('id')
+      );
+
+      if (delErr) {
+        console.error('[deleteAnnouncementHandler] Lỗi xóa Postgres:', delErr);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Lỗi cơ sở dữ liệu khi xóa thông báo: ${delErr.message || delErr.code || 'Bị từ chối bởi RLS'}.`,
+          },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Không thể xóa bản ghi khỏi cơ sở dữ liệu: Bản ghi không tồn tại hoặc bị từ chối bởi quyền RLS.',
+          },
+          { status: 500, headers: NO_CACHE_HEADERS }
+        );
+      }
+
+      dbDeleted = true;
+    }
+
+    // 5. CASCADE BƯỚC 4: Ghi nhận vĩnh viễn vào Deleted Tombstone Registry trên Database
+    const regSuccess = await recordDeletedAnnouncementId(ctx, id);
+
+    // 6. CASCADE BƯỚC 5: Xóa khỏi bộ đệm cục bộ
+    const localDeleted = deleteLocalAnnouncement(id);
 
     return NextResponse.json(
       {
@@ -1432,15 +1543,30 @@ export async function DELETE(request: Request) {
         db_deleted: dbDeleted,
         tombstone_registered: regSuccess,
         local_deleted: localDeleted,
-        message: 'Đã xóa thông báo thành công khỏi hệ thống.',
+        message: 'Đã xóa thông báo và toàn bộ dữ liệu phụ thuộc (lượt đọc, file audio) thành công.',
       },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {
-    console.error('[api/announcements] DELETE error:', err);
+    console.error('[deleteAnnouncementHandler] Lỗi ngoại lệ:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Không thể xóa thông báo.' },
+      {
+        success: false,
+        error: err?.message || 'Không thể xóa thông báo do lỗi kết nối máy chủ.',
+      },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const queryId = searchParams.get('id');
+  let bodyId = '';
+  try {
+    const body = await request.clone().json().catch(() => ({}));
+    bodyId = body?.id || '';
+  } catch {}
+  const id = String(queryId || bodyId || '').trim();
+  return deleteAnnouncementHandler(request, id);
 }
