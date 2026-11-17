@@ -290,8 +290,10 @@ export async function GET(request: Request) {
       };
 
       // Clean up legacy mock audience string
-      const sanitizedAudience =
-        rawMeta.audience === 'Toàn trường (200 bé)' ? 'Toàn trường' : rawMeta.audience || 'Toàn trường';
+      let sanitizedAudience = rawMeta.audience || a.audience || 'Toàn trường';
+      if (typeof sanitizedAudience === 'string') {
+        sanitizedAudience = sanitizedAudience.replace(/\s*\(200\s*bé\)/gi, '').trim() || 'Toàn trường';
+      }
 
       // Dynamic total target count based on target scope (default to actual 170 students, never 200)
       const audienceStr = String(sanitizedAudience || a.audience || '').toLowerCase();

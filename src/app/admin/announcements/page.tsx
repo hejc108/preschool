@@ -505,6 +505,32 @@ export default function AnnouncementsStudioPage() {
       showToast('Đang khởi tạo dữ liệu mẫu Sương Mai vào cơ sở dữ liệu...');
       const samples = [
         {
+          title: 'Giấy Mời Tham dự Lễ hội "Mừng Ngày Nhà Giáo Việt Nam"',
+          content:
+            'Trân trọng kính mời Quý Phụ huynh cùng các bé đến tham dự Lễ hội "Mừng Ngày Nhà Giáo Việt Nam 20/11" với nhiều tiết mục văn nghệ đặc sắc và hoạt động tri ân các thầy cô giáo đầy ý nghĩa.',
+          category: 'Lễ hội',
+          status: 'PUBLISHED',
+          target_role: 'ALL',
+          is_urgent: true,
+          audio_url: '/audio/audio_20_11_suongmai.wav',
+          voice_type: 'vn_north_female_teacher',
+          background_music: 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)',
+          metadata: {
+            template_id: 'le-hoi',
+            is_bg_enabled: true,
+            audience: 'Toàn trường',
+            cards_visibility: { time: true, location: true, table: false, deadline: true, seal: true },
+            time_value: '08:00 Thứ Sáu, 20/11/2026',
+            location_value: 'Sân khấu chính - Trường Mầm non Sương Mai',
+            deadline_value: 'Trang phục lễ hội truyền thống • Hotline BGH: 0262.352.1234',
+            read_count: 0,
+            total_target_count: 170,
+            is_urgent: true,
+            voice_type: 'vn_north_female_teacher',
+            audio_url: '/audio/audio_20_11_suongmai.wav',
+          },
+        },
+        {
           title: 'Thông báo thu học phí & tiền ăn tháng 11/2026',
           content:
             'Nhà trường gửi tới Quý Phụ huynh bảng kê chi tiết các khoản thu bán trú tháng 11. Phụ huynh vui lòng hoàn thành đúng thời hạn quy định.',
@@ -596,7 +622,7 @@ export default function AnnouncementsStudioPage() {
         });
       }
 
-      showToast('Đã khởi tạo 4 thông báo mẫu chuẩn Sương Mai vào CSDL thành công!');
+      showToast('Đã khởi tạo 5 thông báo mẫu chuẩn Sương Mai vào CSDL thành công!');
       await fetchAnnouncements();
     } catch (e) {
       console.error('Lỗi seed data:', e);
@@ -1245,14 +1271,14 @@ export default function AnnouncementsStudioPage() {
                     <td colSpan={5} className="py-12 text-center text-slate-500 space-y-3">
                       <p className="text-sm font-semibold">Chưa có thông báo nào trong cơ sở dữ liệu.</p>
                       <p className="text-xs text-slate-400 max-w-md mx-auto">
-                        Bạn có thể khởi tạo ngay 4 thông báo mẫu chuẩn sư phạm Sương Mai để sẵn sàng sử dụng.
+                        Bạn có thể khởi tạo ngay 5 thông báo mẫu chuẩn sư phạm Sương Mai (kèm thông báo Lễ hội 20/11) để sẵn sàng sử dụng.
                       </p>
                       <button
                         onClick={handleSeedSampleData}
                         className="px-4 py-2 bg-[#D32F2F] hover:bg-red-700 text-white font-semibold text-xs rounded-lg shadow-sm transition inline-flex items-center space-x-1.5"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Khởi tạo 4 thông báo mẫu Sương Mai vào CSDL</span>
+                        <span>Khởi tạo 5 thông báo mẫu Sương Mai vào CSDL</span>
                       </button>
                     </td>
                   </tr>
@@ -1278,7 +1304,11 @@ export default function AnnouncementsStudioPage() {
                             <span>{item.title}</span>
                           </div>
                           <div className="text-slate-500 text-[11px] mt-0.5 flex items-center space-x-1.5 flex-wrap">
-                            <span>{item.metadata?.audience || 'Toàn trường'}</span>
+                            <span>
+                              {(item.metadata?.audience || item.audience || 'Toàn trường')
+                                .replace(/\s*\(200\s*bé\)/gi, '')
+                                .trim() || 'Toàn trường'}
+                            </span>
                             <span>•</span>
                             <span className="text-emerald-700 font-medium">Poster Đồ họa</span>
                             {item.audio_url || item.metadata?.audio_url ? (

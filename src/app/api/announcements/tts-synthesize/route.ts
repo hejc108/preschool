@@ -5,6 +5,8 @@
 // ==============================================================================
 
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { requireActiveRole, executeWithContextFallback, isAdminRole } from '@/lib/auth/sessionContext';
 import { getSupabaseAdminClient, NO_CACHE_HEADERS, isAuthOrRlsError } from '@/lib/supabase/server';
 import { normalizeVietnameseSpeech, DEFAULT_TTS_RULES, TtsRule } from '@/lib/announcements/ttsDictionary';
@@ -198,6 +200,19 @@ export async function POST(request: Request) {
         }
       } catch (err) {
         lastError = err;
+      }
+    }
+
+    if (!uploadedUrl) {
+      try {
+        const publicAudioDir = path.resolve(process.cwd(), 'public/audio');
+        if (!fs.existsSync(publicAudioDir)) {
+          fs.mkdirSync(publicAudioDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(publicAudioDir, fileName), finalAudioBuffer);
+        uploadedUrl = `/audio/${fileName}`;
+      } catch (localErr) {
+        console.warn('Lỗi ghi file audio cục bộ:', localErr);
       }
     }
 
