@@ -26,8 +26,7 @@ import {
   EMBEDDED_BACKGROUNDS,
 } from '@/lib/announcements/posterTemplates';
 import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
-import { normalizeVietnameseSpeech } from '@/lib/announcements/ttsDictionary';
-import { getVoiceOption } from '@/lib/announcements/ttsVoices';
+import { AnnouncementAudioPlayer } from '@/components/announcements/AnnouncementAudioPlayer';
 
 function TeacherAnnouncementsSkeleton() {
   return (
@@ -76,12 +75,6 @@ function TeacherAnnouncementsInner() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'poster' | 'text'>('poster');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Audio Playback State
-  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
-  const [audioProgress, setAudioProgress] = useState<number>(0);
-  const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   // Bottom action acknowledgment state
   const [acknowledgedMap, setAcknowledgedMap] = useState<Record<string, boolean>>({});
@@ -190,33 +183,6 @@ function TeacherAnnouncementsInner() {
   // Current active announcement for detail view
   const currentAnnouncement = detailAnnouncement || (requestedId ? announcements.find((a) => a.id === requestedId) || null : null);
 
-  // Clean Audio playback on unmount or announcement switch
-  useEffect(() => {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-    }
-    const win = typeof window !== 'undefined' ? (window as any) : null;
-    if (win?.speechSynthesis) {
-      win.speechSynthesis.cancel();
-    }
-    setIsPlayingAudio(false);
-    setAudioProgress(0);
-    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-
-    return () => {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-        audioPlayerRef.current = null;
-      }
-      const w = typeof window !== 'undefined' ? (window as any) : null;
-      if (w?.speechSynthesis) {
-        w.speechSynthesis.cancel();
-      }
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    };
-  }, [currentAnnouncement?.id]);
-
   // Automatic 2-second Read-Receipt
   useEffect(() => {
     if (!currentAnnouncement || currentAnnouncement.is_read) return;
@@ -242,129 +208,6 @@ function TeacherAnnouncementsInner() {
 
     return () => clearTimeout(timer);
   }, [currentAnnouncement?.id, currentAnnouncement?.is_read]);
-
-  // SpeechSynthesis Fallback
-  const playWithSpeechSynthesis = (ann: AnnouncementItem) => {
-    const win = typeof window !== 'undefined' ? (window as any) : null;
-    if (!win || !win.speechSynthesis) {
-      showToast('Trình duyệt không hỗ trợ phát âm thanh.');
-      return;
-    }
-
-    win.speechSynthesis.cancel();
-    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-
-    const meta = ann.metadata || {};
-    const rawSpoken = `${ann.title}. ${ann.content}. ${
-      meta.time_value ? `Thời gian: ${meta.time_value}.` : ''
-    } ${meta.location_value ? `Địa điểm: ${meta.location_value}.` : ''} ${
-      meta.deadline_value ? `Lưu ý: ${meta.deadline_value}.` : ''
-    } Ban Giám Hiệu Trường Mầm non Sương Mai thông báo đến Quý Thầy Cô.`;
-
-    const spokenText = normalizeVietnameseSpeech(rawSpoken);
-    const utterance = new SpeechSynthesisUtterance(spokenText);
-    utterance.lang = 'vi-VN';
-
-    const vProfile = getVoiceOption(meta.voice_type || meta.voice || (ann as any).voice_type);
-    utterance.pitch = vProfile.pitch;
-    utterance.rate = vProfile.rate;
-
-    utterance.onstart = () => {
-      setIsPlayingAudio(true);
-      setAudioProgress(0);
-      audioIntervalRef.current = setInterval(() => {
-        setAudioProgress((prev) => (prev >= 98 ? 98 : prev + 2));
-      }, 500);
-    };
-
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-      setAudioProgress(100);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    };
-
-    utterance.onerror = () => {
-      setIsPlayingAudio(false);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    };
-
-    win.speechSynthesis.speak(utterance);
-  };
-
-  // Toggle Play / Pause Audio
-  const handleTogglePlayAudio = () => {
-    if (!currentAnnouncement) return;
-    const meta = currentAnnouncement.metadata || {};
-    const audioUrl = (currentAnnouncement as any).audio_url || meta.audio_url;
-
-    if (isPlayingAudio) {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-      }
-      const win = typeof window !== 'undefined' ? (window as any) : null;
-      if (win?.speechSynthesis) {
-        win.speechSynthesis.cancel();
-      }
-      setIsPlayingAudio(false);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-      return;
-    }
-
-    // 1. Phát audio thật nếu có
-    if (audioUrl) {
-      if (!audioPlayerRef.current) {
-        const audio = new Audio(audioUrl);
-        audioPlayerRef.current = audio;
-
-        audio.ontimeupdate = () => {
-          if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
-            const pct = (audio.currentTime / audio.duration) * 100;
-            setAudioProgress(Math.min(100, Math.round(pct)));
-          }
-        };
-
-        audio.onended = () => {
-          setIsPlayingAudio(false);
-          setAudioProgress(100);
-        };
-
-        audio.onerror = () => {
-          console.warn('Lỗi file audio, chuyển sang SpeechSynthesis dự phòng');
-          playWithSpeechSynthesis(currentAnnouncement);
-        };
-      } else if (audioPlayerRef.current.src !== audioUrl) {
-        audioPlayerRef.current.src = audioUrl;
-      }
-
-      audioPlayerRef.current
-        .play()
-        .then(() => setIsPlayingAudio(true))
-        .catch(() => {
-          playWithSpeechSynthesis(currentAnnouncement);
-        });
-      return;
-    }
-
-    // 2. Dự phòng SpeechSynthesis
-    playWithSpeechSynthesis(currentAnnouncement);
-  };
-
-  // Replay Audio
-  const handleReplayAudio = () => {
-    if (!currentAnnouncement) return;
-    const meta = currentAnnouncement.metadata || {};
-    const audioUrl = (currentAnnouncement as any).audio_url || meta.audio_url;
-
-    if (audioPlayerRef.current && audioUrl) {
-      audioPlayerRef.current.currentTime = 0;
-      audioPlayerRef.current
-        .play()
-        .then(() => setIsPlayingAudio(true))
-        .catch(() => playWithSpeechSynthesis(currentAnnouncement));
-    } else {
-      playWithSpeechSynthesis(currentAnnouncement);
-    }
-  };
 
   // Download Poster as PNG
   const handleDownloadPosterPng = async () => {
@@ -594,60 +437,6 @@ function TeacherAnnouncementsInner() {
                   </div>
                 </header>
 
-                {/* Trình phát Audio AI trên cùng (Khôi phục nổi bật theo FR-02) */}
-                {meta.has_audio !== false && (ann as any).has_audio !== false && (
-                  <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white px-4 py-3 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <button
-                          type="button"
-                          onClick={handleTogglePlayAudio}
-                          className="w-9 h-9 rounded-full bg-white text-red-600 flex items-center justify-center shadow-md active:scale-95 transition shrink-0"
-                          aria-label={isPlayingAudio ? 'Tạm dừng audio' : 'Phát audio'}
-                        >
-                          {isPlayingAudio ? (
-                            <Pause className="w-4 h-4 fill-red-600" />
-                          ) : (
-                            <Play className="w-4 h-4 fill-red-600 ml-0.5" />
-                          )}
-                        </button>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <Volume2 className="w-3.5 h-3.5 text-white/90" />
-                            <span className="text-xs font-bold truncate">
-                              {isPlayingAudio ? 'Đang phát qua loa máy...' : 'Nghe thông báo qua Audio AI'}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-red-100 truncate mt-0.5">
-                            {(() => {
-                              const vProfile = getVoiceOption(meta.voice_type || meta.voice || (ann as any).voice_type);
-                              return `${vProfile.label.split('(')[0].trim()} • Sương Mai Studio`;
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-
-                      {isPlayingAudio && (
-                        <button
-                          type="button"
-                          onClick={handleReplayAudio}
-                          className="p-1.5 rounded-full hover:bg-white/20 text-white/90 transition shrink-0"
-                          title="Phát lại từ đầu"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="w-full bg-white/30 rounded-full h-1 mt-2.5 overflow-hidden">
-                      <div
-                        className="bg-white h-1 rounded-full transition-all duration-300"
-                        style={{ width: `${audioProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
                 {/* Bộ 2 Tab: Xem Poster / Văn bản gốc */}
                 <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -695,10 +484,16 @@ function TeacherAnnouncementsInner() {
                   <div
                     className={
                       activeTab === 'poster'
-                        ? 'flex flex-col items-center w-full'
+                        ? 'flex flex-col items-center w-full space-y-3'
                         : 'hidden'
                     }
                   >
+                    {/* Thanh phát Audio AI (Audio Player Bar) ngay phía trên khối Poster */}
+                    <AnnouncementAudioPlayer
+                      audioUrl={(ann as any).audio_url || meta.audio_url}
+                      voiceType={(ann as any).voice_type || meta.voice_type || meta.voice}
+                    />
+
                     <AnnouncementPosterCard
                       ref={posterRef}
                       title={ann.title}
