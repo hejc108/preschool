@@ -593,10 +593,8 @@ export function TeacherPortalView() {
     [linkedStudents]
   );
 
-  const officialStudents = useMemo(
-    () => students.filter((s) => s.is_official !== false && !s.is_non_regular),
-    [students]
-  );
+  // PWA Teacher: Nguyên tắc hòa nhập bình đẳng - 100% học sinh trong lớp (chính quy & hòa nhập/bổ sung) đều được tính vào sĩ số thực tế
+  const officialStudents = useMemo(() => students, [students]);
 
   const handleRefreshClassAssignment = async () => {
     setRefreshingClass(true);

@@ -137,16 +137,22 @@ export async function GET(request: Request) {
     const readMap = new Map<string, string>();
     const readCountMap = new Map<string, number>();
 
-    // Calculate total active students in school (from DB or fallback 170)
+    // Calculate total active students in school & per class (from DB or fallback)
     let totalEnrolledStudents = 170;
+    const classHeadcountMap = new Map<string, number>();
     try {
       const studentRes = (await executeWithContextFallback(ctx, async (sb) =>
-        await sb.from('students').select('id', { count: 'exact' }).eq('status', 'ACTIVE')
+        await sb.from('students').select('id, class_id').eq('status', 'ACTIVE')
       )) as any;
-      if (typeof studentRes?.count === 'number' && studentRes.count > 0) {
-        totalEnrolledStudents = studentRes.count;
-      } else if (Array.isArray(studentRes?.data) && studentRes.data.length > 0) {
+      if (Array.isArray(studentRes?.data) && studentRes.data.length > 0) {
         totalEnrolledStudents = studentRes.data.length;
+        studentRes.data.forEach((s: any) => {
+          if (s.class_id) {
+            classHeadcountMap.set(s.class_id, (classHeadcountMap.get(s.class_id) || 0) + 1);
+          }
+        });
+      } else if (typeof studentRes?.count === 'number' && studentRes.count > 0) {
+        totalEnrolledStudents = studentRes.count;
       }
     } catch {
       // Fallback 170
@@ -262,7 +268,10 @@ export async function GET(request: Request) {
       const audienceStr = String(sanitizedAudience || a.audience || '').toLowerCase();
       let totalTargetCount = totalEnrolledStudents;
       if (a.class_id) {
-        if (a.class_id === 'c-nhatre' || a.class_id.includes('14ccdb7e')) totalTargetCount = 24;
+        const dbClassCount = classHeadcountMap.get(a.class_id);
+        if (dbClassCount && dbClassCount > 0) {
+          totalTargetCount = dbClassCount;
+        } else if (a.class_id === 'c-nhatre' || a.class_id.includes('14ccdb7e')) totalTargetCount = 24;
         else if (a.class_id === 'c-mam' || a.class_id.includes('5b61ec3a')) totalTargetCount = 38;
         else if (a.class_id === 'c-choi' || a.class_id.includes('9d953115')) totalTargetCount = 38;
         else if (a.class_id === 'c-la1' || a.class_id.includes('ebe8ec4d')) totalTargetCount = 40;

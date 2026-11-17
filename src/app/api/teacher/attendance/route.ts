@@ -161,6 +161,8 @@ export async function GET(request: Request) {
 
       const isNonReg = isNonRegularStudent(s, targetClassName || s.class_name);
 
+      const isTeacherRole = ctx.activeRole === 'TEACHER';
+
       return {
         id: s.id,
         student_code: s.student_code || s.code || '',
@@ -178,13 +180,15 @@ export async function GET(request: Request) {
         checkedInAt: att?.checked_in_at || null,
         checkedOutAt: att?.checked_out_at || null,
         checkoutReason: att?.checkout_reason || '',
-        is_official: !isNonReg,
-        is_non_regular: isNonReg,
+        // PWA Teacher: Nguyên tắc hòa nhập bình đẳng, 100% học sinh trong lớp là học sinh chính thức
+        is_official: isTeacherRole ? true : !isNonReg,
+        is_non_regular: isTeacherRole ? false : isNonReg,
       };
     });
 
-    const officialStudents = mappedStudents.filter((s) => s.is_official);
-    const unofficialStudents = mappedStudents.filter((s) => s.is_non_regular);
+    const isTeacherRole = ctx.activeRole === 'TEACHER';
+    const officialStudents = isTeacherRole ? mappedStudents : mappedStudents.filter((s) => s.is_official);
+    const unofficialStudents = isTeacherRole ? [] : mappedStudents.filter((s) => s.is_non_regular);
 
     return NextResponse.json(
       {
