@@ -234,3 +234,19 @@ export function getAnnouncementReadsLocally(userId: string, roleContext: string)
   const data = readLocalAnnouncementReads();
   return new Set(data[userKey] || []);
 }
+
+export function removeAnnouncementReadsLocally(announcementId: string): void {
+  const targetId = String(announcementId || '').trim();
+  const data = readLocalAnnouncementReads();
+  let changed = false;
+  Object.keys(data).forEach((userKey) => {
+    const list = data[userKey] || [];
+    if (list.includes(targetId)) {
+      data[userKey] = list.filter((id) => id !== targetId);
+      changed = true;
+    }
+  });
+  if (changed) {
+    writeLocalAnnouncementReads(data);
+  }
+}

@@ -163,6 +163,7 @@ export default function AnnouncementsStudioPage() {
     id: '',
     title: '',
   });
+  const [isDeletingAnnouncement, setIsDeletingAnnouncement] = useState<boolean>(false);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -480,34 +481,38 @@ export default function AnnouncementsStudioPage() {
   // Real Database Deletion (xóa triệt để cả DB, khóa ngoại và local persistent store)
   const handleDeleteAnnouncement = async () => {
     const targetId = deleteModal.id;
-    if (!targetId) return;
+    if (!targetId || isDeletingAnnouncement) return;
     try {
-      showToast('Đang xóa bản ghi khỏi cơ sở dữ liệu...');
-      // Cập nhật giao diện tức thì (Optimistic UI update)
-      setAnnouncements((prev) => prev.filter((a) => a.id !== targetId));
-      setDeleteModal({ open: false, id: '', title: '' });
+      setIsDeletingAnnouncement(true);
+      showToast('Đang tiến hành xóa thông báo khỏi cơ sở dữ liệu...');
 
       const res = await fetch(`/api/announcements?id=${targetId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
       const json = await res.json().catch(() => ({}));
+
       if (res.ok && json.success) {
+        // Chỉ khi máy chủ xác nhận xóa thành công 200/204 mới cập nhật lại giao diện
+        setAnnouncements((prev) => prev.filter((a) => a.id !== targetId));
+        setDeleteModal({ open: false, id: '', title: '' });
         showToast('Đã xóa thông báo khỏi cơ sở dữ liệu thành công!');
-        await fetchAnnouncements();
-        router.refresh();
         if (currentAnnouncementId === targetId) {
           setCurrentAnnouncementId(null);
           setCurrentView('list');
         }
-      } else {
-        showToast(json.error || json.message || 'Không thể xóa thông báo.');
         await fetchAnnouncements();
+        router.refresh();
+      } else {
+        const errorMsg =
+          json.error || json.message || `Lỗi khi xóa thông báo khỏi cơ sở dữ liệu (Mã lỗi ${res.status}).`;
+        showToast(errorMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi xóa:', err);
-      showToast('Lỗi kết nối khi xóa thông báo.');
-      await fetchAnnouncements();
+      showToast(err?.message ? `Lỗi kết nối: ${err.message}` : 'Lỗi kết nối máy chủ khi xóa thông báo.');
+    } finally {
+      setIsDeletingAnnouncement(false);
     }
   };
 
@@ -2659,16 +2664,27 @@ export default function AnnouncementsStudioPage() {
             </p>
             <div className="flex justify-end space-x-2 pt-1">
               <button
+                type="button"
                 onClick={() => setDeleteModal({ open: false, id: '', title: '' })}
-                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                disabled={isDeletingAnnouncement}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer disabled:opacity-50"
               >
                 Hủy bỏ
               </button>
               <button
+                type="button"
                 onClick={handleDeleteAnnouncement}
-                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                disabled={isDeletingAnnouncement}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50 flex items-center space-x-1"
               >
-                Xác nhận xóa
+                {isDeletingAnnouncement ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <span>Xác nhận xóa</span>
+                )}
               </button>
             </div>
           </div>

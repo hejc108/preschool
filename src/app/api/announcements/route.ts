@@ -21,6 +21,7 @@ import {
   deleteLocalAnnouncement,
   markAnnouncementReadLocally,
   getAnnouncementReadsLocally,
+  removeAnnouncementReadsLocally,
   AnnouncementEnvelopeData,
 } from '@/lib/announcements/announcementStore';
 
@@ -118,6 +119,8 @@ export async function GET(request: Request) {
         if (requestedTarget && effectiveTargetRole !== requestedTarget) return false;
         if (requestedCategory && effectiveCategory !== requestedCategory) return false;
         if (requestedStatus && effectiveStatus !== requestedStatus) return false;
+        // Bỏ qua các thông báo đã bị lưu trữ/xóa (ARCHIVED) trừ khi Admin chủ động lọc theo status=ARCHIVED
+        if (!requestedStatus && effectiveStatus === 'ARCHIVED') return false;
         return true;
       }
 
@@ -1057,42 +1060,69 @@ export async function DELETE(request: Request) {
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    // 1. Xử lý xóa trên Database (Supabase)
+    let dbDeleted = false;
+    let dbErrorMsg: string | null = null;
+
+    // 1. Xử lý xóa trên Database (Supabase) nếu ID là UUID
     if (isUuid) {
       try {
-        await executeWithContextFallback(ctx, async (sb) => {
-          // 1.1 Xóa triệt để các bảng tham chiếu khóa ngoại
+        const delResult = await executeWithContextFallback(ctx, async (sb) => {
+          // 1.1 Xóa sạch các bản ghi phụ thuộc khóa ngoại ở bảng announcement_reads trước
           try {
             await sb.from('announcement_reads').delete().eq('announcement_id', id);
-          } catch (_) {}
+          } catch (readErr) {
+            console.warn('[api/announcements] Xóa announcement_reads warning:', readErr);
+          }
 
-          try {
-            await sb.from('notifications').delete().eq('metadata->>announcement_id', id);
-          } catch (_) {}
-
-          // 1.2 Thực hiện xóa bản ghi chính (hoặc soft delete nếu bị chặn)
+          // 1.2 Thực hiện xóa cứng bản ghi chính trong bảng announcements
           const delRes = await sb.from('announcements').delete().eq('id', id);
           if (delRes?.error) {
-            console.warn('[api/announcements] Xóa cứng lỗi, chuyển sang soft delete (ARCHIVED):', delRes.error);
-            await sb
+            console.warn('[api/announcements] Xóa cứng DB lỗi, chuyển sang soft delete (ARCHIVED):', delRes.error);
+            const softRes = await sb
               .from('announcements')
               .update({
                 status: 'ARCHIVED',
                 updated_at: new Date().toISOString(),
               })
               .eq('id', id);
+            return softRes;
           }
           return delRes;
         });
-      } catch (dbErr) {
-        console.warn('[api/announcements] DB delete warning:', dbErr);
+
+        if (delResult?.error) {
+          dbErrorMsg = delResult.error.message || 'Lỗi cơ sở dữ liệu khi xóa thông báo.';
+        } else {
+          dbDeleted = true;
+        }
+      } catch (dbErr: any) {
+        console.error('[api/announcements] DB delete fatal error:', dbErr);
+        dbErrorMsg = dbErr?.message || 'Lỗi kết nối cơ sở dữ liệu khi xóa thông báo.';
       }
     }
 
-    // 2. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store)
-    deleteLocalAnnouncement(id);
+    // 2. Xóa khỏi kho lưu trữ cục bộ (Local Persistent Store) và dọn dẹp lượt đọc
+    const localDeleted = deleteLocalAnnouncement(id);
+    removeAnnouncementReadsLocally(id);
 
-    return NextResponse.json({ success: true, deleted: id }, { headers: NO_CACHE_HEADERS });
+    // 3. Nếu là UUID trong DB nhưng xóa DB thất bại và bản ghi cũng không có trong local
+    if (isUuid && dbErrorMsg && !localDeleted) {
+      return NextResponse.json(
+        { success: false, error: `Không thể xóa thông báo: ${dbErrorMsg}` },
+        { status: 500, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        deleted: id,
+        db_deleted: dbDeleted,
+        local_deleted: localDeleted,
+        message: 'Đã xóa thông báo thành công khỏi hệ thống.',
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     console.error('[api/announcements] DELETE error:', err);
     return NextResponse.json(
