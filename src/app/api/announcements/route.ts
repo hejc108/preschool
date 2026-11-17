@@ -19,6 +19,8 @@ import {
   readLocalAnnouncementsStore,
   upsertLocalAnnouncement,
   deleteLocalAnnouncement,
+  markAnnouncementReadLocally,
+  getAnnouncementReadsLocally,
   AnnouncementEnvelopeData,
 } from '@/lib/announcements/announcementStore';
 
@@ -187,33 +189,43 @@ export async function GET(request: Request) {
       // Fallback 170
     }
 
-    if (filtered.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
+    if (filtered.length > 0) {
       const annIds = filtered.map((a: any) => a.id).filter(Boolean);
-      if (annIds.length > 0) {
-        const { data: readRows } = await executeWithContextFallback(ctx, async (sb) =>
-          await sb
-            .from('announcement_reads')
-            .select('announcement_id, read_at')
-            .eq('user_id', ctx.profileId)
-            .eq('role_context', ctx.activeRole)
-            .in('announcement_id', annIds)
-        );
-        (readRows || []).forEach((r: any) => {
-          readMap.set(r.announcement_id, r.read_at);
-        });
+      const uuidAnnIds = annIds.filter((id: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      );
 
-        if (isAdminRole(ctx.activeRole)) {
-          // Fetch all read log entries for these announcements
-          const { data: allReads } = await executeWithContextFallback(ctx, async (sb) =>
+      // 5.1 Đọc từ Supabase (announcement_reads)
+      if (uuidAnnIds.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
+        try {
+          const { data: readRows } = await executeWithContextFallback(ctx, async (sb) =>
             await sb
               .from('announcement_reads')
-              .select('announcement_id, user_id, role_context')
-              .in('announcement_id', annIds)
+              .select('announcement_id, read_at')
+              .eq('user_id', ctx.profileId)
+              .eq('role_context', ctx.activeRole)
+              .in('announcement_id', uuidAnnIds)
           );
+          (readRows || []).forEach((r: any) => {
+            readMap.set(r.announcement_id, r.read_at);
+          });
+        } catch (readErr) {
+          console.warn('[api/announcements] Đọc announcement_reads warning:', readErr);
+        }
 
-          // Group by announcement_id -> Set of distinct user_ids
-          const distinctUsersByAnn = new Map<string, Set<string>>();
-          const allParentUserIds = new Set<string>();
+        if (isAdminRole(ctx.activeRole)) {
+          try {
+            // Fetch all read log entries for these announcements
+            const { data: allReads } = await executeWithContextFallback(ctx, async (sb) =>
+              await sb
+                .from('announcement_reads')
+                .select('announcement_id, user_id, role_context')
+                .in('announcement_id', uuidAnnIds)
+            );
+
+            // Group by announcement_id -> Set of distinct user_ids
+            const distinctUsersByAnn = new Map<string, Set<string>>();
+            const allParentUserIds = new Set<string>();
 
           (allReads || []).forEach((r: any) => {
             if (!r.announcement_id || !r.user_id) return;
@@ -268,9 +280,20 @@ export async function GET(request: Request) {
             const distinctCount = distinctStudents.size > 0 ? distinctStudents.size : userSet.size;
             readCountMap.set(aid, distinctCount);
           });
+        } catch (adminReadErr) {
+          console.warn('[api/announcements] Đọc admin allReads warning:', adminReadErr);
         }
       }
     }
+
+    // 5.2 Đọc bổ sung từ kho lưu trữ cục bộ cho tài khoản hiện tại
+    const localReads = getAnnouncementReadsLocally(ctx.profileId, ctx.activeRole);
+    localReads.forEach((aid) => {
+      if (!readMap.has(aid)) {
+        readMap.set(aid, new Date().toISOString());
+      }
+    });
+  }
 
     // 6. Map to standardized AnnouncementItem with envelope unpacking
     const announcements = filtered.map((a: any) => {
@@ -707,9 +730,9 @@ export async function POST(request: Request) {
     // Luôn đồng bộ vào kho dự phòng cục bộ để không bao giờ mất dữ liệu
     upsertLocalAnnouncement(resultItem);
 
-    // Xử lý gửi thông báo đẩy nếu phát hành chính thức
+    // Xử lý gửi thông báo đẩy nếu phát hành chính thức (1 lần duy nhất)
     let notificationPayload = null;
-    if (status === 'PUBLISHED') {
+    if (status === 'PUBLISHED' && !mergedMetadata.push_sent) {
       try {
         notificationPayload = buildPushPayload({
           id: `announcement-${createdId}`,
@@ -720,6 +743,9 @@ export async function POST(request: Request) {
           url: notificationChannel === 'TEACHER' ? '/teacher' : '/parent',
         });
         await dispatchContextPushNotification({ payload: notificationPayload });
+        mergedMetadata.push_sent = true;
+        resultItem.metadata = mergedMetadata;
+        upsertLocalAnnouncement(resultItem);
       } catch (pushErr) {
         console.warn('[api/announcements] Push notification warning:', pushErr);
       }
@@ -757,6 +783,8 @@ export async function PUT(request: Request) {
         { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
+
+    const existing = readLocalAnnouncementsStore().find((a) => a.id === id);
 
     const title = body.title !== undefined ? String(body.title).trim() : undefined;
     const content = body.content !== undefined ? String(body.content).trim() : undefined;
@@ -900,7 +928,10 @@ export async function PUT(request: Request) {
 
     upsertLocalAnnouncement(updatedItem);
 
-    if (status === 'PUBLISHED') {
+    // Chỉ kích hoạt gửi Push Notification 1 lần duy nhất tại thời điểm thông báo được phát hành chính thức
+    const wasAlreadyPublished =
+      Boolean(existing?.status === 'PUBLISHED' || (existing?.metadata as any)?.push_sent || mergedMetadata.push_sent);
+    if (status === 'PUBLISHED' && !wasAlreadyPublished) {
       try {
         const notificationPayload = buildPushPayload({
           id: `announcement-${id}`,
@@ -911,6 +942,9 @@ export async function PUT(request: Request) {
           url: updatedItem.notification_channel === 'TEACHER' ? '/teacher' : '/parent',
         });
         await dispatchContextPushNotification({ payload: notificationPayload });
+        mergedMetadata.push_sent = true;
+        updatedItem.metadata = mergedMetadata;
+        upsertLocalAnnouncement(updatedItem);
       } catch (pushErr) {
         console.warn('[api/announcements] PUT push notification warning:', pushErr);
       }
@@ -957,19 +991,33 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!ctx.profileId.startsWith('bootstrap-')) {
-      const rows = announcementIds.map((aid) => ({
-        announcement_id: aid,
-        user_id: ctx.profileId,
-        role_context: ctx.activeRole,
-        read_at: new Date().toISOString(),
-      }));
+    // 1. Luôn ghi nhận vào kho lưu trữ cục bộ cho tài khoản hiện tại
+    announcementIds.forEach((aid) => {
+      markAnnouncementReadLocally(aid, ctx.profileId, ctx.activeRole);
+    });
 
-      await executeWithContextFallback(ctx, async (sb) =>
-        await sb
-          .from('announcement_reads')
-          .upsert(rows, { onConflict: 'announcement_id,user_id,role_context' })
-      );
+    // 2. Ghi nhận vào Supabase (announcement_reads) cho các ID là UUID
+    if (!ctx.profileId.startsWith('bootstrap-')) {
+      const validUuidRows = announcementIds
+        .filter((aid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aid))
+        .map((aid) => ({
+          announcement_id: aid,
+          user_id: ctx.profileId,
+          role_context: ctx.activeRole,
+          read_at: new Date().toISOString(),
+        }));
+
+      if (validUuidRows.length > 0) {
+        try {
+          await executeWithContextFallback(ctx, async (sb) =>
+            await sb
+              .from('announcement_reads')
+              .upsert(validUuidRows, { onConflict: 'announcement_id,user_id,role_context' })
+          );
+        } catch (dbErr) {
+          console.warn('[api/announcements] PATCH announcement_reads warning:', dbErr);
+        }
+      }
     }
 
     return NextResponse.json(

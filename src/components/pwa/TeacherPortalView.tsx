@@ -33,6 +33,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { AnnouncementsStrip } from '@/components/pwa/AnnouncementsStrip';
+import { NotificationBell } from '@/components/pwa/NotificationBell';
 import { MenuTodayCard } from '@/components/pwa/MenuTodayCard';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
 import {
@@ -959,6 +960,7 @@ export function TeacherPortalView() {
         </span>
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        <NotificationBell portalRole="TEACHER" />
         <RoleSwitcher currentPortal="TEACHER" />
         <LanguageSwitcher compact />
       </div>
@@ -1094,6 +1096,7 @@ export function TeacherPortalView() {
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <NotificationBell portalRole="TEACHER" />
           <RoleSwitcher currentPortal="TEACHER" />
           <LanguageSwitcher compact />
           <button

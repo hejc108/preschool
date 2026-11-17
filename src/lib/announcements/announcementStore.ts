@@ -164,3 +164,73 @@ export function deleteLocalAnnouncement(id: string): boolean {
   writeLocalAnnouncementsStore(filtered);
   return filtered.length !== current.length;
 }
+
+// -----------------------------------------------------------------------------
+// In-Memory & Local Disk Fallback for User Read Receipts
+// -----------------------------------------------------------------------------
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __SUONGMAI_ANNOUNCEMENT_READS_STORE__: Record<string, string[]> | undefined;
+}
+
+function getReadsStoreFilePath(): string {
+  return path.resolve(process.cwd(), 'src/lib/data/announcement_reads_store.json');
+}
+
+export function readLocalAnnouncementReads(): Record<string, string[]> {
+  if (globalThis.__SUONGMAI_ANNOUNCEMENT_READS_STORE__) {
+    return globalThis.__SUONGMAI_ANNOUNCEMENT_READS_STORE__;
+  }
+
+  try {
+    const filePath = getReadsStoreFilePath();
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        globalThis.__SUONGMAI_ANNOUNCEMENT_READS_STORE__ = parsed;
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('[announcementStore] readLocalAnnouncementReads warning:', err);
+  }
+
+  globalThis.__SUONGMAI_ANNOUNCEMENT_READS_STORE__ = {};
+  return {};
+}
+
+export function writeLocalAnnouncementReads(data: Record<string, string[]>): void {
+  globalThis.__SUONGMAI_ANNOUNCEMENT_READS_STORE__ = data;
+  try {
+    const filePath = getReadsStoreFilePath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[announcementStore] writeLocalAnnouncementReads warning:', err);
+  }
+}
+
+export function markAnnouncementReadLocally(
+  announcementId: string,
+  userId: string,
+  roleContext: string
+): void {
+  const userKey = `${userId}:${roleContext}`;
+  const data = readLocalAnnouncementReads();
+  const currentList = data[userKey] || [];
+  if (!currentList.includes(announcementId)) {
+    data[userKey] = [...currentList, announcementId];
+    writeLocalAnnouncementReads(data);
+  }
+}
+
+export function getAnnouncementReadsLocally(userId: string, roleContext: string): Set<string> {
+  const userKey = `${userId}:${roleContext}`;
+  const data = readLocalAnnouncementReads();
+  return new Set(data[userKey] || []);
+}
