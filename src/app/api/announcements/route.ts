@@ -32,13 +32,101 @@ export const SYSTEM_DELETED_REGISTRY_ID = '00000000-0000-0000-0000-000000000001'
 export const SYSTEM_DELETED_TITLE = '__SYSTEM_DELETED_ANNOUNCEMENT_IDS__';
 export const TOMBSTONE_DELETED_TITLE = '__DELETED_ANNOUNCEMENT__';
 
+export const SYSTEM_READS_REGISTRY_ID = '00000000-0000-0000-0000-000000000002';
+export const SYSTEM_READS_TITLE = '__SYSTEM_ANNOUNCEMENT_READS__';
+
 declare global {
   // eslint-disable-next-line no-var
   var __SUONGMAI_DELETED_ANNOUNCEMENT_IDS__: Set<string> | undefined;
+  // eslint-disable-next-line no-var
+  var __SUONGMAI_ANNOUNCEMENT_READS_CACHE__: Record<string, Record<string, { role_context: string; read_at: string }>> | undefined;
 }
 
 if (!globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__) {
   globalThis.__SUONGMAI_DELETED_ANNOUNCEMENT_IDS__ = new Set<string>();
+}
+if (!globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__) {
+  globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__ = {};
+}
+
+export async function recordPersistentAnnouncementReads(
+  ctx: any,
+  announcementIds: string[]
+): Promise<void> {
+  const cleanIds = (announcementIds || []).map((id) => String(id || '').trim()).filter(Boolean);
+  if (cleanIds.length === 0) return;
+  const now = new Date().toISOString();
+  const profileId = String(ctx.profileId || '').trim();
+  const activeRole = String(ctx.activeRole || 'PARENT').trim();
+
+  // 1. Cập nhật cache in-memory
+  const cache = globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__ || {};
+  cleanIds.forEach((aid) => {
+    markAnnouncementReadLocally(aid, profileId, activeRole);
+    if (!cache[aid]) cache[aid] = {};
+    cache[aid][profileId] = { role_context: activeRole, read_at: now };
+  });
+  globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__ = cache;
+
+  // 2. Ghi vào bảng announcement_reads nếu ID và profileId là UUID hợp lệ
+  const isProfileUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId);
+  const validUuidRows = cleanIds
+    .filter((aid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aid))
+    .map((aid) => ({
+      announcement_id: aid,
+      user_id: isProfileUuid ? profileId : '00000000-0000-0000-0000-000000000000',
+      role_context: activeRole,
+      read_at: now,
+    }));
+
+  if (validUuidRows.length > 0 && isProfileUuid) {
+    try {
+      await executeWithContextFallback(ctx, async (sb) =>
+        await sb.from('announcement_reads').upsert(validUuidRows, {
+          onConflict: 'announcement_id,user_id,role_context',
+        })
+      );
+    } catch (readErr) {
+      console.warn('[announcements] announcement_reads upsert warning:', readErr);
+    }
+  }
+
+  // 3. Ghi nhận vĩnh viễn vào hàng lưu trữ hệ thống SYSTEM_READS_REGISTRY_ID trong announcements
+  try {
+    const { data: regRow } = await executeWithContextFallback(ctx, async (sb) =>
+      await sb
+        .from('announcements')
+        .select('id, content')
+        .eq('id', SYSTEM_READS_REGISTRY_ID)
+        .maybeSingle()
+    );
+
+    let currentMap: Record<string, Record<string, { role_context: string; read_at: string }>> = {};
+    if (regRow?.content) {
+      try {
+        currentMap = JSON.parse(regRow.content) || {};
+      } catch {}
+    }
+
+    cleanIds.forEach((aid) => {
+      if (!currentMap[aid]) currentMap[aid] = {};
+      currentMap[aid][profileId] = { role_context: activeRole, read_at: now };
+    });
+
+    const payload = {
+      id: SYSTEM_READS_REGISTRY_ID,
+      title: SYSTEM_READS_TITLE,
+      content: JSON.stringify(currentMap),
+      target_role: 'ALL',
+      notification_channel: 'PARENT',
+    };
+
+    await executeWithContextFallback(ctx, async (sb) =>
+      await sb.from('announcements').upsert(payload, { onConflict: 'id' })
+    );
+  } catch (regErr) {
+    console.warn('[announcements] recordPersistentAnnouncementReads registry warning:', regErr);
+  }
 }
 
 export async function getPersistentDeletedIds(ctx: any): Promise<Set<string>> {
@@ -178,15 +266,19 @@ export async function GET(request: Request) {
       rawList = dbRows.filter(
         (r: any) =>
           r.id !== SYSTEM_DELETED_REGISTRY_ID &&
+          r.id !== SYSTEM_READS_REGISTRY_ID &&
           r.title !== SYSTEM_DELETED_TITLE &&
-          r.title !== TOMBSTONE_DELETED_TITLE
+          r.title !== TOMBSTONE_DELETED_TITLE &&
+          r.title !== SYSTEM_READS_TITLE
       );
     } else if (!dbError && dbRows) {
       const singleRow = dbRows as any;
       if (
         singleRow.id !== SYSTEM_DELETED_REGISTRY_ID &&
+        singleRow.id !== SYSTEM_READS_REGISTRY_ID &&
         singleRow.title !== SYSTEM_DELETED_TITLE &&
-        singleRow.title !== TOMBSTONE_DELETED_TITLE
+        singleRow.title !== TOMBSTONE_DELETED_TITLE &&
+        singleRow.title !== SYSTEM_READS_TITLE
       ) {
         rawList = [singleRow];
       }
@@ -225,8 +317,10 @@ export async function GET(request: Request) {
       // 4.1 Bỏ qua bản ghi hệ thống hoặc bản ghi đã bị đánh dấu xóa vĩnh viễn
       if (
         item.id === SYSTEM_DELETED_REGISTRY_ID ||
+        item.id === SYSTEM_READS_REGISTRY_ID ||
         item.title === SYSTEM_DELETED_TITLE ||
-        item.title === TOMBSTONE_DELETED_TITLE
+        item.title === TOMBSTONE_DELETED_TITLE ||
+        item.title === SYSTEM_READS_TITLE
       ) return false;
       if (persistentDeletedIds.has(item.id)) return false;
 
@@ -349,7 +443,7 @@ export async function GET(request: Request) {
 
         if (isAdminRole(ctx.activeRole)) {
           try {
-            // Fetch all read log entries for these announcements
+            // Fetch all read log entries for these announcements from DB
             const { data: allReads } = await executeWithContextFallback(ctx, async (sb) =>
               await sb
                 .from('announcement_reads')
@@ -361,61 +455,114 @@ export async function GET(request: Request) {
             const distinctUsersByAnn = new Map<string, Set<string>>();
             const allParentUserIds = new Set<string>();
 
-          (allReads || []).forEach((r: any) => {
-            if (!r.announcement_id || !r.user_id) return;
-            if (!distinctUsersByAnn.has(r.announcement_id)) {
-              distinctUsersByAnn.set(r.announcement_id, new Set<string>());
-            }
-            distinctUsersByAnn.get(r.announcement_id)!.add(r.user_id);
-            if (r.role_context === 'PARENT') {
-              allParentUserIds.add(r.user_id);
-            }
-          });
-
-          // Lookup student_parents for parents to calculate distinct student_id
-          const parentToStudentsMap = new Map<string, string[]>();
-          if (allParentUserIds.size > 0) {
-            try {
-              const { data: spRows } = await executeWithContextFallback(ctx, async (sb) =>
-                await sb
-                  .from('student_parents')
-                  .select('student_id, parent_user_id')
-                  .in('parent_user_id', Array.from(allParentUserIds))
-              );
-              (spRows || []).forEach((sp: any) => {
-                if (!sp.parent_user_id || !sp.student_id) return;
-                const list = parentToStudentsMap.get(sp.parent_user_id) || [];
-                list.push(sp.student_id);
-                parentToStudentsMap.set(sp.parent_user_id, list);
-              });
-            } catch (spErr) {
-              console.warn('[api/announcements] student_parents lookup warning:', spErr);
-            }
-          }
-
-          // Calculate deduplicated count for each announcement
-          annIds.forEach((aid: string) => {
-            const userSet = distinctUsersByAnn.get(aid);
-            if (!userSet || userSet.size === 0) {
-              readCountMap.set(aid, 0);
-              return;
-            }
-
-            // Count distinct student_ids reached
-            const distinctStudents = new Set<string>();
-            userSet.forEach((uid) => {
-              const children = parentToStudentsMap.get(uid);
-              if (children && children.length > 0) {
-                children.forEach((sid) => distinctStudents.add(sid));
+            (allReads || []).forEach((r: any) => {
+              if (!r.announcement_id || !r.user_id) return;
+              if (!distinctUsersByAnn.has(r.announcement_id)) {
+                distinctUsersByAnn.set(r.announcement_id, new Set<string>());
+              }
+              distinctUsersByAnn.get(r.announcement_id)!.add(r.user_id);
+              if (r.role_context === 'PARENT') {
+                allParentUserIds.add(r.user_id);
               }
             });
 
-            // Distinct count: either distinct students reached or distinct user accounts that viewed
-            const distinctCount = distinctStudents.size > 0 ? distinctStudents.size : userSet.size;
-            readCountMap.set(aid, distinctCount);
-          });
-        } catch (adminReadErr) {
-          console.warn('[api/announcements] Đọc admin allReads warning:', adminReadErr);
+            // Đồng bộ thêm lượt đọc từ Persistent Reads Registry (hỗ trợ cả các ID string như ann-20-11-2026)
+            try {
+              const { data: regRow } = await executeWithContextFallback(ctx, async (sb) =>
+                await sb
+                  .from('announcements')
+                  .select('id, content')
+                  .eq('id', SYSTEM_READS_REGISTRY_ID)
+                  .maybeSingle()
+              );
+
+              if (regRow?.content) {
+                const regMap = JSON.parse(regRow.content) || {};
+                Object.entries(regMap).forEach(([aid, userMap]: [string, any]) => {
+                  if (userMap && typeof userMap === 'object') {
+                    if (!distinctUsersByAnn.has(aid)) {
+                      distinctUsersByAnn.set(aid, new Set<string>());
+                    }
+                    Object.entries(userMap).forEach(([uid, uInfo]: [string, any]) => {
+                      distinctUsersByAnn.get(aid)!.add(uid);
+                      if (uInfo?.role_context === 'PARENT') {
+                        allParentUserIds.add(uid);
+                      }
+                      if (uid === ctx.profileId) {
+                        readMap.set(aid, uInfo?.read_at || new Date().toISOString());
+                      }
+                    });
+                  }
+                });
+              }
+            } catch (regReadErr) {
+              console.warn('[api/announcements] Đọc registry reads warning:', regReadErr);
+            }
+
+            // Đồng bộ thêm từ cache in-memory
+            const memCache = globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__ || {};
+            Object.entries(memCache).forEach(([aid, userMap]) => {
+              if (userMap && typeof userMap === 'object') {
+                if (!distinctUsersByAnn.has(aid)) {
+                  distinctUsersByAnn.set(aid, new Set<string>());
+                }
+                Object.entries(userMap).forEach(([uid, uInfo]) => {
+                  distinctUsersByAnn.get(aid)!.add(uid);
+                  if (uInfo?.role_context === 'PARENT') {
+                    allParentUserIds.add(uid);
+                  }
+                  if (uid === ctx.profileId) {
+                    readMap.set(aid, uInfo?.read_at || new Date().toISOString());
+                  }
+                });
+              }
+            });
+
+            // Lookup student_parents for parents to calculate distinct student_id
+            const parentToStudentsMap = new Map<string, string[]>();
+            if (allParentUserIds.size > 0) {
+              try {
+                const { data: spRows } = await executeWithContextFallback(ctx, async (sb) =>
+                  await sb
+                    .from('student_parents')
+                    .select('student_id, parent_user_id')
+                    .in('parent_user_id', Array.from(allParentUserIds))
+                );
+                (spRows || []).forEach((sp: any) => {
+                  if (!sp.parent_user_id || !sp.student_id) return;
+                  const list = parentToStudentsMap.get(sp.parent_user_id) || [];
+                  list.push(sp.student_id);
+                  parentToStudentsMap.set(sp.parent_user_id, list);
+                });
+              } catch (spErr) {
+                console.warn('[api/announcements] student_parents lookup warning:', spErr);
+              }
+            }
+
+            // Calculate deduplicated count for each announcement
+            annIds.forEach((aid: string) => {
+              const userSet = distinctUsersByAnn.get(aid);
+              if (!userSet || userSet.size === 0) {
+                readCountMap.set(aid, 0);
+                return;
+              }
+
+              // Count distinct student_ids reached
+              const distinctStudents = new Set<string>();
+              userSet.forEach((uid) => {
+                const children = parentToStudentsMap.get(uid);
+                if (children && children.length > 0) {
+                  children.forEach((sid) => distinctStudents.add(sid));
+                }
+              });
+
+              // Distinct count: either distinct students reached or distinct user accounts that viewed
+              const distinctCount = distinctStudents.size > 0 ? distinctStudents.size : userSet.size;
+              readCountMap.set(aid, distinctCount);
+            });
+          } catch (adminReadErr) {
+            console.warn('[api/announcements] Đọc admin allReads warning:', adminReadErr);
+          }
         }
       }
     }
@@ -427,7 +574,30 @@ export async function GET(request: Request) {
         readMap.set(aid, new Date().toISOString());
       }
     });
-  }
+
+    // 5.3 Truy vấn danh tính người tạo (Creator Profiles)
+    const creatorIds = Array.from(
+      new Set(
+        filtered
+          .map((a: any) => a.created_by)
+          .filter((id: any) => id && typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(id))
+      )
+    );
+    const creatorNameMap = new Map<string, string>();
+    if (creatorIds.length > 0) {
+      try {
+        const { data: profs } = await executeWithContextFallback(ctx, async (sb) =>
+          await sb.from('profiles').select('id, full_name, role').in('id', creatorIds)
+        );
+        (profs || []).forEach((p: any) => {
+          if (p?.id && p?.full_name) {
+            creatorNameMap.set(p.id, p.full_name);
+          }
+        });
+      } catch (profErr) {
+        console.warn('[api/announcements] creator profiles lookup warning:', profErr);
+      }
+    }
 
     // 6. Map to standardized AnnouncementItem with envelope unpacking
     const announcements = filtered.map((a: any) => {
@@ -445,6 +615,14 @@ export async function GET(request: Request) {
         ...(envelope?.metadata || {}),
         ...(a.metadata || {}),
       };
+
+      const createdByName =
+        (a.created_by && creatorNameMap.get(a.created_by)) ||
+        rawMeta.created_by_name ||
+        rawMeta.author_name ||
+        a.author_name ||
+        a.created_by_name ||
+        'Ban Giám Hiệu';
 
       // Clean up legacy mock audience string
       let sanitizedAudience = rawMeta.audience || a.audience || 'Toàn trường';
@@ -535,6 +713,7 @@ export async function GET(request: Request) {
         voice_type: voiceType,
         background_music: bgMusic,
         is_urgent: isUrgent,
+        created_by_name: createdByName,
       };
 
       if (isFullRequested || requestedId) {
@@ -547,7 +726,9 @@ export async function GET(request: Request) {
           target_role: a.target_role || 'ALL',
           notification_channel: a.notification_channel || 'PARENT',
           class_id: a.class_id || null,
-          created_at: a.created_at || new Date().toISOString(),
+          created_by: a.created_by || null,
+          created_by_name: createdByName,
+          created_at: a.created_at || rawMeta.created_at || new Date().toISOString(),
           updated_at: a.updated_at || envelope?.updated_at || a.created_at || new Date().toISOString(),
           audio_url: audioUrl,
           voice_type: voiceType,
@@ -590,7 +771,9 @@ export async function GET(request: Request) {
         target_role: a.target_role || 'ALL',
         notification_channel: a.notification_channel || 'PARENT',
         class_id: a.class_id || null,
-        created_at: a.created_at || new Date().toISOString(),
+        created_by: a.created_by || null,
+        created_by_name: createdByName,
+        created_at: a.created_at || rawMeta.created_at || new Date().toISOString(),
         updated_at: a.updated_at || envelope?.updated_at || a.created_at || new Date().toISOString(),
         is_urgent: isUrgent,
         priority: isUrgent ? 'URGENT' : 'NORMAL',
@@ -709,7 +892,17 @@ export async function POST(request: Request) {
     const locationVal = body.location || metadata.location || body.location_value || metadata.location_value || '';
     const noteVal = body.note || metadata.note || body.deadline_value || metadata.deadline_value || '';
     const tableRowsVal = body.table_rows || metadata.table_rows || body.table_data || metadata.table_data || null;
-    const audienceVal = body.audience || metadata.audience || 'Toàn trường';
+    const rawAudience = body.audience || metadata.audience || '';
+    const isAllScope =
+      rawAudience === 'Toàn trường' ||
+      body.scope === 'all' ||
+      metadata.scope === 'all' ||
+      !rawAudience;
+    const audienceVal = isAllScope ? 'Toàn trường' : rawAudience;
+    if (body.target_role !== undefined) targetRole = String(body.target_role).trim();
+    if (isAllScope && ctx.activeRole !== 'TEACHER') {
+      targetRole = 'ALL';
+    }
     const isBgEnabledVal = body.is_bg_enabled ?? metadata.is_bg_enabled ?? true;
     const showSealVal =
       body.show_seal ??
@@ -731,6 +924,7 @@ export async function POST(request: Request) {
       table_data: tableRowsVal,
       show_seal: showSealVal,
       audience: audienceVal,
+      scope: isAllScope ? 'all' : audienceVal,
       is_bg_enabled: isBgEnabledVal,
       cards_visibility: {
         ...(metadata.cards_visibility || {}),
@@ -928,6 +1122,7 @@ export async function PUT(request: Request) {
     const voiceType = body.voice_type || 'vn_north_female_teacher';
     const backgroundMusic = body.background_music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
     const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+    let targetRole = body.target_role !== undefined ? String(body.target_role).trim() : 'ALL';
 
     const templateId = body.template_id || metadata.template_id || 'le-hoi';
     const bgUrl =
@@ -941,7 +1136,17 @@ export async function PUT(request: Request) {
     const locationVal = body.location || metadata.location || body.location_value || metadata.location_value || '';
     const noteVal = body.note || metadata.note || body.deadline_value || metadata.deadline_value || '';
     const tableRowsVal = body.table_rows || metadata.table_rows || body.table_data || metadata.table_data || null;
-    const audienceVal = body.audience || metadata.audience || 'Toàn trường';
+    const rawAudience = body.audience || metadata.audience || '';
+    const isAllScope =
+      rawAudience === 'Toàn trường' ||
+      body.scope === 'all' ||
+      metadata.scope === 'all' ||
+      !rawAudience;
+    const audienceVal = isAllScope ? 'Toàn trường' : rawAudience;
+    if (body.target_role !== undefined) targetRole = String(body.target_role).trim();
+    if (isAllScope && ctx.activeRole !== 'TEACHER') {
+      targetRole = 'ALL';
+    }
     const isBgEnabledVal = body.is_bg_enabled ?? metadata.is_bg_enabled ?? true;
     const showSealVal =
       body.show_seal ??
@@ -963,6 +1168,7 @@ export async function PUT(request: Request) {
       table_data: tableRowsVal,
       show_seal: showSealVal,
       audience: audienceVal,
+      scope: isAllScope ? 'all' : audienceVal,
       is_bg_enabled: isBgEnabledVal,
       cards_visibility: {
         ...(metadata.cards_visibility || {}),
@@ -1125,34 +1331,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // 1. Luôn ghi nhận vào kho lưu trữ cục bộ cho tài khoản hiện tại
-    announcementIds.forEach((aid) => {
-      markAnnouncementReadLocally(aid, ctx.profileId, ctx.activeRole);
-    });
-
-    // 2. Ghi nhận vào Supabase (announcement_reads) cho các ID là UUID
-    if (!ctx.profileId.startsWith('bootstrap-')) {
-      const validUuidRows = announcementIds
-        .filter((aid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aid))
-        .map((aid) => ({
-          announcement_id: aid,
-          user_id: ctx.profileId,
-          role_context: ctx.activeRole,
-          read_at: new Date().toISOString(),
-        }));
-
-      if (validUuidRows.length > 0) {
-        try {
-          await executeWithContextFallback(ctx, async (sb) =>
-            await sb
-              .from('announcement_reads')
-              .upsert(validUuidRows, { onConflict: 'announcement_id,user_id,role_context' })
-          );
-        } catch (dbErr) {
-          console.warn('[api/announcements] PATCH announcement_reads warning:', dbErr);
-        }
-      }
-    }
+    // 1. Ghi nhận lượt đọc bền vững vào cả cache, announcement_reads và Persistent Reads Registry
+    await recordPersistentAnnouncementReads(ctx, announcementIds);
 
     return NextResponse.json(
       {

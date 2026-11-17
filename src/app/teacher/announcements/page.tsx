@@ -27,6 +27,7 @@ import {
 } from '@/lib/announcements/posterTemplates';
 import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
 import { AnnouncementAudioPlayer } from '@/components/announcements/AnnouncementAudioPlayer';
+import { NotificationBell } from '@/components/pwa/NotificationBell';
 
 function TeacherAnnouncementsSkeleton() {
   return (
@@ -204,7 +205,7 @@ function TeacherAnnouncementsInner() {
       } catch (err) {
         console.error('Lỗi tự động ghi nhận đã đọc giáo viên:', err);
       }
-    }, 2000);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [currentAnnouncement?.id, currentAnnouncement?.is_read]);
@@ -411,6 +412,7 @@ function TeacherAnnouncementsInner() {
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    <NotificationBell portalRole="TEACHER" />
                     <button
                       type="button"
                       onClick={handleDownloadPosterPng}
@@ -660,11 +662,14 @@ function TeacherAnnouncementsInner() {
               </Link>
               <h1 className="text-sm font-bold text-slate-900">Thông báo Ban Giám Hiệu</h1>
             </div>
-            {unreadCount > 0 && (
-              <span className="px-2 py-0.5 bg-red-100 text-red-700 font-bold text-xs rounded-full">
-                {unreadCount} chưa đọc
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 font-bold text-xs rounded-full">
+                  {unreadCount} chưa đọc
+                </span>
+              )}
+              <NotificationBell portalRole="TEACHER" />
+            </div>
           </header>
 
           <div className="p-4 space-y-3.5 flex-1 overflow-y-auto">

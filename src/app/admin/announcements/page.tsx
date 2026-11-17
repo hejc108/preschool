@@ -38,6 +38,8 @@ import {
   AlertTriangle,
   RefreshCw,
   BookOpen,
+  User,
+  Calendar,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import {
@@ -48,6 +50,7 @@ import {
   AnnouncementMetadata,
 } from '@/lib/announcements/posterTemplates';
 import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
+import { AnnouncementAudioPlayer } from '@/components/announcements/AnnouncementAudioPlayer';
 import {
   TtsRule,
   DEFAULT_TTS_RULES,
@@ -164,6 +167,25 @@ export default function AnnouncementsStudioPage() {
     title: '',
   });
   const [isDeletingAnnouncement, setIsDeletingAnnouncement] = useState<boolean>(false);
+
+  // Mobile Frame Preview modal state (Xem trước giao diện di động 375px)
+  const [previewModalAnnouncement, setPreviewModalAnnouncement] = useState<AnnouncementItem | null>(null);
+  const [previewActiveTab, setPreviewActiveTab] = useState<'poster' | 'text'>('poster');
+
+  const formatVietnameseDate = (dateStr?: string | null) => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -325,7 +347,12 @@ export default function AnnouncementsStudioPage() {
     setCategory(tpl.name);
     setTitle(tpl.defaultTitle);
     setBodyText(tpl.defaultBody);
-    if (tpl.defaultAudience) setAudience(tpl.defaultAudience);
+    // Bảo vệ phạm vi gửi: Giữ "Toàn trường" khi người dùng đã chọn hoặc mặc định là Toàn trường
+    if (audience === 'Toàn trường' || !tpl.defaultAudience) {
+      setAudience('Toàn trường');
+    } else {
+      setAudience(tpl.defaultAudience);
+    }
     if (tpl.defaultTime) setTimeValue(tpl.defaultTime);
     if (tpl.defaultLocation) setLocValue(tpl.defaultLocation);
     if (tpl.defaultDeadline) setDeadlineValue(tpl.defaultDeadline);
@@ -528,6 +555,8 @@ export default function AnnouncementsStudioPage() {
           category: 'Lễ hội',
           status: 'PUBLISHED',
           target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
           is_urgent: true,
           audio_url: '/audio/audio_20_11_suongmai.mp3',
           voice_type: 'vn_north_female_teacher',
@@ -554,6 +583,8 @@ export default function AnnouncementsStudioPage() {
           category: 'Học phí',
           status: 'PUBLISHED',
           target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
           metadata: {
             template_id: 'hoc-phi',
             is_bg_enabled: true,
@@ -579,6 +610,8 @@ export default function AnnouncementsStudioPage() {
           category: 'Giấy mời',
           status: 'PUBLISHED',
           target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
           metadata: {
             template_id: 'giay-moi',
             is_bg_enabled: true,
@@ -598,6 +631,8 @@ export default function AnnouncementsStudioPage() {
           category: 'Sức khỏe',
           status: 'PENDING_APPROVAL',
           target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
           metadata: {
             template_id: 'suc-khoe',
             is_bg_enabled: true,
@@ -617,6 +652,8 @@ export default function AnnouncementsStudioPage() {
           category: 'Nghỉ lễ',
           status: 'DRAFT',
           target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
           metadata: {
             template_id: 'nghi-le',
             is_bg_enabled: false,
@@ -718,7 +755,8 @@ export default function AnnouncementsStudioPage() {
         template_id: currentTemplateId,
         is_bg_enabled: isBgEnabled,
         custom_bg_url: customUploadedBgUrl,
-        audience,
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
         cards_visibility: {
           time: showTimeCard,
           location: showLocCard,
@@ -753,6 +791,8 @@ export default function AnnouncementsStudioPage() {
         category,
         status: 'DRAFT',
         target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
         audio_url: audioUrl,
         voice_type: getVoiceOption(selectedVoice).id,
         background_music: selectedMusic,
@@ -801,7 +841,8 @@ export default function AnnouncementsStudioPage() {
         template_id: currentTemplateId,
         is_bg_enabled: isBgEnabled,
         custom_bg_url: customUploadedBgUrl,
-        audience,
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
         cards_visibility: {
           time: showTimeCard,
           location: showLocCard,
@@ -836,6 +877,8 @@ export default function AnnouncementsStudioPage() {
         category,
         status: 'PUBLISHED',
         target_role: 'ALL',
+        audience: audience || 'Toàn trường',
+        scope: audience === 'Toàn trường' ? 'all' : audience,
         audio_url: audioUrl,
         voice_type: getVoiceOption(selectedVoice).id,
         background_music: selectedMusic,
@@ -1310,6 +1353,8 @@ export default function AnnouncementsStudioPage() {
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   <th className="py-3.5 px-5 whitespace-nowrap">TIÊU ĐỀ</th>
                   <th className="py-3.5 px-4 whitespace-nowrap">PHÂN LOẠI</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">NGƯỜI TẠO</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">NGÀY TẠO</th>
                   <th className="py-3.5 px-4 whitespace-nowrap">TRẠNG THÁI</th>
                   <th className="py-3.5 px-4 whitespace-nowrap">ĐÃ ĐỌC</th>
                   <th className="py-3.5 px-5 text-right whitespace-nowrap">THAO TÁC</th>
@@ -1318,14 +1363,14 @@ export default function AnnouncementsStudioPage() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
                       <span>Đang tải danh sách thông báo từ cơ sở dữ liệu...</span>
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-500 space-y-3">
+                    <td colSpan={7} className="py-12 text-center text-slate-500 space-y-3">
                       <p className="text-sm font-semibold">Chưa có thông báo nào trong cơ sở dữ liệu.</p>
                       <p className="text-xs text-slate-400 max-w-md mx-auto">
                         Bạn có thể khởi tạo ngay 5 thông báo mẫu chuẩn sư phạm Sương Mai (kèm thông báo Lễ hội 20/11) để sẵn sàng sử dụng.
@@ -1401,6 +1446,19 @@ export default function AnnouncementsStudioPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-1.5">
+                            <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
+                              <User className="w-3 h-3 text-slate-500" />
+                            </div>
+                            <span className="font-medium text-slate-800 text-xs truncate max-w-[130px]" title={item.created_by_name || 'Ban Giám Hiệu'}>
+                              {item.created_by_name || 'Ban Giám Hiệu'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600 text-xs">
+                          {formatVietnameseDate(item.created_at)}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           {item.status === 'PUBLISHED' ? (
                             <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-semibold border border-emerald-200">
                               Đã phát hành
@@ -1464,6 +1522,17 @@ export default function AnnouncementsStudioPage() {
                                 <span>Sửa tiếp</span>
                               </button>
                             ) : null}
+
+                            <button
+                              onClick={() => {
+                                setPreviewModalAnnouncement(item);
+                                setPreviewActiveTab('poster');
+                              }}
+                              title="Xem trước trên khung di động (PWA 375px)"
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition cursor-pointer"
+                            >
+                              <Smartphone className="w-4 h-4" />
+                            </button>
 
                             <button
                               onClick={() => cloneAnnouncement(item)}
@@ -2686,6 +2755,231 @@ export default function AnnouncementsStudioPage() {
                   <span>Xác nhận xóa</span>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL XEM TRƯỚC DẠNG KHUNG DI ĐỘNG (PWA 375PX MOBILE FRAME PREVIEW)   */}
+      {/* ===================================================================== */}
+      {previewModalAnnouncement && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-[395px] h-[86vh] max-h-[820px] bg-slate-950 rounded-[44px] p-3 shadow-2xl border-4 border-slate-700/80 flex flex-col">
+            {/* Dynamic Island / Tai thỏ camera */}
+            <div className="absolute top-5 left-1/2 -translate-x-1/2 w-28 h-5 bg-slate-900 rounded-full z-30 flex items-center justify-center">
+              <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
+            </div>
+
+            {/* Nút đóng modal góc ngoài */}
+            <button
+              type="button"
+              onClick={() => setPreviewModalAnnouncement(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white hover:bg-slate-100 text-slate-700 rounded-full shadow-lg border border-slate-200 flex items-center justify-center cursor-pointer z-40 transition"
+              title="Đóng xem trước"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Màn hình điện thoại PWA */}
+            <div className="w-full h-full bg-slate-100 rounded-[34px] overflow-hidden flex flex-col relative">
+              {/* Header PWA điện thoại */}
+              <div className="bg-red-700 text-white px-4 pt-7 pb-2.5 flex items-center justify-between shadow-sm shrink-0">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-xs tracking-wide">PWA Sương Mai</span>
+                  <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded text-white font-medium">
+                    Xem trước
+                  </span>
+                </div>
+                <span className="text-[10px] text-red-100 font-mono">375 x 812 px</span>
+              </div>
+
+              {/* 2 Tab chuyển đổi: Xem Poster / Văn bản gốc */}
+              <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPreviewActiveTab('poster')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
+                    previewActiveTab === 'poster'
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Palette className="w-3.5 h-3.5" />
+                  <span>Xem Poster</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewActiveTab('text')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
+                    previewActiveTab === 'text'
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Văn bản gốc</span>
+                </button>
+              </div>
+
+              {/* Vùng nội dung cuộn được */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                {/* TAB 1: XEM POSTER */}
+                {previewActiveTab === 'poster' ? (
+                  <div className="flex flex-col items-center w-full space-y-3">
+                    {/* Thanh phát Audio Voice */}
+                    <AnnouncementAudioPlayer
+                      audioUrl={
+                        previewModalAnnouncement.audio_url ||
+                        previewModalAnnouncement.metadata?.audio_url
+                      }
+                      voiceType={
+                        previewModalAnnouncement.voice_type ||
+                        previewModalAnnouncement.metadata?.voice_type ||
+                        previewModalAnnouncement.metadata?.voice
+                      }
+                    />
+
+                    {/* Card Poster trực quan */}
+                    <AnnouncementPosterCard
+                      title={previewModalAnnouncement.title}
+                      bodyText={previewModalAnnouncement.content}
+                      templateId={
+                        previewModalAnnouncement.metadata?.template_id || 'hoat-dong'
+                      }
+                      customBgUrl={
+                        previewModalAnnouncement.metadata?.custom_bg_url || ''
+                      }
+                      backgroundUrl={
+                        previewModalAnnouncement.metadata?.custom_bg_url || ''
+                      }
+                      isBgEnabled={
+                        previewModalAnnouncement.metadata?.is_bg_enabled ?? false
+                      }
+                      audience={
+                        previewModalAnnouncement.audience ||
+                        previewModalAnnouncement.metadata?.audience ||
+                        'Toàn trường'
+                      }
+                      showTimeCard={
+                        previewModalAnnouncement.metadata?.show_time ?? true
+                      }
+                      timeValue={
+                        previewModalAnnouncement.metadata?.time_value || ''
+                      }
+                      eventTime={
+                        previewModalAnnouncement.metadata?.time_value || ''
+                      }
+                      showLocCard={
+                        previewModalAnnouncement.metadata?.show_loc ?? true
+                      }
+                      locValue={
+                        previewModalAnnouncement.metadata?.loc_value || ''
+                      }
+                      location={
+                        previewModalAnnouncement.metadata?.loc_value || ''
+                      }
+                      showTableCard={
+                        previewModalAnnouncement.metadata?.show_table ?? false
+                      }
+                      tableData={
+                        previewModalAnnouncement.metadata?.table_data || null
+                      }
+                      tableRows={
+                        previewModalAnnouncement.metadata?.table_data || null
+                      }
+                      showDeadlineCard={
+                        previewModalAnnouncement.metadata?.show_deadline ?? false
+                      }
+                      deadlineValue={
+                        previewModalAnnouncement.metadata?.deadline_value || ''
+                      }
+                      note={
+                        previewModalAnnouncement.metadata?.deadline_value || ''
+                      }
+                      showSealCard={
+                        previewModalAnnouncement.metadata?.show_seal ?? true
+                      }
+                      showSeal={
+                        previewModalAnnouncement.metadata?.show_seal ?? true
+                      }
+                      className="w-full max-w-[360px] mx-auto aspect-[3/4.25]"
+                    />
+                  </div>
+                ) : (
+                  /* TAB 2: VĂN BẢN GỐC */
+                  <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5 text-xs">
+                    <div className="border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[10px] font-bold">
+                          {previewModalAnnouncement.category || 'Thông báo'}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          {formatVietnameseDate(
+                            previewModalAnnouncement.created_at ||
+                              previewModalAnnouncement.published_at
+                          )}
+                        </span>
+                      </div>
+                      <h1 className="text-sm font-bold text-slate-900 leading-snug">
+                        {previewModalAnnouncement.title}
+                      </h1>
+                    </div>
+
+                    <div className="space-y-2 text-xs leading-relaxed text-slate-700 text-justify">
+                      <p className="whitespace-pre-line">
+                        {previewModalAnnouncement.content}
+                      </p>
+                    </div>
+
+                    {/* Chi tiết đính kèm */}
+                    {(previewModalAnnouncement.metadata?.time_value ||
+                      previewModalAnnouncement.metadata?.loc_value ||
+                      previewModalAnnouncement.metadata?.deadline_value) && (
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2 text-xs">
+                        {previewModalAnnouncement.metadata?.time_value && (
+                          <div className="flex items-start gap-2">
+                            <CalendarClock className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-slate-900">Thời gian: </span>
+                              <span className="text-slate-700 whitespace-pre-line">
+                                {previewModalAnnouncement.metadata.time_value}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {previewModalAnnouncement.metadata?.loc_value && (
+                          <div className="flex items-start gap-2">
+                            <MapPin className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-slate-900">Địa điểm: </span>
+                              <span className="text-slate-700">
+                                {previewModalAnnouncement.metadata.loc_value}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {previewModalAnnouncement.metadata?.deadline_value && (
+                          <div className="flex items-start gap-2">
+                            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-slate-900">Lưu ý / Hạn chót: </span>
+                              <span className="text-slate-700">
+                                {previewModalAnnouncement.metadata.deadline_value}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Thanh điều hướng dưới đáy (Home Bar) */}
+              <div className="bg-white border-t border-slate-200 py-2 flex justify-center items-center shrink-0">
+                <div className="w-32 h-1 bg-slate-300 rounded-full" />
+              </div>
             </div>
           </div>
         </div>

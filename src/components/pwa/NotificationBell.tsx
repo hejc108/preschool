@@ -87,17 +87,13 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
 
   // 1. Fetch danh sách thông báo và số lượng chưa đọc qua SWR
   const { data, mutate } = useSWR(
-    activeRole === portalRole ? ['role', portalRole, 'notifications-bell'] : null,
-    async () => {
-      const aligned = await waitForRoleSync(portalRole);
-      if (!aligned) return { announcements: [], unread_count: 0 };
-      return fetcher('/api/announcements');
-    },
+    ['notifications-bell', portalRole],
+    () => fetcher('/api/announcements'),
     {
       revalidateOnMount: true,
       keepPreviousData: true,
       revalidateOnFocus: true,
-      refreshInterval: 25000, // Tối ưu polling nhẹ nhàng mỗi 25s
+      refreshInterval: 15000, // Tối ưu polling định kỳ mỗi 15s
     }
   );
 
@@ -126,7 +122,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   // 2. Đồng bộ thời gian thực (Real-time Sync) với Supabase
   useRoleRealtimeSync({
     channelName: `notifications-bell-sync-${portalRole}`,
-    enabled: activeRole === portalRole && serverSyncedRole === portalRole,
+    enabled: true,
     debounceMs: 300,
     handlers: [
       {
@@ -144,8 +140,15 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
         },
       },
       {
+        table: 'announcements',
+        event: 'DELETE',
+        onEvent: () => {
+          mutate();
+        },
+      },
+      {
         table: 'announcement_reads',
-        event: 'INSERT',
+        event: '*',
         onEvent: () => {
           mutate();
         },

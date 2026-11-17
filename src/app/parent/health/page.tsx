@@ -6,6 +6,7 @@ import { ChevronLeft, Activity, ShieldCheck, TrendingUp, RefreshCw, Calendar, Sc
 import Link from 'next/link';
 import { getGrowthStatusDisplay } from '@/lib/utils/healthHelper';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { NotificationBell } from '@/components/pwa/NotificationBell';
 
 interface ChildHealthDetail {
   id: string;
@@ -132,7 +133,10 @@ function ParentHealthContent() {
           </div>
         </div>
 
-        <LanguageSwitcher />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <NotificationBell portalRole="PARENT" />
+          <LanguageSwitcher />
+        </div>
       </header>
 
       {/* Main Content */}

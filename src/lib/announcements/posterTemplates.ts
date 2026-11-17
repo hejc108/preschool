@@ -25,31 +25,38 @@ export interface AnnouncementMetadata {
   custom_bg_url?: string | null;
   background_url?: string | null;
   audience?: string;
+  scope?: string;
   cards_visibility?: {
     time?: boolean;
     location?: boolean;
     table?: boolean;
     deadline?: boolean;
     seal?: boolean;
+    [key: string]: any;
   };
   time_value?: string;
   event_time?: string;
+  show_time?: boolean;
   location_value?: string;
   location?: string;
+  loc_value?: string;
+  show_loc?: boolean;
   deadline_value?: string;
   note?: string;
+  show_deadline?: boolean;
   table_data?: {
     row1_label?: string;
     row1_amt?: string;
     row2_label?: string;
     row2_amt?: string;
-  };
+  } | null;
   table_rows?: {
     row1_label?: string;
     row1_amt?: string;
     row2_label?: string;
     row2_amt?: string;
-  };
+  } | null;
+  show_table?: boolean;
   show_seal?: boolean;
   voice?: string;
   voice_type?: string;
@@ -66,6 +73,9 @@ export interface AnnouncementMetadata {
   status?: string;
   category?: string;
   target_role?: string;
+  created_by_name?: string | null;
+  author_name?: string | null;
+  [key: string]: any;
 }
 
 export interface AnnouncementItem {
@@ -80,7 +90,10 @@ export interface AnnouncementItem {
   metadata?: AnnouncementMetadata;
   created_at?: string;
   updated_at?: string;
+  published_at?: string | null;
   created_by?: string | null;
+  created_by_name?: string | null;
+  author_name?: string | null;
   is_read?: boolean;
   read_at?: string | null;
   read_count?: number;
@@ -106,8 +119,10 @@ export interface AnnouncementItem {
   table_data?: any;
   show_seal?: boolean;
   audience?: string;
+  scope?: string;
   is_bg_enabled?: boolean;
   cards_visibility?: any;
+  [key: string]: any;
 }
 
 export const EMBEDDED_BACKGROUNDS: Record<string, string> = {
@@ -223,7 +238,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "08:30 - 10:30 Thứ Sáu, 16/10/2026",
     "defaultLocation": "Khuôn viên vườn cổ tích & sân trường Sương Mai",
     "defaultDeadline": "Bé mặc trang phục thoải mái, mang giày quai hậu",
-    "defaultAudience": "Khối Chồi & Khối Lá",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {
@@ -235,7 +250,7 @@ export const POSTER_TEMPLATES: PosterTemplate[] = [
     "defaultTime": "07:30 - 11:30 Thứ Bảy, 21/11/2026",
     "defaultLocation": "Nông trại giáo dục sinh thái Krông Pắc",
     "defaultDeadline": "Tập trung tại sảnh trường lúc 07:15 sáng • BGH: 0262.352.1234",
-    "defaultAudience": "Khối Lá (5-6 tuổi)",
+    "defaultAudience": "Toàn trường",
     "showTable": false
   },
   {

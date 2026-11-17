@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import {
   GET as getAnnouncementsHandler,
   PATCH as patchAnnouncementsHandler,
+  recordPersistentAnnouncementReads,
 } from '@/app/api/announcements/route';
 import { NO_CACHE_HEADERS } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/auth/sessionContext';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -26,6 +28,16 @@ export async function GET(
         { success: false, error: 'Thiếu mã định danh thông báo.' },
         { status: 400, headers: NO_CACHE_HEADERS }
       );
+    }
+
+    // Tự động ghi nhận lượt đọc ngay khi mở xem chi tiết trên server
+    try {
+      const auth = await requireAuth(request);
+      if (!('response' in auth) && auth.ctx) {
+        await recordPersistentAnnouncementReads(auth.ctx, [id]);
+      }
+    } catch (readErr) {
+      console.warn('[pwa/announcements] Auto mark read warning:', readErr);
     }
 
     const url = new URL(request.url);
