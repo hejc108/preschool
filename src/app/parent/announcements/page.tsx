@@ -251,63 +251,127 @@ function ParentAnnouncementsInner() {
     return () => clearTimeout(timer);
   }, [currentAnnouncement?.id, currentAnnouncement?.is_read]);
 
-  // Handle Real Audio Playback from Cloud Storage
+  // Handle SpeechSynthesis Fallback
+  const playWithSpeechSynthesis = (ann: AnnouncementItem) => {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (!win || !win.speechSynthesis) {
+      showToast('Trình duyệt không hỗ trợ phát âm thanh.');
+      return;
+    }
+
+    win.speechSynthesis.cancel();
+    if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+
+    const meta = ann.metadata || {};
+    const rawSpoken = `${ann.title}. ${ann.content}. ${
+      meta.time_value ? `Thời gian: ${meta.time_value}.` : ''
+    } ${meta.location_value ? `Địa điểm: ${meta.location_value}.` : ''} ${
+      meta.deadline_value ? `Lưu ý: ${meta.deadline_value}.` : ''
+    } Trường Mầm non Sương Mai trân trọng thông báo.`;
+
+    const spokenText = normalizeVietnameseSpeech(rawSpoken);
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    utterance.lang = 'vi-VN';
+
+    const vProfile = getVoiceOption(meta.voice_type || meta.voice || (ann as any).voice_type);
+    utterance.pitch = vProfile.pitch;
+    utterance.rate = vProfile.rate;
+
+    utterance.onstart = () => {
+      setIsPlayingAudio(true);
+      setAudioProgress(0);
+      audioIntervalRef.current = setInterval(() => {
+        setAudioProgress((prev) => (prev >= 98 ? 98 : prev + 2));
+      }, 500);
+    };
+
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+      setAudioProgress(100);
+      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+    };
+
+    utterance.onerror = () => {
+      setIsPlayingAudio(false);
+      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+    };
+
+    win.speechSynthesis.speak(utterance);
+  };
+
+  // Handle Audio Playback (Real MP3 from Storage or SpeechSynthesis Fallback)
   const handleTogglePlayAudio = () => {
     if (!currentAnnouncement) return;
     const meta = currentAnnouncement.metadata || {};
     const audioUrl = (currentAnnouncement as any).audio_url || meta.audio_url;
 
-    if (!audioUrl) {
-      showToast('Thông báo này chưa có file âm thanh.');
+    // Nếu đang phát -> dừng lại
+    if (isPlayingAudio) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      const win = typeof window !== 'undefined' ? (window as any) : null;
+      if (win?.speechSynthesis) {
+        win.speechSynthesis.cancel();
+      }
+      setIsPlayingAudio(false);
+      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
       return;
     }
 
-    if (!audioPlayerRef.current) {
-      const audio = new Audio(audioUrl);
-      audioPlayerRef.current = audio;
+    // 1. Ưu tiên phát file âm thanh MP3 thực tế nếu có
+    if (audioUrl) {
+      if (!audioPlayerRef.current) {
+        const audio = new Audio(audioUrl);
+        audioPlayerRef.current = audio;
 
-      audio.ontimeupdate = () => {
-        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
-          const pct = (audio.currentTime / audio.duration) * 100;
-          setAudioProgress(Math.min(100, Math.round(pct)));
-        }
-      };
+        audio.ontimeupdate = () => {
+          if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+            const pct = (audio.currentTime / audio.duration) * 100;
+            setAudioProgress(Math.min(100, Math.round(pct)));
+          }
+        };
 
-      audio.onended = () => {
-        setIsPlayingAudio(false);
-        setAudioProgress(100);
-      };
+        audio.onended = () => {
+          setIsPlayingAudio(false);
+          setAudioProgress(100);
+        };
 
-      audio.onerror = () => {
-        setIsPlayingAudio(false);
-        showToast('Không thể tải tệp âm thanh từ máy chủ.');
-      };
-    } else if (audioPlayerRef.current.src !== audioUrl) {
-      audioPlayerRef.current.src = audioUrl;
-    }
+        audio.onerror = () => {
+          console.warn('Lỗi file audio, chuyển sang SpeechSynthesis dự phòng');
+          playWithSpeechSynthesis(currentAnnouncement);
+        };
+      } else if (audioPlayerRef.current.src !== audioUrl) {
+        audioPlayerRef.current.src = audioUrl;
+      }
 
-    if (isPlayingAudio) {
-      audioPlayerRef.current.pause();
-      setIsPlayingAudio(false);
-    } else {
       audioPlayerRef.current
         .play()
         .then(() => setIsPlayingAudio(true))
         .catch(() => {
-          setIsPlayingAudio(false);
-          showToast('Vui lòng chạm để cho phép trình duyệt phát âm thanh.');
+          playWithSpeechSynthesis(currentAnnouncement);
         });
+      return;
     }
+
+    // 2. Dự phòng: Đọc trực tiếp bằng SpeechSynthesis với đúng giọng AI cấu hình
+    playWithSpeechSynthesis(currentAnnouncement);
   };
 
   // Replay Audio
   const handleReplayAudio = () => {
-    if (audioPlayerRef.current) {
+    if (!currentAnnouncement) return;
+    const meta = currentAnnouncement.metadata || {};
+    const audioUrl = (currentAnnouncement as any).audio_url || meta.audio_url;
+
+    if (audioPlayerRef.current && audioUrl) {
       audioPlayerRef.current.currentTime = 0;
       audioPlayerRef.current
         .play()
         .then(() => setIsPlayingAudio(true))
-        .catch(() => setIsPlayingAudio(false));
+        .catch(() => playWithSpeechSynthesis(currentAnnouncement));
+    } else {
+      playWithSpeechSynthesis(currentAnnouncement);
     }
   };
 
@@ -536,8 +600,8 @@ function ParentAnnouncementsInner() {
                   </div>
                 </header>
 
-                {/* Trình phát Audio AI trên cùng (Chỉ hiển thị khi đã có file âm thanh thật từ Storage) */}
-                {Boolean(meta.audio_url || (ann as any).audio_url) && (
+                {/* Trình phát Audio AI trên cùng (Hiển thị nổi bật theo chuẩn FR-02) */}
+                {meta.has_audio !== false && (ann as any).has_audio !== false && (
                   <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white px-4 py-3 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
