@@ -77,7 +77,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
       if (!aligned) return { announcements: [], unread_count: 0 };
       return announcementsFetcher('/api/announcements');
     },
-    { revalidateOnMount: true, keepPreviousData: true, revalidateOnFocus: true, refreshInterval: 15000 }
+    { revalidateOnMount: true, keepPreviousData: true, revalidateOnFocus: false, refreshInterval: 15000 }
   );
 
   const announcements: AnnouncementItem[] = useMemo(
@@ -208,6 +208,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
           </div>
           <Link
             href="/parent/announcements"
+            prefetch={false}
             className="text-[11px] font-semibold text-red-600 hover:text-red-700 flex items-center gap-0.5 transition"
           >
             <span>Xem tất cả ({announcements.length})</span>
@@ -226,6 +227,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
             </div>
             <Link
               href="/parent/announcements"
+              prefetch={false}
               className="text-[11px] font-bold text-emerald-700 hover:underline shrink-0 ml-2"
             >
               Xem lại ({announcements.length})
@@ -241,6 +243,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
             return (
               <Link
                 href={`/parent/announcements?id=${item.id}`}
+                prefetch={false}
                 className={`block rounded-xl border p-3 shadow-2xs transition active:scale-[0.99] ${
                   isUrgent
                     ? 'bg-red-50/90 border-red-300 ring-1 ring-red-200'
@@ -296,6 +299,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
                 <Link
                   key={item.id}
                   href={`/parent/announcements?id=${item.id}`}
+                  prefetch={false}
                   className={`w-[86%] shrink-0 snap-start block rounded-xl border p-3 shadow-2xs transition active:scale-[0.99] ${
                     isUrgent
                       ? 'bg-red-50/90 border-red-300 ring-1 ring-red-200'
@@ -391,6 +395,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
         <div className="flex items-center gap-1.5 shrink-0">
           <Link
             href="/teacher/announcements"
+            prefetch={false}
             className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 transition px-2 py-1 rounded-lg hover:bg-rose-50"
           >
             <span>Tất cả ({announcements.length})</span>
@@ -415,6 +420,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
             <Link
               key={item.id}
               href={`/teacher/announcements?id=${item.id}`}
+              prefetch={false}
               className={`px-3.5 py-2.5 flex items-start justify-between gap-2.5 transition active:scale-[0.99] cursor-pointer ${
                 item.is_read ? 'bg-white hover:bg-slate-50' : 'bg-red-50/50 hover:bg-red-50/80'
               }`}

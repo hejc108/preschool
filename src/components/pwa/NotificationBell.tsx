@@ -127,7 +127,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     {
       revalidateOnMount: true,
       keepPreviousData: true,
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
       refreshInterval: 15000, // Tối ưu polling định kỳ mỗi 15s
     }
   );
@@ -566,6 +566,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
             )}
             <Link
               href={portalAnnouncementsLink}
+              prefetch={false}
               onClick={() => setIsOpen(false)}
               className="w-full py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
             >

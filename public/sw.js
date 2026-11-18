@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v8';
+const CACHE_NAME = 'suongmai-pwa-v9';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -80,7 +80,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Tối ưu hóa Stale-While-Revalidate & Strict Auth Bypass
+// Fetch Event - Tối ưu hóa Stale-While-Revalidate, Strict Auth & Next.js RSC Bypass
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -93,6 +93,19 @@ self.addEventListener('fetch', (event) => {
     url.origin.includes('supabase.co') ||
     url.searchParams.has('code') ||
     url.searchParams.has('state')
+  ) {
+    return;
+  }
+
+  // 1b. CỰC KỲ QUAN TRỌNG: Bỏ qua 100% các request Next.js App Router RSC prefetch / subrequests
+  // Khi người dùng di chuyển chuột (hover) qua các thẻ Link, Next.js gửi prefetch request.
+  // Tuyệt đối không can thiệp để tránh Next.js nhận nhầm HTML dẫn đến hard reload toàn trang (window.location.reload)!
+  if (
+    event.request.headers.get('rsc') ||
+    event.request.headers.get('next-router-prefetch') ||
+    event.request.headers.get('next-router-state-tree') ||
+    event.request.headers.get('next-url') ||
+    url.searchParams.has('_rsc')
   ) {
     return;
   }
@@ -127,25 +140,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Giao diện trang HTML PWA (/parent, /teacher, /admin): Stale-While-Revalidate
-  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+  // 5. Giao diện trang HTML PWA: Chỉ can thiệp khi là điều hướng cấp trình duyệt (Top-level Document Navigation)
+  // Tuyệt đối không can thiệp các subresource request hoặc hover prefetch
+  if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          const fetchPromise = fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-                cache.put(event.request, networkResponse.clone());
-              }
-              return networkResponse;
-            })
-            .catch(() => {
-              return cachedResponse || caches.match('/');
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, copy);
             });
-
-          return cachedResponse || fetchPromise;
-        });
-      })
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cached) => cached || caches.match('/'));
+        })
     );
     return;
   }

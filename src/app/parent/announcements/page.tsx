@@ -669,6 +669,7 @@ function ParentAnnouncementsInner() {
             <p className="text-sm font-bold text-slate-700">Không tìm thấy thông báo này</p>
             <Link
               href="/parent/announcements"
+              prefetch={false}
               className="inline-block px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl"
             >
               Quay lại danh sách
@@ -685,6 +686,7 @@ function ParentAnnouncementsInner() {
             <div className="flex items-center gap-2">
               <Link
                 href="/parent"
+                prefetch={false}
                 className="p-1 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 transition"
               >
                 <ArrowLeft className="w-5 h-5 text-slate-700" />
@@ -782,6 +784,7 @@ function ParentAnnouncementsInner() {
                     <Link
                       key={item.id}
                       href={`/parent/announcements?id=${item.id}`}
+                      prefetch={false}
                       className={`block rounded-xl border p-3.5 shadow-2xs transition active:scale-[0.99] ${
                         !isRead && isUrgent
                           ? 'bg-red-50/95 border-red-300 ring-1 ring-red-200'
