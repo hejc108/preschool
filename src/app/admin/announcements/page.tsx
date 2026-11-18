@@ -1354,219 +1354,244 @@ export default function AnnouncementsStudioPage() {
             </div>
           </div>
 
-          {/* Bảng danh sách 5 cột */}
+          {/* Bảng danh sách thông báo chuẩn UI/UX 1280px (table-layout: fixed) */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3.5 px-5 whitespace-nowrap">TIÊU ĐỀ</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">PHÂN LOẠI</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">NGƯỜI TẠO</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">NGÀY TẠO</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">TRẠNG THÁI</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">ĐÃ ĐỌC</th>
-                  <th className="py-3.5 px-5 text-right whitespace-nowrap">THAO TÁC</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
-                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
-                      <span>Đang tải danh sách thông báo từ cơ sở dữ liệu...</span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed text-left border-collapse min-w-[1020px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    <th className="py-3 px-4 w-[35%] text-left whitespace-nowrap">TIÊU ĐỀ</th>
+                    <th className="py-3 px-4 w-[10%] text-center whitespace-nowrap">PHÂN LOẠI</th>
+                    <th className="py-3 px-4 w-[12%] text-left whitespace-nowrap">NGƯỜI TẠO</th>
+                    <th className="py-3 px-4 w-[9%] text-center whitespace-nowrap">NGÀY TẠO</th>
+                    <th className="py-3 px-4 w-[11%] text-center whitespace-nowrap">TRẠNG THÁI</th>
+                    <th className="py-3 px-4 w-[10%] text-center whitespace-nowrap">ĐÃ ĐỌC</th>
+                    <th className="py-3 px-4 w-[13%] text-right whitespace-nowrap">THAO TÁC</th>
                   </tr>
-                ) : filteredList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-500 space-y-3">
-                      <p className="text-sm font-semibold">Chưa có thông báo nào trong cơ sở dữ liệu.</p>
-                      <p className="text-xs text-slate-400 max-w-md mx-auto">
-                        Bạn có thể khởi tạo ngay 5 thông báo mẫu chuẩn sư phạm Sương Mai (kèm thông báo Lễ hội 20/11) để sẵn sàng sử dụng.
-                      </p>
-                      <button
-                        onClick={handleSeedSampleData}
-                        className="px-4 py-2 bg-[#D32F2F] hover:bg-red-700 text-white font-semibold text-xs rounded-lg shadow-sm transition inline-flex items-center space-x-1.5"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        <span>Khởi tạo 5 thông báo mẫu Sương Mai vào CSDL</span>
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredList.map((item) => {
-                    const readCount = item.read_count ?? 0;
-                    const totalCount = item.total_target_count ?? 170;
-                    const percent =
-                      totalCount > 0 ? Math.min(100, Math.round((readCount / totalCount) * 100)) : 0;
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-slate-400" />
+                        <span>Đang tải danh sách thông báo từ cơ sở dữ liệu...</span>
+                      </td>
+                    </tr>
+                  ) : filteredList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-500 space-y-3">
+                        <p className="text-sm font-semibold">Chưa có thông báo nào trong cơ sở dữ liệu.</p>
+                        <p className="text-xs text-slate-400 max-w-md mx-auto">
+                          Bạn có thể khởi tạo ngay 5 thông báo mẫu chuẩn sư phạm Sương Mai (kèm thông báo Lễ hội 20/11) để sẵn sàng sử dụng.
+                        </p>
+                        <button
+                          onClick={handleSeedSampleData}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-lg shadow-sm transition inline-flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>Khởi tạo 5 thông báo mẫu Sương Mai vào CSDL</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredList.map((item) => {
+                      const readCount = item.read_count ?? 0;
+                      const totalCount = item.total_target_count ?? 170;
+                      const percent =
+                        totalCount > 0 ? Math.min(100, Math.round((readCount / totalCount) * 100)) : 0;
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3.5 px-5">
-                          <div
-                            onClick={() => openAnnouncementInStudio(item)}
-                            className="font-bold text-slate-900 text-sm cursor-pointer hover:text-[#D32F2F] transition flex items-center gap-1.5 flex-wrap"
-                          >
-                            {Boolean(item.is_urgent || item.metadata?.is_urgent) && (
-                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded shadow-xs animate-pulse">
-                                KHẨN
-                              </span>
-                            )}
-                            <span>{item.title}</span>
-                          </div>
-                          <div className="text-slate-500 text-[11px] mt-0.5 flex items-center space-x-1.5 flex-wrap">
-                            <span>
-                              {(item.metadata?.audience || item.audience || 'Toàn trường')
-                                .replace(/\s*\(200\s*bé\)/gi, '')
-                                .trim() || 'Toàn trường'}
-                            </span>
-                            <span>•</span>
-                            <span className="text-emerald-700 font-medium">Poster Đồ họa</span>
-                            {item.audio_url || item.metadata?.audio_url ? (
-                              <>
-                                <span>•</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePreviewRowAudio(item);
-                                  }}
-                                  className={`text-[11px] font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-full transition cursor-pointer shadow-2xs ${
-                                    playingRowId === item.id
-                                      ? 'bg-red-600 text-white animate-pulse'
-                                      : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
-                                  }`}
-                                  title={
-                                    playingRowId === item.id
-                                      ? 'Bấm để dừng phát'
-                                      : 'Nghe thử trực tiếp tệp giọng đọc AI của thông báo này'
-                                  }
-                                >
-                                  <Volume2 className="w-3.5 h-3.5 text-current" />
-                                  <span>{playingRowId === item.id ? 'Đang phát...' : 'Nghe Audio AI'}</span>
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="px-2.5 py-1 bg-amber-50 text-amber-800 rounded-md font-medium border border-amber-200">
-                            {item.category || 'Thông báo'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-1.5">
-                            <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
-                              <User className="w-3 h-3 text-slate-500" />
-                            </div>
-                            <span className="font-medium text-slate-800 text-xs truncate max-w-[130px]" title={item.created_by_name || 'Ban Giám Hiệu'}>
-                              {item.created_by_name || 'Ban Giám Hiệu'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600 text-xs">
-                          {formatVietnameseDate(item.created_at)}
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          {item.status === 'PUBLISHED' ? (
-                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-semibold border border-emerald-200">
-                              Đã phát hành
-                            </span>
-                          ) : item.status === 'PENDING_APPROVAL' ? (
-                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full font-semibold border border-blue-200">
-                              Chờ duyệt
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full font-semibold border border-amber-200">
-                              Bản nháp
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          {item.status === 'PUBLISHED' ? (
-                            <div className="flex items-center space-x-2">
-                              <div className="w-20 bg-slate-200 rounded-full h-1.5">
-                                <div
-                                  className="bg-emerald-600 h-1.5 rounded-full"
-                                  style={{ width: `${percent}%` }}
-                                ></div>
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                          {/* Cột 1: Tiêu đề (35%, line-clamp-2, mượt mà) */}
+                          <td className="py-3 px-4 align-middle">
+                            <div className="flex flex-col gap-1">
+                              <div
+                                onClick={() => openAnnouncementInStudio(item)}
+                                className="font-bold text-slate-900 text-xs sm:text-sm cursor-pointer hover:text-red-600 transition flex items-center gap-1.5"
+                                title={item.title}
+                              >
+                                {Boolean(item.is_urgent || item.metadata?.is_urgent) && (
+                                  <span className="px-1.5 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded shadow-xs shrink-0 animate-pulse">
+                                    KHẨN
+                                  </span>
+                                )}
+                                <span className="line-clamp-2 leading-snug break-words">
+                                  {item.title}
+                                </span>
                               </div>
-                              <span className="font-bold text-slate-700">
-                                {readCount}/{totalCount} bé
+                              <div className="text-slate-500 text-[11px] flex items-center space-x-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                                <span className="truncate max-w-[130px]">
+                                  {(item.metadata?.audience || item.audience || 'Toàn trường')
+                                    .replace(/\s*\(200\s*bé\)/gi, '')
+                                    .trim() || 'Toàn trường'}
+                                </span>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-emerald-700 font-medium shrink-0">Poster Đồ họa</span>
+                                {item.audio_url || item.metadata?.audio_url ? (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePreviewRowAudio(item);
+                                      }}
+                                      className={`text-[10px] font-semibold inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full transition cursor-pointer shrink-0 ${
+                                        playingRowId === item.id
+                                          ? 'bg-red-600 text-white animate-pulse'
+                                          : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                                      }`}
+                                      title={
+                                        playingRowId === item.id
+                                          ? 'Bấm để dừng phát'
+                                          : 'Nghe thử trực tiếp tệp giọng đọc AI của thông báo này'
+                                      }
+                                    >
+                                      <Volume2 className="w-3 h-3 text-current" />
+                                      <span>{playingRowId === item.id ? 'Đang phát...' : 'Audio AI'}</span>
+                                    </button>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Cột 2: Phân loại (10%, centered, nowrap) */}
+                          <td className="py-3 px-4 text-center whitespace-nowrap align-middle">
+                            <span className="inline-block px-2.5 py-0.5 bg-amber-50 text-amber-800 text-[11px] font-semibold rounded-md border border-amber-200">
+                              {item.category || 'Thông báo'}
+                            </span>
+                          </td>
+
+                          {/* Cột 3: Người tạo (12%, nowrap, truncated) */}
+                          <td className="py-3 px-4 text-left whitespace-nowrap align-middle">
+                            <div className="flex items-center space-x-1.5 min-w-0">
+                              <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
+                                <User className="w-3 h-3 text-slate-500" />
+                              </div>
+                              <span
+                                className="font-medium text-slate-800 text-xs truncate"
+                                title={item.created_by_name || 'Ban Giám Hiệu'}
+                              >
+                                {item.created_by_name || 'Ban Giám Hiệu'}
                               </span>
                             </div>
-                          ) : item.status === 'PENDING_APPROVAL' ? (
-                            <span className="text-slate-400 italic">Chưa phát hành</span>
-                          ) : (
-                            <span className="text-slate-400 italic">—</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-5 text-right whitespace-nowrap">
-                          <div className="inline-flex items-center space-x-1.5">
-                            {item.status === 'PUBLISHED' && (
-                              <button
-                                onClick={() => handleOpenReadReceipt(item)}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold transition flex items-center space-x-1"
-                                title="Xem thống kê phụ huynh đã đọc"
-                              >
-                                <BarChart2 className="w-3.5 h-3.5" />
-                                <span>Thống kê</span>
-                              </button>
+                          </td>
+
+                          {/* Cột 4: Ngày tạo (9%, centered, font-mono, nowrap) */}
+                          <td className="py-3 px-4 text-center whitespace-nowrap text-slate-600 text-xs font-mono align-middle">
+                            {formatVietnameseDate(item.created_at)}
+                          </td>
+
+                          {/* Cột 5: Trạng thái (11%, centered, nowrap) */}
+                          <td className="py-3 px-4 text-center whitespace-nowrap align-middle">
+                            {item.status === 'PUBLISHED' ? (
+                              <span className="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] rounded-full font-semibold border border-emerald-200">
+                                Đã phát hành
+                              </span>
+                            ) : item.status === 'PENDING_APPROVAL' ? (
+                              <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded-full font-semibold border border-blue-200">
+                                Chờ duyệt
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 bg-amber-50 text-amber-700 text-[11px] rounded-full font-semibold border border-amber-200">
+                                Bản nháp
+                              </span>
                             )}
+                          </td>
 
-                            {item.status === 'PENDING_APPROVAL' ? (
+                          {/* Cột 6: Đã đọc (10%, centered, nowrap) */}
+                          <td className="py-3 px-4 text-center whitespace-nowrap align-middle">
+                            {item.status === 'PUBLISHED' ? (
+                              <div className="inline-flex flex-col items-center space-y-1">
+                                <div className="w-16 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="bg-emerald-600 h-1.5 rounded-full transition-all duration-300"
+                                    style={{ width: `${percent}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  {readCount}/{totalCount} bé
+                                </span>
+                              </div>
+                            ) : item.status === 'PENDING_APPROVAL' ? (
+                              <span className="text-slate-400 text-[11px] italic">Chưa phát hành</span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px] italic">—</span>
+                            )}
+                          </td>
+
+                          {/* Cột 7: Thao tác (13%, right-aligned, nowrap, không tràn) */}
+                          <td className="py-3 px-4 text-right whitespace-nowrap align-middle">
+                            <div className="inline-flex items-center justify-end space-x-1">
+                              {item.status === 'PUBLISHED' && (
+                                <button
+                                  onClick={() => handleOpenReadReceipt(item)}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold text-xs transition inline-flex items-center space-x-1 cursor-pointer shrink-0"
+                                  title="Xem thống kê phụ huynh đã đọc"
+                                >
+                                  <BarChart2 className="w-3.5 h-3.5" />
+                                  <span className="hidden xl:inline">Thống kê</span>
+                                </button>
+                              )}
+
+                              {item.status === 'PENDING_APPROVAL' ? (
+                                <button
+                                  onClick={() => openAnnouncementInStudio(item)}
+                                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-xs transition inline-flex items-center space-x-1 cursor-pointer shrink-0"
+                                  title="Xem và phê duyệt thông báo"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Duyệt</span>
+                                </button>
+                              ) : item.status === 'DRAFT' ? (
+                                <button
+                                  onClick={() => openAnnouncementInStudio(item)}
+                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md font-semibold text-xs transition inline-flex items-center space-x-1 cursor-pointer shrink-0"
+                                  title="Chỉnh sửa tiếp bản nháp"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  <span>Sửa</span>
+                                </button>
+                              ) : null}
+
                               <button
-                                onClick={() => openAnnouncementInStudio(item)}
-                                className="px-2.5 py-1.5 bg-[#D32F2F] hover:bg-red-700 text-white rounded-md font-semibold transition flex items-center space-x-1"
+                                onClick={() => {
+                                  setPreviewModalAnnouncement(item);
+                                  setPreviewActiveTab('poster');
+                                }}
+                                title="Xem trước trên khung di động (PWA 375px)"
+                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition cursor-pointer shrink-0"
                               >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>Xem & Duyệt</span>
+                                <Smartphone className="w-4 h-4" />
                               </button>
-                            ) : item.status === 'DRAFT' ? (
+
                               <button
-                                onClick={() => openAnnouncementInStudio(item)}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md font-semibold transition flex items-center space-x-1"
+                                onClick={() => cloneAnnouncement(item)}
+                                title="Nhân bản thông báo này"
+                                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition cursor-pointer shrink-0"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                <span>Sửa tiếp</span>
+                                <Copy className="w-4 h-4" />
                               </button>
-                            ) : null}
 
-                            <button
-                              onClick={() => {
-                                setPreviewModalAnnouncement(item);
-                                setPreviewActiveTab('poster');
-                              }}
-                              title="Xem trước trên khung di động (PWA 375px)"
-                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition cursor-pointer"
-                            >
-                              <Smartphone className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              onClick={() => cloneAnnouncement(item)}
-                              title="Nhân bản tạo kỳ mới trong CSDL"
-                              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              onClick={() =>
-                                setDeleteModal({ open: true, id: item.id, title: item.title })
-                              }
-                              title="Xóa thông báo khỏi cơ sở dữ liệu"
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                              <button
+                                onClick={() =>
+                                  setDeleteModal({ open: true, id: item.id, title: item.title })
+                                }
+                                title="Xóa thông báo khỏi cơ sở dữ liệu"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
