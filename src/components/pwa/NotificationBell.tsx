@@ -100,6 +100,9 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     try {
       setIsTestingPush(true);
       unlockAudioContext();
+      new Audio('/sounds/notification-ting.mp3')
+        .play()
+        .catch((e) => console.log('Audio autoplay blocked', e));
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,7 +137,10 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PLAY_NOTIFICATION_SOUND') {
-        playNotificationSound();
+        new Audio('/sounds/notification-ting.mp3')
+          .play()
+          .catch((e) => console.log('Audio autoplay blocked', e));
+        playNotificationSound('/sounds/notification-ting.mp3');
         mutate();
       }
     };
@@ -156,10 +162,13 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     return announcements.filter((a) => !a.is_read).length;
   }, [data, announcements]);
 
-  // Kích hoạt tiếng Ping khi danh sách nhận được bản ghi mới mà người dùng đang mở sẵn app
+  // Kích hoạt tiếng Ting khi danh sách nhận được bản ghi mới mà người dùng đang mở sẵn app (Foreground)
   useEffect(() => {
     if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
-      playNotificationSound();
+      new Audio('/sounds/notification-ting.mp3')
+        .play()
+        .catch((e) => console.log('Audio autoplay blocked', e));
+      playNotificationSound('/sounds/notification-ting.mp3');
     }
     prevUnreadRef.current = unreadCount;
   }, [unreadCount]);
@@ -174,7 +183,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     });
   }, [announcements]);
 
-  // 2. Đồng bộ thời gian thực (Real-time Sync) với Supabase
+  // 2. Đồng bộ thời gian thực (Real-time Sync) với Supabase WebSocket
   useRoleRealtimeSync({
     channelName: `notifications-bell-sync-${portalRole}`,
     enabled: true,
@@ -184,7 +193,10 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
         table: 'announcements',
         event: 'INSERT',
         onEvent: () => {
-          playNotificationSound();
+          new Audio('/sounds/notification-ting.mp3')
+            .play()
+            .catch((e) => console.log('Audio autoplay blocked', e));
+          playNotificationSound('/sounds/notification-ting.mp3');
           mutate();
         },
       },

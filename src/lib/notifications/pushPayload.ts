@@ -157,7 +157,7 @@ export async function dispatchContextPushNotification(params: {
     entity_id: params.payload.id,
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
-    sound: '/sounds/acb-zalo-ting.mp3',
+    sound: '/sounds/notification-ting.mp3',
   });
 
   let successCount = 0;

@@ -1,5 +1,5 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
-const CACHE_NAME = 'suongmai-pwa-v5';
+const CACHE_NAME = 'suongmai-pwa-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/favicon.ico',
+  '/sounds/notification-ting.mp3',
   '/sounds/acb-zalo-ting.mp3',
   '/sounds/notification.mp3'
 ];
@@ -135,7 +136,7 @@ self.addEventListener('push', (event) => {
     tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
     vibrate: [300, 100, 300, 100, 400],
     silent: false,
-    sound: payload.sound || '/sounds/acb-zalo-ting.mp3',
+    sound: payload.sound || '/sounds/notification-ting.mp3',
     renotify: true,
     requireInteraction: true,
     data: {

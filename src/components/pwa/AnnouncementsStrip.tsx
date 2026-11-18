@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
+import { playNotificationSound } from '@/lib/sound/notificationSound';
 
 interface AnnouncementItem {
   id: string;
@@ -109,6 +110,11 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
           const record = payload?.new as AnnouncementItem | undefined;
           if (!record) return;
           mutate();
+
+          new Audio('/sounds/notification-ting.mp3')
+            .play()
+            .catch((e) => console.log('Audio autoplay blocked', e));
+          playNotificationSound('/sounds/notification-ting.mp3');
 
           if (
             !seenIdsRef.current.has(record.id) &&

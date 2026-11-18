@@ -5,8 +5,8 @@
 // ==============================================================================
 
 const SOUND_ENABLED_KEY = 'suongmai_pwa_notification_sound_enabled';
-const NOTIFICATION_SOUND_PATH = '/sounds/acb-zalo-ting.mp3';
-const BACKUP_SOUND_PATH = '/sounds/notification.mp3';
+const NOTIFICATION_SOUND_PATH = '/sounds/notification-ting.mp3';
+const BACKUP_SOUND_PATH = '/sounds/acb-zalo-ting.mp3';
 
 let sharedAudioContext: AudioContext | null = null;
 let isAudioUnlocked = false;
@@ -153,10 +153,10 @@ export function playSynthesizedPing(targetVolume = 0.3): void {
 
 /**
  * Kích hoạt tệp âm thanh chuông báo ngắn (.mp3) đi kèm khi có thông báo mới
- * Thực thi theo đúng chuẩn JavaScript: new Audio('/sounds/notification.mp3').play()
+ * Thực thi theo đúng chuẩn JavaScript: new Audio('/sounds/notification-ting.mp3').play().catch(e => console.log('Audio autoplay blocked', e))
  * kèm fallback dự phòng qua Web Audio API AudioContext
  */
-export async function playNotificationSound(): Promise<boolean> {
+export async function playNotificationSound(soundUrl?: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
   // Rà soát cấu hình của người dùng (tôn trọng khi người dùng chọn tắt âm)
@@ -167,8 +167,10 @@ export async function playNotificationSound(): Promise<boolean> {
   // Luôn đảm bảo AudioContext sẵn sàng
   unlockAudioContext();
 
+  const targetPath = soundUrl || NOTIFICATION_SOUND_PATH;
+
   try {
-    const audio = new Audio(NOTIFICATION_SOUND_PATH);
+    const audio = new Audio(targetPath);
     audio.volume = 1.0; // Âm lượng chuẩn hóa tối đa, trong trẻo và rõ nét
 
     const playPromise = audio.play();
@@ -178,13 +180,14 @@ export async function playNotificationSound(): Promise<boolean> {
     }
     return true;
   } catch (err: any) {
-    console.warn('[NotificationSound] HTML5 Audio acb-zalo-ting play error, trying backup:', err);
+    console.log('Audio autoplay blocked', err);
     try {
       const fallbackAudio = new Audio(BACKUP_SOUND_PATH);
       fallbackAudio.volume = 1.0;
       await fallbackAudio.play();
       return true;
-    } catch (_) {
+    } catch (e2: any) {
+      console.log('Audio autoplay blocked (backup)', e2);
       try {
         playSynthesizedPing(0.6);
         return true;
@@ -197,8 +200,24 @@ export async function playNotificationSound(): Promise<boolean> {
 }
 
 /**
+ * Hàm phát trực tiếp hiệu ứng chuông Ting chuẩn (/sounds/notification-ting.mp3)
+ * Thực thi chính xác: new Audio('/sounds/notification-ting.mp3').play().catch(e => console.log('Audio autoplay blocked', e))
+ */
+export function playNotificationTing(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  try {
+    new Audio('/sounds/notification-ting.mp3')
+      .play()
+      .catch((e) => console.log('Audio autoplay blocked', e));
+  } catch (e) {
+    console.log('Audio autoplay blocked', e);
+  }
+  return playNotificationSound(NOTIFICATION_SOUND_PATH);
+}
+
+/**
  * Hàm phát trực tiếp tiếng Ting chuẩn ACB One / Zalo (alias)
  */
 export async function playAcbZaloTing(): Promise<boolean> {
-  return playNotificationSound();
+  return playNotificationTing();
 }
