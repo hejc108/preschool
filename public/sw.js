@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/favicon.ico',
+  '/sounds/acb-zalo-ting.mp3',
   '/sounds/notification.mp3'
 ];
 
@@ -134,7 +135,7 @@ self.addEventListener('push', (event) => {
     tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
     vibrate: [200, 100, 200],
     silent: false,
-    sound: '/sounds/notification.mp3',
+    sound: '/sounds/acb-zalo-ting.mp3',
     data: {
       notification_channel: channel,
       target_url: payload.target_url || defaultUrl,

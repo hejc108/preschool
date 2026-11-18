@@ -190,6 +190,11 @@ function TeacherAnnouncementsInner() {
 
     const timer = setTimeout(async () => {
       try {
+        await fetch(`/api/announcements/${currentAnnouncement.id}/read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => {});
+
         await fetch('/api/announcements', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },

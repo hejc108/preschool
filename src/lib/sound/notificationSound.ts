@@ -5,7 +5,8 @@
 // ==============================================================================
 
 const SOUND_ENABLED_KEY = 'suongmai_pwa_notification_sound_enabled';
-const NOTIFICATION_SOUND_PATH = '/sounds/notification.mp3';
+const NOTIFICATION_SOUND_PATH = '/sounds/acb-zalo-ting.mp3';
+const BACKUP_SOUND_PATH = '/sounds/notification.mp3';
 
 let sharedAudioContext: AudioContext | null = null;
 let isAudioUnlocked = false;
@@ -168,7 +169,7 @@ export async function playNotificationSound(): Promise<boolean> {
 
   try {
     const audio = new Audio(NOTIFICATION_SOUND_PATH);
-    audio.volume = 0.75;
+    audio.volume = 1.0; // Âm lượng chuẩn hóa tối đa, trong trẻo và rõ nét
 
     const playPromise = audio.play();
     if (playPromise !== undefined) {
@@ -177,14 +178,27 @@ export async function playNotificationSound(): Promise<boolean> {
     }
     return true;
   } catch (err: any) {
-    console.warn('[NotificationSound] HTML5 Audio play error, invoking AudioContext fallback:', err);
-    // Nếu trình duyệt chặn Audio tag hoặc mạng chưa nạp file mp3, kích hoạt Web Audio API
+    console.warn('[NotificationSound] HTML5 Audio acb-zalo-ting play error, trying backup:', err);
     try {
-      playSynthesizedPing(0.35);
+      const fallbackAudio = new Audio(BACKUP_SOUND_PATH);
+      fallbackAudio.volume = 1.0;
+      await fallbackAudio.play();
       return true;
-    } catch (synthErr) {
-      console.warn('[NotificationSound] All audio playback channels failed:', synthErr);
-      return false;
+    } catch (_) {
+      try {
+        playSynthesizedPing(0.6);
+        return true;
+      } catch (synthErr) {
+        console.warn('[NotificationSound] All audio playback channels failed:', synthErr);
+        return false;
+      }
     }
   }
+}
+
+/**
+ * Hàm phát trực tiếp tiếng Ting chuẩn ACB One / Zalo (alias)
+ */
+export async function playAcbZaloTing(): Promise<boolean> {
+  return playNotificationSound();
 }

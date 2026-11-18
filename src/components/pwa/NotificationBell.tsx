@@ -193,6 +193,13 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
           mutate();
         },
       },
+      {
+        table: 'read_receipts',
+        event: '*',
+        onEvent: () => {
+          mutate();
+        },
+      },
     ],
   });
 
@@ -248,6 +255,10 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
       );
 
       try {
+        await fetch(`/api/announcements/${announcement.id}/read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => {});
         await fetch('/api/announcements', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },

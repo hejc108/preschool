@@ -191,6 +191,11 @@ function ParentAnnouncementsInner() {
 
     const timer = setTimeout(async () => {
       try {
+        await fetch(`/api/announcements/${currentAnnouncement.id}/read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => {});
+
         await fetch('/api/announcements', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -260,6 +265,10 @@ function ParentAnnouncementsInner() {
     if (!currentAnnouncement) return;
     try {
       setAcknowledgedMap((prev) => ({ ...prev, [currentAnnouncement.id]: true }));
+      await fetch(`/api/announcements/${currentAnnouncement.id}/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
       await fetch('/api/announcements', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

@@ -117,7 +117,6 @@ export default function AnnouncementsStudioPage() {
   const [showSealCard, setShowSealCard] = useState<boolean>(true);
 
   // Audio AI states
-  const [useAiVoice, setUseAiVoice] = useState<boolean>(true);
   const [selectedVoice, setSelectedVoice] = useState<string>(DEFAULT_AI_VOICE);
   const [selectedMusic, setSelectedMusic] = useState<string>(
     'Nhạc Lễ hội Thiếu nhi (Không bản quyền)'
@@ -401,7 +400,6 @@ export default function AnnouncementsStudioPage() {
     if (!tpl) return;
     setCurrentAnnouncementId(null);
     setStatus('DRAFT');
-    setUseAiVoice(true);
     setSelectedVoice(DEFAULT_AI_VOICE);
     applyTemplate(tpl);
     setCurrentView('studio');
@@ -440,8 +438,6 @@ export default function AnnouncementsStudioPage() {
       if (meta.table_data.row2_amt) setRow2Amt(meta.table_data.row2_amt);
     }
 
-    const hasAudioVal = Boolean((ann as any).audio_url || meta.audio_url || meta.has_audio !== false);
-    setUseAiVoice(hasAudioVal);
     const voiceVal = (ann as any).voice_type || meta.voice_type || meta.voice;
     if (voiceVal) setSelectedVoice(getVoiceOption(voiceVal).label);
     else setSelectedVoice(DEFAULT_AI_VOICE);
@@ -792,12 +788,12 @@ export default function AnnouncementsStudioPage() {
         },
         voice: selectedVoice,
         voice_type: getVoiceOption(selectedVoice).id,
-        music: useAiVoice ? selectedMusic : undefined,
-        background_music: useAiVoice ? selectedMusic : undefined,
-        audio_url: useAiVoice ? audioUrl : null,
+        music: audioUrl ? selectedMusic : undefined,
+        background_music: audioUrl ? selectedMusic : undefined,
+        audio_url: audioUrl || null,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: useAiVoice && Boolean(audioUrl),
+        has_audio: Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -810,9 +806,9 @@ export default function AnnouncementsStudioPage() {
         target_role: 'ALL',
         audience: audience || 'Toàn trường',
         scope: audience === 'Toàn trường' ? 'all' : audience,
-        audio_url: useAiVoice ? audioUrl : null,
+        audio_url: audioUrl || null,
         voice_type: getVoiceOption(selectedVoice).id,
-        background_music: useAiVoice ? selectedMusic : null,
+        background_music: audioUrl ? selectedMusic : null,
         metadata: metadataPayload,
       };
 
@@ -878,12 +874,12 @@ export default function AnnouncementsStudioPage() {
         },
         voice: selectedVoice,
         voice_type: getVoiceOption(selectedVoice).id,
-        music: useAiVoice ? selectedMusic : undefined,
-        background_music: useAiVoice ? selectedMusic : undefined,
-        audio_url: useAiVoice ? audioUrl : null,
+        music: audioUrl ? selectedMusic : undefined,
+        background_music: audioUrl ? selectedMusic : undefined,
+        audio_url: audioUrl || null,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: useAiVoice && Boolean(audioUrl),
+        has_audio: Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -896,9 +892,9 @@ export default function AnnouncementsStudioPage() {
         target_role: 'ALL',
         audience: audience || 'Toàn trường',
         scope: audience === 'Toàn trường' ? 'all' : audience,
-        audio_url: useAiVoice ? audioUrl : null,
+        audio_url: audioUrl || null,
         voice_type: getVoiceOption(selectedVoice).id,
-        background_music: useAiVoice ? selectedMusic : null,
+        background_music: audioUrl ? selectedMusic : null,
         metadata: metadataPayload,
       };
 
@@ -1255,7 +1251,6 @@ export default function AnnouncementsStudioPage() {
                 onClick={() => {
                   setCurrentAnnouncementId(null);
                   setStatus('DRAFT');
-                  setUseAiVoice(true);
                   setSelectedVoice(DEFAULT_AI_VOICE);
                   const tpl = POSTER_TEMPLATES.find((t) => t.id === 'le-hoi') || POSTER_TEMPLATES[0];
                   applyTemplate(tpl);
@@ -2008,42 +2003,7 @@ export default function AnnouncementsStudioPage() {
                 </h2>
               </div>
 
-              {/* Checkbox Mặc định chọn sẵn: Sử dụng Giọng đọc AI */}
-              <div className="bg-white px-3 py-2.5 rounded-lg border border-slate-200 flex items-center justify-between shadow-2xs">
-                <label className="flex items-center space-x-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={useAiVoice}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setUseAiVoice(checked);
-                      if (checked && !selectedVoice) {
-                        setSelectedVoice(DEFAULT_AI_VOICE);
-                      }
-                    }}
-                    className="w-4 h-4 text-[#D32F2F] accent-[#D32F2F] rounded border-slate-300 focus:ring-red-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-slate-800">
-                    Sử dụng Giọng đọc AI cho thông báo này
-                  </span>
-                </label>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-                    useAiVoice
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-slate-100 text-slate-500 border-slate-200'
-                  }`}
-                >
-                  {useAiVoice ? 'Đang kích hoạt' : 'Tạm tắt'}
-                </span>
-              </div>
-
-              <div
-                className={`space-y-3 transition-opacity duration-200 ${
-                  !useAiVoice ? 'opacity-40 pointer-events-none' : ''
-                }`}
-              >
-                <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                       Chọn giọng đọc AI (5 Sắc thái Sư phạm)
@@ -2161,7 +2121,6 @@ export default function AnnouncementsStudioPage() {
                   </div>
                 </div>
               </div>
-            </div>
           </section>
 
           {/* CỘT PHẢI: 40% LIVE PREVIEW POSTER */}
