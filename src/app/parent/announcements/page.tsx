@@ -185,37 +185,45 @@ function ParentAnnouncementsInner() {
   // Current active announcement for detail view
   const currentAnnouncement = detailAnnouncement || (requestedId ? announcements.find((a) => a.id === requestedId) || null : null);
 
-  // Automatic 2-second Read-Receipt
-  useEffect(() => {
-    if (!currentAnnouncement || currentAnnouncement.is_read) return;
+  // Automatic Read-Receipt khi người dùng xem thông báo trên PWA
+  const hasMarkedReadRef = useRef<Set<string>>(new Set());
 
-    const timer = setTimeout(async () => {
+  useEffect(() => {
+    const targetId = requestedId || currentAnnouncement?.id;
+    if (!targetId) return;
+
+    if (hasMarkedReadRef.current.has(targetId)) return;
+    hasMarkedReadRef.current.add(targetId);
+
+    // Kích hoạt ngay lập tức API POST /api/announcements/[id]/read và PATCH /api/announcements
+    const recordRead = async () => {
       try {
-        await fetch(`/api/announcements/${currentAnnouncement.id}/read`, {
+        await fetch(`/api/announcements/${targetId}/read`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ announcement_id: targetId }),
         }).catch(() => {});
 
         await fetch('/api/announcements', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ announcement_id: currentAnnouncement.id }),
-        });
+          body: JSON.stringify({ announcement_id: targetId }),
+        }).catch(() => {});
 
-        // Update local state smoothly
+        // Cập nhật trạng thái hiển thị cục bộ mượt mà
         setAnnouncements((prev) =>
-          prev.map((a) => (a.id === currentAnnouncement.id ? { ...a, is_read: true } : a))
+          prev.map((a) => (a.id === targetId ? { ...a, is_read: true } : a))
         );
-        if (detailAnnouncement && detailAnnouncement.id === currentAnnouncement.id) {
+        if (detailAnnouncement && detailAnnouncement.id === targetId) {
           setDetailAnnouncement((prev) => (prev ? { ...prev, is_read: true } : null));
         }
       } catch (err) {
         console.error('Lỗi tự động ghi nhận đã đọc:', err);
       }
-    }, 300);
+    };
 
-    return () => clearTimeout(timer);
-  }, [currentAnnouncement?.id, currentAnnouncement?.is_read]);
+    recordRead();
+  }, [requestedId, currentAnnouncement?.id]);
 
   // Download Poster as PNG (Header icon button)
   const handleDownloadPosterPng = async () => {

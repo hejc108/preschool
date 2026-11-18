@@ -235,6 +235,28 @@ export function getAnnouncementReadsLocally(userId: string, roleContext: string)
   return new Set(data[userKey] || []);
 }
 
+/**
+ * Trích xuất bản đồ tất cả độc giả cho từng thông báo từ kho lưu trữ cục bộ
+ * Phục vụ tính toán tổng số người đã đọc (read_count) cho Web Admin
+ */
+export function getLocalDistinctReadersByAnnouncement(): Map<string, Set<string>> {
+  const data = readLocalAnnouncementReads();
+  const map = new Map<string, Set<string>>();
+  Object.entries(data).forEach(([userKey, aIds]) => {
+    const uid = userKey.split(':')[0];
+    if (Array.isArray(aIds)) {
+      aIds.forEach((aid) => {
+        const cleanAid = String(aid || '').trim();
+        if (cleanAid) {
+          if (!map.has(cleanAid)) map.set(cleanAid, new Set<string>());
+          map.get(cleanAid)!.add(uid);
+        }
+      });
+    }
+  });
+  return map;
+}
+
 export function removeAnnouncementReadsLocally(announcementId: string): void {
   const targetId = String(announcementId || '').trim();
   const data = readLocalAnnouncementReads();

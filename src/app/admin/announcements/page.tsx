@@ -311,6 +311,15 @@ export default function AnnouncementsStudioPage() {
   useEffect(() => {
     fetchAnnouncements();
     fetchTtsRules();
+
+    // Tự động làm mới danh sách và số lượng phụ huynh đã đọc định kỳ 15 giây khi tab đang mở
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchAnnouncements();
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Cleanup speech synthesis on unmount

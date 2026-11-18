@@ -33,9 +33,15 @@ export async function GET(
     // Tự động ghi nhận lượt đọc ngay khi mở xem chi tiết trên server
     try {
       const auth = await requireAuth(request);
-      if (!('response' in auth) && auth.ctx) {
-        await recordPersistentAnnouncementReads(auth.ctx, [id]);
-      }
+      const ctx =
+        !('response' in auth) && auth.ctx
+          ? auth.ctx
+          : {
+              profileId: 'anonymous-parent',
+              activeRole: 'PARENT',
+              roles: ['PARENT'],
+            };
+      await recordPersistentAnnouncementReads(ctx, [id]);
     } catch (readErr) {
       console.warn('[pwa/announcements] Auto mark read warning:', readErr);
     }
