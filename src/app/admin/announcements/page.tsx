@@ -205,24 +205,37 @@ export default function AnnouncementsStudioPage() {
     }, 3500);
   };
 
-  // Load announcements directly from real Database API
+  // Load announcements directly from real Database API (Stale-While-Revalidate UI hydration)
   const fetchAnnouncements = async () => {
     try {
-      setLoading(true);
+      // 1. Phục hồi ngay lập tức từ bộ nhớ đệm (0ms loading cho BGH/Admin)
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = sessionStorage.getItem('suongmai_admin_announcements');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAnnouncements(parsed);
+              setLoading(false);
+            }
+          }
+        } catch (_) {}
+      }
+
       const res = await fetch('/api/announcements?full=true');
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {
           setAnnouncements(json.announcements);
-        } else {
-          setAnnouncements([]);
+          if (typeof window !== 'undefined') {
+            try {
+              sessionStorage.setItem('suongmai_admin_announcements', JSON.stringify(json.announcements));
+            } catch (_) {}
+          }
         }
-      } else {
-        setAnnouncements([]);
       }
     } catch (e) {
       console.error('Lỗi khi tải thông báo:', e);
-      setAnnouncements([]);
     } finally {
       setLoading(false);
     }

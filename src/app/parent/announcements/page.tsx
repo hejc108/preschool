@@ -90,27 +90,40 @@ function ParentAnnouncementsInner() {
     }, 3200);
   };
 
-  // Fetch lightweight list of announcements from real Database
+  // Fetch lightweight list of announcements (Stale-While-Revalidate UI hydration)
   const fetchAnnouncements = async () => {
     try {
-      setLoadingList(true);
-      let res = await fetch('/api/pwa/announcements', { cache: 'no-store' });
+      // 1. Phục hồi ngay lập tức từ bộ nhớ đệm cục bộ (0ms loading)
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = sessionStorage.getItem('suongmai_parent_announcements');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAnnouncements(parsed);
+              setLoadingList(false);
+            }
+          }
+        } catch (_) {}
+      }
+
+      let res = await fetch('/api/pwa/announcements');
       if (!res.ok) {
-        res = await fetch('/api/announcements', { cache: 'no-store' });
+        res = await fetch('/api/announcements');
       }
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {
           setAnnouncements(json.announcements);
-        } else {
-          setAnnouncements([]);
+          if (typeof window !== 'undefined') {
+            try {
+              sessionStorage.setItem('suongmai_parent_announcements', JSON.stringify(json.announcements));
+            } catch (_) {}
+          }
         }
-      } else {
-        setAnnouncements([]);
       }
     } catch (e) {
       console.error('Lỗi khi tải thông báo:', e);
-      setAnnouncements([]);
     } finally {
       setLoadingList(false);
     }

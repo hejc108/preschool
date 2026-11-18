@@ -1,5 +1,9 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
-const CACHE_NAME = 'suongmai-pwa-v7';
+// Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
+const CACHE_NAME = 'suongmai-pwa-v8';
+const DATA_CACHE_NAME = 'suongmai-data-v1';
+const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
+
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -16,6 +20,42 @@ const ASSETS_TO_CACHE = [
   '/sounds/notification.mp3'
 ];
 
+// Helper: Stale-While-Revalidate (SWR) Caching Strategy
+function staleWhileRevalidate(request, cacheName) {
+  return caches.open(cacheName).then((cache) => {
+    return cache.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            cache.put(request, networkResponse.clone());
+          }
+          return networkResponse;
+        })
+        .catch(() => cachedResponse);
+
+      // Trả về bản cache ngay lập tức nếu có (0ms), fetch ngầm để làm mới
+      return cachedResponse || fetchPromise;
+    });
+  });
+}
+
+// Helper: Cache-First Strategy cho tài nguyên tĩnh bất biến
+function cacheFirst(request, cacheName) {
+  return caches.open(cacheName).then((cache) => {
+    return cache.match(request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+      });
+    });
+  });
+}
+
 // Install Event
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -31,7 +71,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
+          if (!CURRENT_CACHES.includes(cache)) {
             return caches.delete(cache);
           }
         })
@@ -40,15 +80,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Strict PKCE Cookie & Auth Bypass
+// Fetch Event - Tối ưu hóa Stale-While-Revalidate & Strict Auth Bypass
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
+  // 1. Tuyệt đối không can thiệp các luồng xác thực, PKCE và Supabase Auth
   if (
     url.pathname.startsWith('/auth') ||
-    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/api/auth') ||
     url.origin.includes('supabase.co') ||
     url.searchParams.has('code') ||
     url.searchParams.has('state')
@@ -56,28 +97,58 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
-          }
+  // 2. Tài nguyên tĩnh bất biến (_next/static, sounds, images, icons): Cache-First
+  if (
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/sounds/') ||
+    url.pathname.startsWith('/images/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.json' ||
+    url.pathname === '/favicon.ico'
+  ) {
+    event.respondWith(cacheFirst(event.request, CACHE_NAME));
+    return;
+  }
+
+  // 3. Danh sách thông báo & dữ liệu PWA an toàn: Stale-While-Revalidate
+  // Hiển thị ngay lập tức từ bộ nhớ đệm (0ms), đồng thời cập nhật dữ liệu mới ngầm
+  if (
+    url.pathname === '/api/announcements' ||
+    url.pathname === '/api/pwa/announcements' ||
+    url.pathname === '/api/notifications' ||
+    url.pathname === '/api/teacher/classes'
+  ) {
+    event.respondWith(staleWhileRevalidate(event.request, DATA_CACHE_NAME));
+    return;
+  }
+
+  // 4. Các API Admin hoặc mutation khác: Network direct
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // 5. Giao diện trang HTML PWA (/parent, /teacher, /admin): Stale-While-Revalidate
+  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          const fetchPromise = fetch(event.request)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                cache.put(event.request, networkResponse.clone());
+              }
+              return networkResponse;
+            })
+            .catch(() => {
+              return cachedResponse || caches.match('/');
+            });
+
+          return cachedResponse || fetchPromise;
         });
       })
-  );
+    );
+    return;
+  }
 });
 
 // Web Push Handler (Q4): Preserve & display channel tag ('TEACHER' | 'PARENT')
