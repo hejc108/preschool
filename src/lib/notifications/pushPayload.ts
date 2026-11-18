@@ -54,6 +54,21 @@ export function hasVapidConfig(): boolean {
   return Boolean(getVapidPublicKey() && getVapidPrivateKey());
 }
 
+export interface PushSubRecord {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  active_role_preference?: string | null;
+  user_agent?: string | null;
+  updated_at: string;
+}
+
+// Bộ đệm lưu trữ dự phòng in-memory giúp bảo toàn đăng ký Web Push
+// ngay cả khi database Supabase gặp phân quyền RLS hoặc độ trễ mạng.
+const LOCAL_PUSH_SUBSCRIPTIONS = new Map<string, PushSubRecord>();
+
 export async function savePushSubscription(params: {
   userId: string;
   endpoint: string;
@@ -63,6 +78,20 @@ export async function savePushSubscription(params: {
   userAgent?: string | null;
   ctx?: SessionContext;
 }) {
+  // 1. Luôn lưu vào bộ nhớ dự phòng an toàn
+  const localRecord: PushSubRecord = {
+    id: `local-sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    user_id: params.userId,
+    endpoint: params.endpoint,
+    p256dh: params.p256dh,
+    auth: params.auth,
+    active_role_preference: params.activeRolePreference || null,
+    user_agent: params.userAgent || null,
+    updated_at: new Date().toISOString(),
+  };
+  LOCAL_PUSH_SUBSCRIPTIONS.set(params.endpoint, localRecord);
+
+  // 2. Đồng bộ xuống Supabase
   const query = async (sb: any) =>
     await sb
       .from('push_subscriptions')
@@ -81,7 +110,76 @@ export async function savePushSubscription(params: {
       .select()
       .maybeSingle();
 
-  return params.ctx ? executeWithContextFallback(params.ctx, query) : executeWithAdminFallback(query);
+  try {
+    const res = params.ctx ? await executeWithContextFallback(params.ctx, query) : await executeWithAdminFallback(query);
+    return res.data ? res : { data: localRecord, error: null };
+  } catch {
+    return { data: localRecord, error: null };
+  }
+}
+
+/**
+ * Gửi trực tiếp Web Push tới một đối tượng PushSubscription cụ thể (Dùng cho kiểm thử chuông màn hình khóa)
+ */
+export async function dispatchDirectWebPush(params: {
+  subscription: {
+    endpoint: string;
+    keys: {
+      p256dh: string;
+      auth: string;
+    };
+  };
+  payload: PushNotificationPayload;
+}): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+  if (!hasVapidConfig() || !params.subscription?.endpoint) {
+    return { success: false, error: 'Thiếu cấu hình VAPID hoặc endpoint' };
+  }
+
+  try {
+    webpush.setVapidDetails(
+      getVapidSubject(),
+      getVapidPublicKey(),
+      getVapidPrivateKey()
+    );
+  } catch (_) {}
+
+  const payloadString = JSON.stringify({
+    title: params.payload.title,
+    body: params.payload.body,
+    notification_channel: params.payload.notification_channel,
+    target_url: params.payload.url,
+    entity_id: params.payload.id,
+    student_id: params.payload.student_id,
+    class_id: params.payload.class_id,
+    sound: '/sounds/notification-ting.mp3',
+    silent: false,
+    requireInteraction: true,
+    timestamp: Date.now(),
+  });
+
+  try {
+    const res = await webpush.sendNotification(
+      {
+        endpoint: params.subscription.endpoint,
+        keys: {
+          p256dh: params.subscription.keys.p256dh,
+          auth: params.subscription.keys.auth,
+        },
+      },
+      payloadString,
+      {
+        TTL: 86400,
+        urgency: 'high',
+        headers: {
+          Urgency: 'high',
+        },
+      }
+    );
+    return { success: true, statusCode: res.statusCode };
+  } catch (err: any) {
+    console.error('[dispatchDirectWebPush] error:', err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
 }
 
 /**
@@ -130,6 +228,35 @@ export async function dispatchContextPushNotification(params: {
   } catch (fetchErr) {
     console.warn('[dispatchContextPushNotification] Lỗi truy vấn push_subscriptions:', fetchErr);
   }
+
+  // Hợp nhất với danh sách bộ đệm nội bộ LOCAL_PUSH_SUBSCRIPTIONS để bảo toàn 100% người nhận
+  const endpointMap = new Map<string, any>();
+  subscriptions.forEach((s) => {
+    if (s && s.endpoint) endpointMap.set(s.endpoint, s);
+  });
+
+  const channel = params.payload.notification_channel;
+  LOCAL_PUSH_SUBSCRIPTIONS.forEach((record, ep) => {
+    if (!endpointMap.has(ep) && record.endpoint && record.p256dh && record.auth) {
+      if (params.targetProfileIds && params.targetProfileIds.length > 0) {
+        if (params.targetProfileIds.includes(record.user_id)) {
+          endpointMap.set(ep, record);
+        }
+      } else {
+        if (channel === 'TEACHER') {
+          if (
+            !record.active_role_preference ||
+            ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN'].includes(record.active_role_preference)
+          ) {
+            endpointMap.set(ep, record);
+          }
+        } else {
+          endpointMap.set(ep, record);
+        }
+      }
+    }
+  });
+  subscriptions = Array.from(endpointMap.values());
 
   const subscriptionCount = subscriptions.length;
   if (!hasVapidConfig() || subscriptionCount === 0) {

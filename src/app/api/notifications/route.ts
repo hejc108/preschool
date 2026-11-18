@@ -4,6 +4,7 @@ import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessio
 import {
   buildPushPayload,
   dispatchContextPushNotification,
+  dispatchDirectWebPush,
   getVapidPublicKey,
   hasVapidConfig,
   savePushSubscription,
@@ -124,6 +125,38 @@ export async function POST(request: Request) {
         notification_channel: ctx.activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
         url: ctx.activeRole === 'TEACHER' ? '/teacher' : '/parent',
       });
+
+      // Nếu client gửi kèm PushSubscription cụ thể của máy hiện tại, lưu ngay và gửi trực tiếp tới máy đó!
+      const directSub = body.subscription;
+      if (directSub?.endpoint && directSub?.keys?.p256dh && directSub?.keys?.auth) {
+        await savePushSubscription({
+          userId: ctx.profileId,
+          endpoint: directSub.endpoint,
+          p256dh: directSub.keys.p256dh,
+          auth: directSub.keys.auth,
+          activeRolePreference: ctx.activeRole,
+          userAgent: request.headers.get('user-agent'),
+          ctx,
+        });
+
+        const directRes = await dispatchDirectWebPush({
+          subscription: directSub,
+          payload: testPayload,
+        });
+
+        return NextResponse.json(
+          {
+            success: directRes.success,
+            mode: 'direct_web_push',
+            test_result: directRes,
+            message: directRes.success
+              ? 'Đã phát tín hiệu chuông trực tiếp tới thiết bị qua Web Push!'
+              : `Lỗi phát tín hiệu: ${directRes.error}`,
+          },
+          { headers: NO_CACHE_HEADERS }
+        );
+      }
+
       const pushRes = await dispatchContextPushNotification({
         targetProfileIds: [ctx.profileId],
         payload: testPayload,

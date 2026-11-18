@@ -103,10 +103,26 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
       setIsTestingPush(true);
       setTestPushMessage(`Chuông sẽ reo sau ${delaySeconds}s. Hãy khóa màn hình ngay!`);
       unlockAudioContext();
+
+      let directSub = null;
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            directSub = sub.toJSON();
+          }
+        } catch (_) {}
+      }
+
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test', delay_ms: delaySeconds * 1000 }),
+        body: JSON.stringify({
+          action: 'test',
+          delay_ms: delaySeconds * 1000,
+          subscription: directSub,
+        }),
       });
     } catch (_) {
       setTestPushMessage('Lỗi kết nối kiểm tra chuông');
