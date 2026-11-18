@@ -1,5 +1,5 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
-const CACHE_NAME = 'suongmai-pwa-v4';
+const CACHE_NAME = 'suongmai-pwa-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -133,9 +133,11 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-192x192.png',
     tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
-    vibrate: [200, 100, 200],
+    vibrate: [300, 100, 300, 100, 400],
     silent: false,
-    sound: '/sounds/acb-zalo-ting.mp3',
+    sound: payload.sound || '/sounds/acb-zalo-ting.mp3',
+    renotify: true,
+    requireInteraction: true,
     data: {
       notification_channel: channel,
       target_url: payload.target_url || defaultUrl,
@@ -144,6 +146,12 @@ self.addEventListener('push', (event) => {
       entity_type: payload.entity_type || 'announcement',
       entity_id: payload.entity_id || null,
     },
+    actions: [
+      {
+        action: 'open',
+        title: 'Xem ngay',
+      },
+    ],
   });
 
   event.waitUntil(Promise.all([showNotificationPromise, notifyOpenClients]));

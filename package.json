@@ -36,12 +36,14 @@
     "react-dom": "^18.3.1",
     "swr": "^2.5.1",
     "tailwind-merge": "^3.0.1",
+    "web-push": "^4.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.17.19",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.24",

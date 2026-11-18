@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
 import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessionContext';
 import {
+  buildPushPayload,
+  dispatchContextPushNotification,
   getVapidPublicKey,
   hasVapidConfig,
   savePushSubscription,
@@ -108,6 +110,25 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
+
+    // Hỗ trợ kiểm thử chuông báo Web Push trực tiếp tới thiết bị của người dùng
+    if (body.action === 'test' || body.send_test === true) {
+      const testPayload = buildPushPayload({
+        title: '🔔 Chuông báo Mầm Non Sương Mai',
+        body: 'Âm thanh thông báo chuẩn ACB One / Zalo đã sẵn sàng trên màn hình khóa!',
+        notification_channel: ctx.activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
+        url: ctx.activeRole === 'TEACHER' ? '/teacher' : '/parent',
+      });
+      const pushRes = await dispatchContextPushNotification({
+        targetProfileIds: [ctx.profileId],
+        payload: testPayload,
+      });
+      return NextResponse.json(
+        { success: true, test_result: pushRes, message: 'Đã phát tín hiệu chuông thử nghiệm tới thiết bị.' },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
     const endpoint = String(body.endpoint || '').trim();
     const p256dh = String(body.keys?.p256dh || body.p256dh || '').trim();
     const authKey = String(body.keys?.auth || body.auth || '').trim();

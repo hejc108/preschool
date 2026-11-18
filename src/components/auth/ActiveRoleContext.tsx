@@ -637,6 +637,24 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     }
   }, [purgeAllRoleCaches]);
 
+  // Tự động đồng bộ và duy trì Web Push Subscription khi người dùng đã cấp quyền
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      !('Notification' in window) ||
+      !('serviceWorker' in navigator) ||
+      approvalStatus !== 'ACTIVE' ||
+      !profileId ||
+      profileId.startsWith('bootstrap-')
+    ) {
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      enableNotifications().catch(() => {});
+    }
+  }, [approvalStatus, profileId, enableNotifications]);
+
   const value = useMemo<ActiveRoleContextValue>(
     () => ({
       isLoading,
