@@ -1230,6 +1230,7 @@ export async function POST(request: Request) {
       body.show_seal ??
       metadata.show_seal ??
       (metadata.cards_visibility?.seal !== false);
+    const soundChoice = body.sound || metadata.sound || '/sounds/SM1.wav';
 
     const mergedMetadata = {
       ...metadata,
@@ -1255,6 +1256,7 @@ export async function POST(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
     };
 
     // Đóng gói phong bì metadata vào content để bảo đảm tương thích ngay cả khi DB chưa chạy migration mới
@@ -1265,6 +1267,7 @@ export async function POST(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
       is_urgent: Boolean(mergedMetadata.is_urgent),
       requires_acknowledgement: Boolean(mergedMetadata.requires_acknowledgement),
       updated_at: new Date().toISOString(),
@@ -1352,6 +1355,7 @@ export async function POST(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
       is_urgent: Boolean(mergedMetadata.is_urgent),
       priority: Boolean(mergedMetadata.is_urgent) ? 'URGENT' : 'NORMAL',
       requires_acknowledgement: Boolean(mergedMetadata.requires_acknowledgement),
@@ -1391,6 +1395,7 @@ export async function POST(request: Request) {
           notification_channel: notificationChannel,
           class_id: classId || undefined,
           url: notificationChannel === 'TEACHER' ? '/teacher' : '/parent',
+          sound: soundChoice,
         });
         await dispatchContextPushNotification({ payload: notificationPayload });
         mergedMetadata.push_sent = true;
@@ -1480,6 +1485,7 @@ export async function PUT(request: Request) {
       body.show_seal ??
       metadata.show_seal ??
       (metadata.cards_visibility?.seal !== false);
+    const soundChoice = body.sound || metadata.sound || '/sounds/SM1.wav';
 
     const mergedMetadata = {
       ...metadata,
@@ -1505,6 +1511,7 @@ export async function PUT(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
     };
 
     // Đóng gói phong bì metadata vào content
@@ -1515,6 +1522,7 @@ export async function PUT(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
       is_urgent: Boolean(mergedMetadata.is_urgent),
       requires_acknowledgement: Boolean(mergedMetadata.requires_acknowledgement),
       updated_at: new Date().toISOString(),
@@ -1572,6 +1580,7 @@ export async function PUT(request: Request) {
       audio_url: audioUrl,
       voice_type: voiceType,
       background_music: backgroundMusic,
+      sound: soundChoice,
       is_urgent: Boolean(mergedMetadata.is_urgent),
       priority: Boolean(mergedMetadata.is_urgent) ? 'URGENT' : 'NORMAL',
       has_audio: Boolean(audioUrl),
@@ -1608,6 +1617,7 @@ export async function PUT(request: Request) {
           notification_channel: updatedItem.notification_channel,
           class_id: updatedItem.class_id || undefined,
           url: updatedItem.notification_channel === 'TEACHER' ? '/teacher' : '/parent',
+          sound: soundChoice,
         });
         await dispatchContextPushNotification({ payload: notificationPayload });
         mergedMetadata.push_sent = true;

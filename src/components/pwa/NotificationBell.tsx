@@ -157,7 +157,8 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     const handleSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'PLAY_NOTIFICATION_SOUND') {
-        playNotificationSound('/sounds/notification-ting.mp3');
+        const soundUrl = event.data?.payload?.sound || '/sounds/SM1.wav';
+        playNotificationSound(soundUrl);
         mutate();
       }
     };
@@ -182,7 +183,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   // Kích hoạt tiếng Ting khi danh sách nhận được bản ghi mới mà người dùng đang mở sẵn app (Foreground)
   useEffect(() => {
     if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
-      playNotificationSound('/sounds/notification-ting.mp3');
+      playNotificationSound('/sounds/SM1.wav');
     }
     prevUnreadRef.current = unreadCount;
   }, [unreadCount]);
@@ -207,7 +208,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
         table: 'announcements',
         event: 'INSERT',
         onEvent: () => {
-          playNotificationSound('/sounds/notification-ting.mp3');
+          playNotificationSound('/sounds/SM1.wav');
           mutate();
         },
       },

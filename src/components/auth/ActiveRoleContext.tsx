@@ -533,7 +533,8 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     const handleSwMessage = (event: MessageEvent) => {
       const payload = event.data;
       if (payload?.type === 'PLAY_NOTIFICATION_SOUND') {
-        playNotificationSound('/sounds/notification-ting.mp3');
+        const soundUrl = payload?.payload?.sound || '/sounds/SM1.wav';
+        playNotificationSound(soundUrl);
       }
       if (payload?.type === 'SWITCH_ROLE_AND_FOCUS') {
         const ch = normalizeClientRole(payload.notification_channel);

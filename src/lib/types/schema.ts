@@ -71,6 +71,7 @@ export interface PushNotificationPayload {
   student_id?: string;
   class_id?: string;
   url?: string;
+  sound?: string;
   created_at?: string;
 }
 

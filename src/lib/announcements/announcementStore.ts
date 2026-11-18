@@ -21,6 +21,7 @@ export interface AnnouncementEnvelopeData {
   audio_url?: string | null;
   voice_type?: string;
   background_music?: string;
+  sound?: string;
   is_urgent?: boolean;
   requires_acknowledgement?: boolean;
   updated_at?: string;

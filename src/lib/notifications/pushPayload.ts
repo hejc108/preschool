@@ -18,6 +18,7 @@ export function buildPushPayload(input: {
   student_id?: string;
   class_id?: string;
   url?: string;
+  sound?: string;
 }): PushNotificationPayload {
   return {
     id: input.id || `${input.notification_channel.toLowerCase()}-${Date.now()}`,
@@ -27,6 +28,7 @@ export function buildPushPayload(input: {
     student_id: input.student_id,
     class_id: input.class_id,
     url: input.url || (input.notification_channel === 'TEACHER' ? '/teacher' : '/parent'),
+    sound: input.sound || '/sounds/SM1.wav',
     created_at: new Date().toISOString(),
   };
 }
@@ -151,7 +153,7 @@ export async function dispatchDirectWebPush(params: {
     entity_id: params.payload.id,
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
-    sound: '/sounds/notification-ting.mp3',
+    sound: params.payload.sound || '/sounds/SM1.wav',
     silent: false,
     requireInteraction: true,
     timestamp: Date.now(),
@@ -286,7 +288,7 @@ export async function dispatchContextPushNotification(params: {
     entity_id: params.payload.id,
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
-    sound: '/sounds/notification-ting.mp3',
+    sound: params.payload.sound || '/sounds/SM1.wav',
     silent: false,
     requireInteraction: true,
     timestamp: Date.now(),

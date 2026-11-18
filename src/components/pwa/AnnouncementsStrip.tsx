@@ -111,7 +111,7 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
           if (!record) return;
           mutate();
 
-          playNotificationSound('/sounds/notification-ting.mp3');
+          playNotificationSound('/sounds/SM1.wav');
 
           if (
             !seenIdsRef.current.has(record.id) &&

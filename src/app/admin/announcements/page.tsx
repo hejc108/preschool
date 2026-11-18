@@ -121,6 +121,7 @@ export default function AnnouncementsStudioPage() {
   const [selectedMusic, setSelectedMusic] = useState<string>(
     'Nhạc Lễ hội Thiếu nhi (Không bản quyền)'
   );
+  const [selectedTone, setSelectedTone] = useState<string>('/sounds/SM1.wav');
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioSynced, setIsAudioSynced] = useState<boolean>(true);
   const router = useRouter();
@@ -424,6 +425,7 @@ export default function AnnouncementsStudioPage() {
     setCurrentAnnouncementId(null);
     setStatus('DRAFT');
     setSelectedVoice(DEFAULT_AI_VOICE);
+    setSelectedTone('/sounds/SM1.wav');
     applyTemplate(tpl);
     setCurrentView('studio');
   };
@@ -442,6 +444,9 @@ export default function AnnouncementsStudioPage() {
     setCurrentTemplateId(meta.template_id || 'le-hoi');
     setCustomUploadedBgUrl(meta.custom_bg_url || null);
     if (meta.audience) setAudience(meta.audience);
+
+    const soundVal = (ann as any).sound || meta.sound || '/sounds/SM1.wav';
+    setSelectedTone(soundVal);
 
     const cards = meta.cards_visibility || {};
     setShowTimeCard(cards.time !== false);
@@ -502,6 +507,7 @@ export default function AnnouncementsStudioPage() {
         has_poster: true,
         has_audio: true,
         is_urgent: Boolean(ann.is_urgent || meta.is_urgent),
+        sound: meta.sound || selectedTone || '/sounds/SM1.wav',
       };
 
       const payload = {
@@ -510,6 +516,7 @@ export default function AnnouncementsStudioPage() {
         category: ann.category || 'Lễ hội',
         status: 'DRAFT',
         target_role: ann.target_role || 'ALL',
+        sound: meta.sound || selectedTone || '/sounds/SM1.wav',
         metadata: metadataPayload,
       };
 
@@ -818,6 +825,7 @@ export default function AnnouncementsStudioPage() {
         has_poster: true,
         has_audio: Boolean(audioUrl),
         is_urgent: isUrgent,
+        sound: selectedTone,
       };
 
       const payload = {
@@ -832,6 +840,7 @@ export default function AnnouncementsStudioPage() {
         audio_url: audioUrl || null,
         voice_type: getVoiceOption(selectedVoice).id,
         background_music: audioUrl ? selectedMusic : null,
+        sound: selectedTone,
         metadata: metadataPayload,
       };
 
@@ -933,6 +942,7 @@ export default function AnnouncementsStudioPage() {
         has_poster: true,
         has_audio: Boolean(effectiveAudioUrl),
         is_urgent: isUrgent,
+        sound: selectedTone,
       };
 
       const payload = {
@@ -947,6 +957,7 @@ export default function AnnouncementsStudioPage() {
         audio_url: effectiveAudioUrl || null,
         voice_type: getVoiceOption(selectedVoice).id,
         background_music: effectiveAudioUrl ? selectedMusic : null,
+        sound: selectedTone,
         metadata: metadataPayload,
       };
 
@@ -1337,6 +1348,7 @@ export default function AnnouncementsStudioPage() {
                   setCurrentAnnouncementId(null);
                   setStatus('DRAFT');
                   setSelectedVoice(DEFAULT_AI_VOICE);
+                  setSelectedTone('/sounds/SM1.wav');
                   const tpl = POSTER_TEMPLATES.find((t) => t.id === 'le-hoi') || POSTER_TEMPLATES[0];
                   applyTemplate(tpl);
                   setCurrentView('studio');
@@ -1888,6 +1900,48 @@ export default function AnnouncementsStudioPage() {
                     <option value="Cán bộ & Giáo viên">Cán bộ & Giáo viên</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Cấu hình Âm thanh chuông báo Web Push */}
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Bell className="w-3.5 h-3.5 text-[#D32F2F]" />
+                      <span>Âm thanh chuông báo Push (Web Push Tone)</span>
+                      <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={selectedTone}
+                      onChange={(e) => setSelectedTone(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none bg-white text-slate-800 focus:ring-1 focus:ring-[#D32F2F]"
+                    >
+                      <option value="/sounds/SM1.wav">SM1.wav (🔔 Tone Sương Mai 1)</option>
+                      <option value="/sounds/SM2.wav">SM2.wav (🔔 Tone Sương Mai 2)</option>
+                      <option value="/sounds/SM3.wav">SM3.wav (🔔 Tone Sương Mai 3)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 sm:self-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const audio = new Audio(selectedTone);
+                          audio.volume = 1.0;
+                          audio.play().catch((err) => console.log('Audio preview blocked', err));
+                        } catch (_) {}
+                      }}
+                      className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm whitespace-nowrap active:scale-95"
+                      title="Bấm để nghe thử âm thanh chuông báo"
+                    >
+                      <Volume2 className="w-4 h-4 text-[#D32F2F]" />
+                      <span>Nghe thử</span>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Âm thanh chuẩn phát khi có thông báo đẩy Web Push trên màn hình khóa hoặc chạy ngầm thiết bị di động.
+                </p>
               </div>
 
               <div>

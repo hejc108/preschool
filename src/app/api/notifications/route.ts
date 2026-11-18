@@ -119,11 +119,13 @@ export async function POST(request: Request) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
 
+      const soundChoice = body.sound || '/sounds/SM1.wav';
       const testPayload = buildPushPayload({
-        title: '🔔 Chuông báo Mầm Non Sương Mai',
-        body: 'Âm thanh thông báo chuẩn ACB One / Zalo đã sẵn sàng trên màn hình khóa!',
+        title: body.title || '🔔 Chuông báo Mầm Non Sương Mai',
+        body: body.body || 'Âm thanh thông báo chuẩn Sương Mai đã sẵn sàng trên màn hình khóa!',
         notification_channel: ctx.activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
         url: ctx.activeRole === 'TEACHER' ? '/teacher' : '/parent',
+        sound: soundChoice,
       });
 
       // Nếu client gửi kèm PushSubscription cụ thể của máy hiện tại, lưu ngay và gửi trực tiếp tới máy đó!

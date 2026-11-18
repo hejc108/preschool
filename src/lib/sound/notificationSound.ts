@@ -5,8 +5,8 @@
 // ==============================================================================
 
 const SOUND_ENABLED_KEY = 'suongmai_pwa_notification_sound_enabled';
-const NOTIFICATION_SOUND_PATH = '/sounds/notification-ting.mp3';
-const BACKUP_SOUND_PATH = '/sounds/acb-zalo-ting.mp3';
+const NOTIFICATION_SOUND_PATH = '/sounds/SM1.wav';
+const BACKUP_SOUND_PATH = '/sounds/SM2.wav';
 
 let sharedAudioContext: AudioContext | null = null;
 let isAudioUnlocked = false;

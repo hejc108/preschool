@@ -64,6 +64,7 @@ export interface AnnouncementMetadata {
   background_music?: string;
   audio_url?: string | null;
   audio_synced?: boolean;
+  sound?: string;
   has_poster?: boolean;
   has_audio?: boolean;
   is_urgent?: boolean;
@@ -87,6 +88,7 @@ export interface AnnouncementItem {
   target_role?: "ALL" | "TEACHER" | "PARENT";
   notification_channel?: "TEACHER" | "PARENT";
   class_id?: string | null;
+  sound?: string;
   metadata?: AnnouncementMetadata;
   created_at?: string;
   updated_at?: string;

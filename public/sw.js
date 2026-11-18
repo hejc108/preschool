@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v10';
+const CACHE_NAME = 'suongmai-pwa-v11';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -15,6 +15,9 @@ const ASSETS_TO_CACHE = [
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/favicon.ico',
+  '/sounds/SM1.wav',
+  '/sounds/SM2.wav',
+  '/sounds/SM3.wav',
   '/sounds/notification-ting.mp3',
   '/sounds/acb-zalo-ting.mp3',
   '/sounds/notification.mp3'
@@ -197,7 +200,7 @@ self.addEventListener('push', (event) => {
   // Chuẩn hóa đường dẫn tài nguyên sang URL tuyệt đối (Absolute URLs)
   // đảm bảo tương thích 100% với Web Push API và WebAPK trên thiết bị di động
   const origin = self.location.origin;
-  const soundPath = payload.sound || '/sounds/notification-ting.mp3';
+  const soundPath = payload.sound || '/sounds/SM1.wav';
   const soundUrl = new URL(soundPath, origin).href;
   const iconUrl = new URL('/icons/icon-192x192.png', origin).href;
   const badgeUrl = new URL('/icons/icon-192x192.png', origin).href;
@@ -237,6 +240,7 @@ self.addEventListener('push', (event) => {
     sound: soundUrl,
     renotify: true,
     requireInteraction: true,
+    urgency: 'high',
     timestamp: Date.now(),
     dir: 'auto',
     lang: 'vi',
@@ -274,8 +278,10 @@ self.addEventListener('push', (event) => {
         silent: false,
         sound: soundPath,
         renotify: true,
+        urgency: 'high',
         data: {
           target_url: targetUrl,
+          sound: soundUrl,
         },
       });
     });
