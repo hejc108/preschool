@@ -174,6 +174,7 @@ export default function AnnouncementsStudioPage() {
   // Mobile Frame Preview modal state (Xem trước giao diện di động 375px)
   const [previewModalAnnouncement, setPreviewModalAnnouncement] = useState<AnnouncementItem | null>(null);
   const [previewActiveTab, setPreviewActiveTab] = useState<'poster' | 'text'>('poster');
+  const [synthesizingRowId, setSynthesizingRowId] = useState<string | null>(null);
 
   const formatVietnameseDate = (dateStr?: string | null) => {
     if (!dateStr) return '—';
@@ -454,7 +455,7 @@ export default function AnnouncementsStudioPage() {
     if (musicVal) setSelectedMusic(musicVal);
     const audUrl = (ann as any).audio_url || meta.audio_url || null;
     setAudioUrl(audUrl);
-    setIsAudioSynced(Boolean(audUrl || meta.audio_synced));
+    setIsAudioSynced(Boolean(audUrl));
 
     setCurrentView('studio');
   };
@@ -858,7 +859,36 @@ export default function AnnouncementsStudioPage() {
     }
 
     try {
-      showToast('Đang duyệt và phát hành thông báo...');
+      showToast('Đang chuẩn bị duyệt và phát hành thông báo...');
+      let effectiveAudioUrl = audioUrl;
+
+      // TỰ ĐỘNG TỔNG HỢP GIỌNG ĐỌC AI NẾU CHƯA CÓ TRƯỚC KHI PHÁT HÀNH
+      if (!effectiveAudioUrl) {
+        try {
+          showToast('Đang tự động tạo giọng đọc AI cho thông báo trước khi phát hành...');
+          const { normalized } = getCurrentSpokenSpeech();
+          const voiceOption = getVoiceOption(selectedVoice);
+          const ttsRes = await fetch('/api/announcements/tts-synthesize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              announcement_id: currentAnnouncementId || undefined,
+              text: normalized,
+              voice_type: voiceOption.id,
+              background_music: selectedMusic,
+            }),
+          });
+          const ttsJson = await ttsRes.json().catch(() => ({}));
+          if (ttsJson.success && ttsJson.audio_url) {
+            effectiveAudioUrl = ttsJson.audio_url;
+            setAudioUrl(effectiveAudioUrl);
+            setIsAudioSynced(true);
+          }
+        } catch (ttsErr) {
+          console.warn('[handleApproveAndPublish] Auto TTS notice:', ttsErr);
+        }
+      }
+
       const metadataPayload: AnnouncementMetadata = {
         template_id: currentTemplateId,
         is_bg_enabled: isBgEnabled,
@@ -883,12 +913,12 @@ export default function AnnouncementsStudioPage() {
         },
         voice: selectedVoice,
         voice_type: getVoiceOption(selectedVoice).id,
-        music: audioUrl ? selectedMusic : undefined,
-        background_music: audioUrl ? selectedMusic : undefined,
-        audio_url: audioUrl || null,
-        audio_synced: isAudioSynced,
+        music: effectiveAudioUrl ? selectedMusic : undefined,
+        background_music: effectiveAudioUrl ? selectedMusic : undefined,
+        audio_url: effectiveAudioUrl || null,
+        audio_synced: Boolean(effectiveAudioUrl),
         has_poster: true,
-        has_audio: Boolean(audioUrl),
+        has_audio: Boolean(effectiveAudioUrl),
         is_urgent: isUrgent,
       };
 
@@ -901,9 +931,9 @@ export default function AnnouncementsStudioPage() {
         target_role: 'ALL',
         audience: audience || 'Toàn trường',
         scope: audience === 'Toàn trường' ? 'all' : audience,
-        audio_url: audioUrl || null,
+        audio_url: effectiveAudioUrl || null,
         voice_type: getVoiceOption(selectedVoice).id,
-        background_music: audioUrl ? selectedMusic : null,
+        background_music: effectiveAudioUrl ? selectedMusic : null,
         metadata: metadataPayload,
       };
 
@@ -1026,7 +1056,7 @@ export default function AnnouncementsStudioPage() {
   };
 
   // Real TTS Voice Synthesis: Web Speech API with real device audio playback
-  const handleGenerateAiAudio = async () => {
+  const handleGenerateAiAudio = async (): Promise<string | null> => {
     try {
       setIsGeneratingAudio(true);
       showToast('Đang gọi API tổng hợp giọng đọc AI và tải lên lưu trữ nhà trường...');
@@ -1045,20 +1075,53 @@ export default function AnnouncementsStudioPage() {
         }),
       });
 
-      const json = await res.json();
-      if (json.success && json.audio_url) {
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success && json.audio_url) {
         setAudioUrl(json.audio_url);
         setIsAudioSynced(true);
         showToast(`Đã tạo file âm thanh AI thành công (${voiceOption.label.split('(')[0].trim()})!`);
+        return json.audio_url;
       } else {
-        setIsAudioSynced(true);
-        showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và sẵn sàng đồng bộ!');
+        const errorMsg = json.error || 'Không thể lưu file âm thanh.';
+        showToast(`Không thể tạo file âm thanh AI: ${errorMsg}`);
+        return null;
       }
     } catch (e: any) {
-      setIsAudioSynced(true);
-      showToast('Đã chuẩn hóa lời đọc qua Từ điển AI và sẵn sàng đồng bộ!');
+      showToast(`Lỗi kết nối khi tạo âm thanh AI: ${e?.message || 'Vui lòng thử lại.'}`);
+      return null;
     } finally {
       setIsGeneratingAudio(false);
+    }
+  };
+
+  // Tạo nhanh tệp giọng đọc AI trực tiếp từ dòng thông báo trên danh sách
+  const handleQuickSynthesizeRowAudio = async (item: AnnouncementItem) => {
+    try {
+      setSynthesizingRowId(item.id);
+      showToast(`Đang tổng hợp giọng đọc AI cho thông báo: "${item.title.slice(0, 30)}..."`);
+
+      const res = await fetch('/api/announcements/tts-synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          announcement_id: item.id,
+          text: `${item.title}. ${item.content || ''}`,
+          voice_type: item.voice_type || item.metadata?.voice_type || 'vn_north_female_teacher',
+          background_music: item.background_music || item.metadata?.background_music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)',
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success && json.audio_url) {
+        showToast('Đã tạo và đính kèm giọng đọc AI thành công!');
+        await fetchAnnouncements();
+      } else {
+        showToast(`Không thể tạo âm thanh AI: ${json.error || 'Lỗi xử lý'}`);
+      }
+    } catch (err: any) {
+      showToast(`Lỗi kết nối: ${err?.message || 'Vui lòng thử lại'}`);
+    } finally {
+      setSynthesizingRowId(null);
     }
   };
 
@@ -1466,7 +1529,24 @@ export default function AnnouncementsStudioPage() {
                                       <span>{playingRowId === item.id ? 'Đang phát...' : 'Audio AI'}</span>
                                     </button>
                                   </>
-                                ) : null}
+                                ) : (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleQuickSynthesizeRowAudio(item);
+                                      }}
+                                      disabled={synthesizingRowId === item.id}
+                                      className="text-[10px] font-semibold inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition cursor-pointer shrink-0 disabled:opacity-50"
+                                      title="Bấm để tạo và gắn ngay tệp giọng đọc AI cho thông báo này"
+                                    >
+                                      <Mic className="w-3 h-3 text-amber-700" />
+                                      <span>{synthesizingRowId === item.id ? 'Đang tạo Audio...' : '+ Tạo Audio AI'}</span>
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -1580,6 +1660,17 @@ export default function AnnouncementsStudioPage() {
                               >
                                 <Smartphone className="w-4 h-4" />
                               </button>
+
+                              {!(item.audio_url || item.metadata?.audio_url) && (
+                                <button
+                                  onClick={() => handleQuickSynthesizeRowAudio(item)}
+                                  disabled={synthesizingRowId === item.id}
+                                  title="Tạo và đính kèm ngay giọng đọc AI cho thông báo này"
+                                  className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-md transition cursor-pointer shrink-0 disabled:opacity-50"
+                                >
+                                  <Mic className="w-4 h-4" />
+                                </button>
+                              )}
 
                               <button
                                 onClick={() => cloneAnnouncement(item)}

@@ -1027,6 +1027,36 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Tự động tổng hợp file giọng đọc AI và trả về Data URI bất biến
+ * Giúp mọi thông báo phát hành đều có audio voice mà không phụ thuộc cloud storage
+ */
+async function autoSynthesizeTtsAudio(title: string, content: string): Promise<string | null> {
+  try {
+    const rawText = `${title}. ${content}`.trim();
+    if (!rawText) return null;
+    const cleanSample = rawText.slice(0, 180);
+    const encoded = encodeURIComponent(cleanSample);
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=vi&client=tw-ob`;
+    const res = await fetch(ttsUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(4500),
+    });
+    if (res.ok) {
+      const ab = await res.arrayBuffer();
+      if (ab.byteLength > 0) {
+        return `data:audio/mpeg;base64,${Buffer.from(ab).toString('base64')}`;
+      }
+    }
+  } catch (err) {
+    console.warn('[autoSynthesizeTtsAudio] notice:', err);
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const auth = await requireActiveRole(request, ['SCHOOL_ADMIN', 'SUPER_ADMIN', 'TEACHER']);
@@ -1074,7 +1104,10 @@ export async function POST(request: Request) {
     const notificationChannel = targetRole === 'TEACHER' ? 'TEACHER' : 'PARENT';
     const createdBy = ctx.profileId.startsWith('bootstrap-') ? null : ctx.profileId;
 
-    const audioUrl = body.audio_url || metadata.audio_url || null;
+    let audioUrl = body.audio_url || metadata.audio_url || null;
+    if (!audioUrl && status === 'PUBLISHED') {
+      audioUrl = await autoSynthesizeTtsAudio(title, content);
+    }
     const voiceType =
       body.voice_type || metadata.voice_type || metadata.voice || 'vn_north_female_teacher';
     const backgroundMusic =
@@ -1318,7 +1351,13 @@ export async function PUT(request: Request) {
     const content = body.content !== undefined ? String(body.content).trim() : undefined;
     const category = body.category !== undefined ? String(body.category).trim() : 'Lễ hội';
     const status = body.status !== undefined ? String(body.status).trim() : 'PUBLISHED';
-    const audioUrl = body.audio_url !== undefined ? body.audio_url : null;
+    let audioUrl = body.audio_url !== undefined ? body.audio_url : null;
+    if (!audioUrl && status === 'PUBLISHED') {
+      audioUrl = await autoSynthesizeTtsAudio(
+        title || existing?.title || '',
+        content || existing?.content || ''
+      );
+    }
     const voiceType = body.voice_type || 'vn_north_female_teacher';
     const backgroundMusic = body.background_music || 'Nhạc Lễ hội Thiếu nhi (Không bản quyền)';
     const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};

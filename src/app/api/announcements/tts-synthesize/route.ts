@@ -221,68 +221,53 @@ export async function POST(request: Request) {
         fs.writeFileSync(path.join(publicAudioDir, fileName), finalAudioBuffer);
         uploadedUrl = `/audio/${fileName}`;
       } catch (localErr) {
-        console.warn('Lỗi ghi file audio cục bộ:', localErr);
+        console.warn('Lỗi ghi file audio cục bộ (Serverless/Vercel):', localErr);
       }
     }
 
+    // Fallback bất biến: Mã hóa Data URI trực tiếp (100% tự chủ, không cần Storage bucket)
     if (!uploadedUrl) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: lastError?.message || 'Không thể lưu file âm thanh vào Storage.',
-        },
-        { status: 500, headers: NO_CACHE_HEADERS }
-      );
+      uploadedUrl = `data:${contentType};base64,${finalAudioBuffer.toString('base64')}`;
     }
 
     // 5. Nếu có announcementId, cập nhật trực tiếp vào cả Cơ sở dữ liệu và Kho lưu trữ cục bộ
     if (announcementId) {
       // 5.1 Cập nhật Database (Supabase)
       try {
-        await executeWithContextFallback(ctx, async (sb) => {
-          // Lấy bản ghi hiện có
+        const { executeWithPrivilegedFallback } = await import('@/lib/supabase/server');
+        await executeWithPrivilegedFallback(async (sb) => {
+          // Lấy bản ghi hiện có (chỉ truy vấn các cột thực tế tồn tại trong CSDL)
           const { data: existing } = await sb
             .from('announcements')
-            .select('id, content, metadata')
+            .select('id, content')
             .eq('id', announcementId)
-            .single();
+            .maybeSingle();
 
-          const existingMeta = existing?.metadata || {};
-          const updatedMetadata = {
-            ...existingMeta,
-            audio_url: uploadedUrl,
-            voice_type: voiceType,
-            background_music: backgroundMusic,
-            audio_synced: true,
-          };
-
-          const updateRes = await sb
-            .from('announcements')
-            .update({
-              audio_url: uploadedUrl,
-              voice_type: voiceType,
-              background_music: backgroundMusic,
-              metadata: updatedMetadata,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', announcementId);
-
-          // Nếu DB chưa có cột audio_url, fallback đóng gói vào content envelope
-          if (updateRes?.error && existing) {
+          if (existing?.content) {
             const { bodyText, envelope } = unpackAnnouncementContent(existing.content);
-            const newEnvelope = {
-              ...(envelope || { category: 'Thông báo', status: 'PUBLISHED', metadata: {} }),
+            const existingEnv = envelope || { category: 'Thông báo', status: 'PUBLISHED', metadata: {} };
+            const curMeta = existingEnv.metadata || {};
+            const updatedMetadata = {
+              ...curMeta,
               audio_url: uploadedUrl,
               voice_type: voiceType,
               background_music: backgroundMusic,
+              audio_synced: true,
+              has_audio: true,
+            };
+            const newEnvelope = {
+              ...existingEnv,
+              audio_url: uploadedUrl,
+              voice_type: voiceType,
+              background_music: backgroundMusic,
+              has_audio: true,
               metadata: updatedMetadata,
               updated_at: new Date().toISOString(),
             };
             const packed = packAnnouncementContent(bodyText, newEnvelope);
-            await sb.from('announcements').update({ content: packed }).eq('id', announcementId);
+            return await sb.from('announcements').update({ content: packed }).eq('id', announcementId);
           }
-
-          return updateRes;
+          return { data: null, error: null };
         });
       } catch (dbErr) {
         console.warn('Lỗi cập nhật audio_url vào database:', dbErr);
