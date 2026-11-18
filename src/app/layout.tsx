@@ -56,7 +56,7 @@ export default function RootLayout({
           </ActiveRoleProvider>
         </LanguageProvider>
 
-        {/* Register Service Worker (Root Scope: /) */}
+        {/* Register Service Worker (Root Scope: /) & Autoplay Audio Unlocker */}
         <Script
           id="register-sw"
           strategy="afterInteractive"
@@ -74,6 +74,28 @@ export default function RootLayout({
                   );
                 });
               }
+
+              // Mở khóa sớm chính sách Autoplay của trình duyệt ngay khi người dùng có tương tác đầu tiên
+              (function() {
+                var unlockEvents = ['click', 'touchstart', 'keydown'];
+                function unlockAudioOnFirstGesture() {
+                  try {
+                    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                      var ctx = new AudioCtx();
+                      if (ctx.state === 'suspended') {
+                        ctx.resume();
+                      }
+                    }
+                  } catch(e) {}
+                  unlockEvents.forEach(function(ev) {
+                    window.removeEventListener(ev, unlockAudioOnFirstGesture);
+                  });
+                }
+                unlockEvents.forEach(function(ev) {
+                  window.addEventListener(ev, unlockAudioOnFirstGesture, { once: true, passive: true });
+                });
+              })();
             `,
           }}
         />

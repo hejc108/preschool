@@ -1,5 +1,5 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
-const CACHE_NAME = 'suongmai-pwa-v3';
+const CACHE_NAME = 'suongmai-pwa-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
@@ -10,7 +10,8 @@ const ASSETS_TO_CACHE = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
-  '/favicon.ico'
+  '/favicon.ico',
+  '/sounds/notification.mp3'
 ];
 
 // Install Event
@@ -106,22 +107,45 @@ self.addEventListener('push', (event) => {
   const channelBadgeLabel = channel === 'TEACHER' ? 'Giáo viên' : 'Phụ huynh';
   const title = payload.title || `Mầm Non Sương Mai (${channelBadgeLabel})`;
 
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body: payload.body,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-192x192.png',
-      tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
-      data: {
-        notification_channel: channel,
-        target_url: payload.target_url || defaultUrl,
-        student_id: payload.student_id || null,
-        class_id: payload.class_id || null,
-        entity_type: payload.entity_type || 'announcement',
-        entity_id: payload.entity_id || null,
-      },
-    })
-  );
+  // Thông báo tới tất cả các cửa sổ PWA đang mở để phát tiếng Ping tương tác
+  const notifyOpenClients = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((clientList) => {
+      for (const client of clientList) {
+        try {
+          client.postMessage({
+            type: 'PLAY_NOTIFICATION_SOUND',
+            payload: {
+              title,
+              body: payload.body,
+              notification_channel: channel,
+              target_url: payload.target_url || defaultUrl,
+              entity_id: payload.entity_id || null,
+            },
+          });
+        } catch (_) {}
+      }
+    });
+
+  const showNotificationPromise = self.registration.showNotification(title, {
+    body: payload.body,
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png',
+    tag: `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`,
+    vibrate: [200, 100, 200],
+    silent: false,
+    sound: '/sounds/notification.mp3',
+    data: {
+      notification_channel: channel,
+      target_url: payload.target_url || defaultUrl,
+      student_id: payload.student_id || null,
+      class_id: payload.class_id || null,
+      entity_type: payload.entity_type || 'announcement',
+      entity_id: payload.entity_id || null,
+    },
+  });
+
+  event.waitUntil(Promise.all([showNotificationPromise, notifyOpenClients]));
 });
 
 // Notification Click Handler (Q4): Auto-switch active PWA context when opening channel URL

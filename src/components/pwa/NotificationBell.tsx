@@ -18,11 +18,19 @@ import {
   Sparkles,
   X,
   Volume2,
+  VolumeX,
   Calendar,
   AlertTriangle,
 } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
+import {
+  playNotificationSound,
+  setupAutoplayUnlock,
+  unlockAudioContext,
+  isNotificationSoundEnabled,
+  setNotificationSoundEnabled,
+} from '@/lib/sound/notificationSound';
 
 export interface NotificationItem {
   id: string;
@@ -81,9 +89,17 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   const { activeRole, serverSyncedRole, waitForRoleSync } = useActiveRole();
   const [isOpen, setIsOpen] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [isSoundActive, setIsSoundActive] = useState<boolean>(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef<number | null>(null);
+
+  // Mở khóa chính sách Autoplay của trình duyệt khi tương tác & tải tùy chọn âm thanh
+  useEffect(() => {
+    setupAutoplayUnlock();
+    setIsSoundActive(isNotificationSoundEnabled());
+  }, []);
 
   // 1. Fetch danh sách thông báo và số lượng chưa đọc qua SWR
   const { data, mutate } = useSWR(
@@ -97,6 +113,21 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     }
   );
 
+  // Lắng nghe tín hiệu âm thanh thông báo đẩy từ Service Worker (Web Push)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PLAY_NOTIFICATION_SOUND') {
+        playNotificationSound();
+        mutate();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, [mutate]);
+
   const announcements: NotificationItem[] = useMemo(
     () => (Array.isArray(data?.announcements) ? data.announcements : []),
     [data]
@@ -108,6 +139,14 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     }
     return announcements.filter((a) => !a.is_read).length;
   }, [data, announcements]);
+
+  // Kích hoạt tiếng Ping khi danh sách nhận được bản ghi mới mà người dùng đang mở sẵn app
+  useEffect(() => {
+    if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
+      playNotificationSound();
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
 
   // Sắp xếp: Tin chưa đọc lên trước, sau đó theo thời gian mới nhất
   const sortedNotifications = useMemo(() => {
@@ -129,6 +168,7 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
         table: 'announcements',
         event: 'INSERT',
         onEvent: () => {
+          playNotificationSound();
           mutate();
         },
       },
@@ -268,7 +308,10 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
       {/* NÚT BIỂU TƯỢNG CHUÔNG (BELL ICON + UNREAD BADGE) */}
       <button
         type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => {
+          unlockAudioContext();
+          setIsOpen((prev) => !prev);
+        }}
         aria-label={`Thông báo ${unreadCount > 0 ? `(${unreadCount} chưa đọc)` : ''}`}
         aria-expanded={isOpen}
         className={`relative p-1.5 rounded-full transition-colors cursor-pointer select-none ${
@@ -319,6 +362,36 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
             </div>
 
             <div className="flex items-center gap-1">
+              {/* Nút Bật/Tắt & Thử tiếng chuông thông báo (Ping) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !isSoundActive;
+                  setIsSoundActive(nextState);
+                  setNotificationSoundEnabled(nextState);
+                  if (nextState) {
+                    playNotificationSound();
+                  }
+                }}
+                className={`p-1.5 rounded-lg transition cursor-pointer flex items-center justify-center ${
+                  isSoundActive
+                    ? 'text-emerald-700 hover:bg-emerald-50'
+                    : 'text-slate-400 hover:bg-slate-100'
+                }`}
+                title={
+                  isSoundActive
+                    ? 'Đang bật âm thanh thông báo (Bấm để thử tiếng Ping / Tắt âm)'
+                    : 'Đang tắt âm thanh thông báo (Bấm để bật)'
+                }
+                aria-label="Cài đặt âm thanh thông báo"
+              >
+                {isSoundActive ? (
+                  <Volume2 className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
               {unreadCount > 0 && (
                 <button
                   type="button"
