@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v9';
+const CACHE_NAME = 'suongmai-pwa-v10';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -197,7 +197,8 @@ self.addEventListener('push', (event) => {
   // Chuẩn hóa đường dẫn tài nguyên sang URL tuyệt đối (Absolute URLs)
   // đảm bảo tương thích 100% với Web Push API và WebAPK trên thiết bị di động
   const origin = self.location.origin;
-  const soundUrl = new URL(payload.sound || '/sounds/notification-ting.mp3', origin).href;
+  const soundPath = payload.sound || '/sounds/notification-ting.mp3';
+  const soundUrl = new URL(soundPath, origin).href;
   const iconUrl = new URL('/icons/icon-192x192.png', origin).href;
   const badgeUrl = new URL('/icons/icon-192x192.png', origin).href;
 
@@ -215,6 +216,7 @@ self.addEventListener('push', (event) => {
               notification_channel: channel,
               target_url: targetUrl,
               entity_id: payload.entity_id || null,
+              sound: soundUrl,
             },
           });
         } catch (_) {}
@@ -222,20 +224,22 @@ self.addEventListener('push', (event) => {
     });
 
   // Hiển thị thông báo Native với sound property, rung haptic và silent: false
-  // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn
+  // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn trên màn hình khóa
   const notificationTag = `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`;
 
-  const showNotificationPromise = self.registration.showNotification(title, {
+  const notificationOptions = {
     body: payload.body,
     icon: iconUrl,
     badge: badgeUrl,
     tag: notificationTag,
-    vibrate: [200, 100, 200, 100, 300],
+    vibrate: [300, 100, 400, 100, 400, 100, 500],
     silent: false,
     sound: soundUrl,
     renotify: true,
     requireInteraction: true,
     timestamp: Date.now(),
+    dir: 'auto',
+    lang: 'vi',
     data: {
       notification_channel: channel,
       target_url: targetUrl,
@@ -243,6 +247,7 @@ self.addEventListener('push', (event) => {
       class_id: payload.class_id || null,
       entity_type: payload.entity_type || 'announcement',
       entity_id: payload.entity_id || null,
+      sound: soundUrl,
     },
     actions: [
       {
@@ -254,9 +259,28 @@ self.addEventListener('push', (event) => {
         title: 'Đóng',
       },
     ],
-  });
+  };
 
-  event.waitUntil(Promise.all([showNotificationPromise, notifyOpenClients]));
+  const showNotificationPromise = self.registration
+    .showNotification(title, notificationOptions)
+    .catch((firstErr) => {
+      console.warn('[SW Push] Primary showNotification failed, trying simplified options:', firstErr);
+      return self.registration.showNotification(title, {
+        body: payload.body,
+        icon: iconUrl,
+        badge: badgeUrl,
+        tag: notificationTag,
+        vibrate: [300, 100, 400, 100, 400],
+        silent: false,
+        sound: soundPath,
+        renotify: true,
+        data: {
+          target_url: targetUrl,
+        },
+      });
+    });
+
+  event.waitUntil(Promise.allSettled([showNotificationPromise, notifyOpenClients]));
 });
 
 // Notification Click Handler (Q4): Auto-switch active PWA context and navigate to target URL

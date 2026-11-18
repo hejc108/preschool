@@ -113,6 +113,11 @@ export async function POST(request: Request) {
 
     // Hỗ trợ kiểm thử chuông báo Web Push trực tiếp tới thiết bị của người dùng
     if (body.action === 'test' || body.send_test === true) {
+      const delayMs = typeof body.delay_ms === 'number' && body.delay_ms >= 0 && body.delay_ms <= 10000 ? body.delay_ms : 0;
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
       const testPayload = buildPushPayload({
         title: '🔔 Chuông báo Mầm Non Sương Mai',
         body: 'Âm thanh thông báo chuẩn ACB One / Zalo đã sẵn sàng trên màn hình khóa!',

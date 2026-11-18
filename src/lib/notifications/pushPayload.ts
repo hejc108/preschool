@@ -119,7 +119,9 @@ export async function dispatchContextPushNotification(params: {
         if (channel === 'TEACHER') {
           query = query.in('active_role_preference', ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
         } else if (channel === 'PARENT') {
-          query = query.eq('active_role_preference', 'PARENT');
+          query = query.or('active_role_preference.eq.PARENT,active_role_preference.is.null');
+        } else {
+          query = query.not('endpoint', 'is', null);
         }
         return await query;
       });
@@ -158,6 +160,9 @@ export async function dispatchContextPushNotification(params: {
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
     sound: '/sounds/notification-ting.mp3',
+    silent: false,
+    requireInteraction: true,
+    timestamp: Date.now(),
   });
 
   let successCount = 0;
@@ -179,6 +184,9 @@ export async function dispatchContextPushNotification(params: {
           {
             TTL: 86400, // Duy trì 24 giờ cho đến khi thiết bị trực tuyến
             urgency: 'high', // Bắt buộc 'high' để đánh thức màn hình khóa thiết bị di động
+            headers: {
+              Urgency: 'high',
+            },
           }
         );
         successCount++;

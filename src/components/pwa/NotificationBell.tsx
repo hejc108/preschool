@@ -96,21 +96,25 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   const dropdownRef = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef<number | null>(null);
 
-  const handleTestPush = async () => {
+  const [testPushMessage, setTestPushMessage] = useState<string>('');
+
+  const handleTestPush = async (delaySeconds = 3) => {
     try {
       setIsTestingPush(true);
+      setTestPushMessage(`Chuông sẽ reo sau ${delaySeconds}s. Hãy khóa màn hình ngay!`);
       unlockAudioContext();
-      new Audio('/sounds/notification-ting.mp3')
-        .play()
-        .catch((e) => console.log('Audio autoplay blocked', e));
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test' }),
+        body: JSON.stringify({ action: 'test', delay_ms: delaySeconds * 1000 }),
       });
     } catch (_) {
+      setTestPushMessage('Lỗi kết nối kiểm tra chuông');
     } finally {
-      setTimeout(() => setIsTestingPush(false), 2500);
+      setTimeout(() => {
+        setIsTestingPush(false);
+        setTestPushMessage('');
+      }, 5000);
     }
   };
 
@@ -555,13 +559,15 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
             {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
               <button
                 type="button"
-                onClick={handleTestPush}
+                onClick={() => handleTestPush(3)}
                 disabled={isTestingPush}
-                className="w-full py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer disabled:opacity-50"
-                title="Bấm nút này rồi khóa màn hình điện thoại để kiểm tra âm thanh ting"
+                className="w-full py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer disabled:opacity-60"
+                title="Bấm nút này rồi khóa màn hình điện thoại trong 3 giây để kiểm tra chuông ting"
               >
-                <Sparkles className="w-3 h-3 text-emerald-600" />
-                <span>{isTestingPush ? 'Đang phát tín hiệu...' : 'Thử phát chuông Ting màn hình khóa'}</span>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  {testPushMessage || (isTestingPush ? 'Đang gửi...' : '🔔 Thử chuông khóa màn hình (sau 3s)')}
+                </span>
               </button>
             )}
             <Link

@@ -9,6 +9,36 @@ const nextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+          {
+            key: 'Service-Worker-Allowed',
+            value: '/',
+          },
+        ],
+      },
+      {
+        source: '/sounds/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

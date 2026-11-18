@@ -66,7 +66,13 @@ export default function RootLayout({
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(
                     function(registration) {
-                      console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                      // Ép Service Worker kiểm tra phiên bản mới ngay lập tức
+                      registration.update().catch(function() {});
+                      document.addEventListener('visibilitychange', function() {
+                        if (document.visibilityState === 'visible') {
+                          registration.update().catch(function() {});
+                        }
+                      });
                     },
                     function(err) {
                       console.log('ServiceWorker registration failed: ', err);
