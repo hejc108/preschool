@@ -63,6 +63,11 @@ import {
   getVoiceOption,
 } from '@/lib/announcements/ttsVoices';
 
+const DEFAULT_AI_VOICE =
+  TTS_VOICE_OPTIONS.find((v) => v.id === 'vn_male_announcer')?.label ||
+  TTS_VOICE_OPTIONS[3]?.label ||
+  'Giọng Nam Phát thanh viên / Thầy giáo (Trầm ấm, uy tín)';
+
 export default function AnnouncementsStudioPage() {
   // View states: 'list' | 'studio' | 'pwa'
   const [currentView, setCurrentView] = useState<'list' | 'studio' | 'pwa'>('list');
@@ -112,9 +117,8 @@ export default function AnnouncementsStudioPage() {
   const [showSealCard, setShowSealCard] = useState<boolean>(true);
 
   // Audio AI states
-  const [selectedVoice, setSelectedVoice] = useState<string>(
-    TTS_VOICE_OPTIONS[0].label
-  );
+  const [useAiVoice, setUseAiVoice] = useState<boolean>(true);
+  const [selectedVoice, setSelectedVoice] = useState<string>(DEFAULT_AI_VOICE);
   const [selectedMusic, setSelectedMusic] = useState<string>(
     'Nhạc Lễ hội Thiếu nhi (Không bản quyền)'
   );
@@ -397,6 +401,8 @@ export default function AnnouncementsStudioPage() {
     if (!tpl) return;
     setCurrentAnnouncementId(null);
     setStatus('DRAFT');
+    setUseAiVoice(true);
+    setSelectedVoice(DEFAULT_AI_VOICE);
     applyTemplate(tpl);
     setCurrentView('studio');
   };
@@ -434,8 +440,11 @@ export default function AnnouncementsStudioPage() {
       if (meta.table_data.row2_amt) setRow2Amt(meta.table_data.row2_amt);
     }
 
+    const hasAudioVal = Boolean((ann as any).audio_url || meta.audio_url || meta.has_audio !== false);
+    setUseAiVoice(hasAudioVal);
     const voiceVal = (ann as any).voice_type || meta.voice_type || meta.voice;
     if (voiceVal) setSelectedVoice(getVoiceOption(voiceVal).label);
+    else setSelectedVoice(DEFAULT_AI_VOICE);
     const musicVal = (ann as any).background_music || meta.background_music || meta.music;
     if (musicVal) setSelectedMusic(musicVal);
     const audUrl = (ann as any).audio_url || meta.audio_url || null;
@@ -783,12 +792,12 @@ export default function AnnouncementsStudioPage() {
         },
         voice: selectedVoice,
         voice_type: getVoiceOption(selectedVoice).id,
-        music: selectedMusic,
-        background_music: selectedMusic,
-        audio_url: audioUrl,
+        music: useAiVoice ? selectedMusic : undefined,
+        background_music: useAiVoice ? selectedMusic : undefined,
+        audio_url: useAiVoice ? audioUrl : null,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: Boolean(audioUrl),
+        has_audio: useAiVoice && Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -801,9 +810,9 @@ export default function AnnouncementsStudioPage() {
         target_role: 'ALL',
         audience: audience || 'Toàn trường',
         scope: audience === 'Toàn trường' ? 'all' : audience,
-        audio_url: audioUrl,
+        audio_url: useAiVoice ? audioUrl : null,
         voice_type: getVoiceOption(selectedVoice).id,
-        background_music: selectedMusic,
+        background_music: useAiVoice ? selectedMusic : null,
         metadata: metadataPayload,
       };
 
@@ -869,12 +878,12 @@ export default function AnnouncementsStudioPage() {
         },
         voice: selectedVoice,
         voice_type: getVoiceOption(selectedVoice).id,
-        music: selectedMusic,
-        background_music: selectedMusic,
-        audio_url: audioUrl,
+        music: useAiVoice ? selectedMusic : undefined,
+        background_music: useAiVoice ? selectedMusic : undefined,
+        audio_url: useAiVoice ? audioUrl : null,
         audio_synced: isAudioSynced,
         has_poster: true,
-        has_audio: Boolean(audioUrl),
+        has_audio: useAiVoice && Boolean(audioUrl),
         is_urgent: isUrgent,
       };
 
@@ -887,9 +896,9 @@ export default function AnnouncementsStudioPage() {
         target_role: 'ALL',
         audience: audience || 'Toàn trường',
         scope: audience === 'Toàn trường' ? 'all' : audience,
-        audio_url: audioUrl,
+        audio_url: useAiVoice ? audioUrl : null,
         voice_type: getVoiceOption(selectedVoice).id,
-        background_music: selectedMusic,
+        background_music: useAiVoice ? selectedMusic : null,
         metadata: metadataPayload,
       };
 
@@ -1246,6 +1255,8 @@ export default function AnnouncementsStudioPage() {
                 onClick={() => {
                   setCurrentAnnouncementId(null);
                   setStatus('DRAFT');
+                  setUseAiVoice(true);
+                  setSelectedVoice(DEFAULT_AI_VOICE);
                   const tpl = POSTER_TEMPLATES.find((t) => t.id === 'le-hoi') || POSTER_TEMPLATES[0];
                   applyTemplate(tpl);
                   setCurrentView('studio');
@@ -1995,138 +2006,158 @@ export default function AnnouncementsStudioPage() {
                 <h2 className="text-sm font-bold text-slate-900">
                   4. Giọng đọc AI Tiếng Việt & Nhạc nền Bản quyền
                 </h2>
+              </div>
+
+              {/* Checkbox Mặc định chọn sẵn: Sử dụng Giọng đọc AI */}
+              <div className="bg-white px-3 py-2.5 rounded-lg border border-slate-200 flex items-center justify-between shadow-2xs">
+                <label className="flex items-center space-x-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={useAiVoice}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setUseAiVoice(checked);
+                      if (checked && !selectedVoice) {
+                        setSelectedVoice(DEFAULT_AI_VOICE);
+                      }
+                    }}
+                    className="w-4 h-4 text-[#D32F2F] accent-[#D32F2F] rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-800">
+                    Sử dụng Giọng đọc AI cho thông báo này
+                  </span>
+                </label>
                 <span
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
-                    isAudioSynced
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                    useAiVoice
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-300'
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
                   }`}
                 >
-                  {isAudioSynced ? 'Đã đồng bộ văn bản' : 'Chữ đã sửa - Cần cập nhật Audio'}
+                  {useAiVoice ? 'Đang kích hoạt' : 'Tạm tắt'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Chọn giọng đọc AI (5 Sắc thái Sư phạm)
-                  </label>
-                  <select
-                    value={selectedVoice}
-                    onChange={(e) => {
-                      setSelectedVoice(e.target.value);
-                      setIsAudioSynced(false);
-                      setAudioUrl(null);
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
-                  >
-                    {TTS_VOICE_OPTIONS.map((v) => (
-                      <option key={v.id} value={v.label}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-slate-500 mt-1 italic">
-                    {getVoiceOption(selectedVoice).description}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Nhạc nền miễn phí bản quyền
-                  </label>
-                  <select
-                    value={selectedMusic}
-                    onChange={(e) => {
-                      setSelectedMusic(e.target.value);
-                      setIsAudioSynced(false);
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
-                  >
-                    {BACKGROUND_MUSIC_OPTIONS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="mt-1">
-                    {audioUrl ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold truncate max-w-full">
-                        <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
-                        <span>Đã lưu file âm thanh trên Cloud Storage</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 truncate max-w-full">
-                        <Info className="w-3 h-3 text-amber-600 shrink-0" />
-                        <span>Chưa tạo file âm thanh - Bấm nút bên dưới để tạo</span>
-                      </span>
+
+              <div
+                className={`space-y-3 transition-opacity duration-200 ${
+                  !useAiVoice ? 'opacity-40 pointer-events-none' : ''
+                }`}
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Chọn giọng đọc AI (5 Sắc thái Sư phạm)
+                    </label>
+                    <select
+                      value={selectedVoice}
+                      onChange={(e) => {
+                        setSelectedVoice(e.target.value);
+                        setIsAudioSynced(false);
+                        setAudioUrl(null);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
+                    >
+                      {TTS_VOICE_OPTIONS.map((v) => (
+                        <option key={v.id} value={v.label}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Nhạc nền miễn phí bản quyền
+                    </label>
+                    <select
+                      value={selectedMusic}
+                      onChange={(e) => {
+                        setSelectedMusic(e.target.value);
+                        setIsAudioSynced(false);
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#D32F2F]"
+                    >
+                      {BACKGROUND_MUSIC_OPTIONS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    {audioUrl && (
+                      <div className="mt-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold truncate max-w-full">
+                          <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span>Đã lưu file âm thanh trên Cloud Storage</span>
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* TỪ ĐIỂN PHÁT ÂM AI & XEM TRƯỚC LỜI ĐỌC */}
-              <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsTtsDictOpen(true)}
-                  className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
-                  title="Cấu hình quy tắc đọc viết tắt, ngày tháng, hotline"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-[#D32F2F]" />
-                  <span>Từ điển cách đọc AI ({ttsRules.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsTtsPreviewOpen(true)}
-                  className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
-                  title="Kiểm tra văn bản được AI chuẩn hóa trước khi đọc"
-                >
-                  <Eye className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Xem trước lời AI đọc</span>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  type="button"
-                  onClick={handleGenerateAiAudio}
-                  disabled={isGeneratingAudio}
-                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition"
-                >
-                  <Mic className="w-3.5 h-3.5" />
-                  <span>
-                    {isGeneratingAudio ? 'Đang tạo giọng đọc AI...' : 'Tạo / Cập nhật Audio AI'}
-                  </span>
-                </button>
-                <div className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+                {/* TỪ ĐIỂN PHÁT ÂM AI & XEM TRƯỚC LỜI ĐỌC */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
                   <button
                     type="button"
-                    onClick={handleTogglePlayAudio}
-                    className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer shadow-2xs ${
-                      isPlayingAudio
-                        ? 'bg-slate-800 text-white hover:bg-slate-900 animate-pulse'
-                        : 'bg-[#D32F2F] text-white hover:bg-red-700'
-                    }`}
-                    title={isPlayingAudio ? 'Tạm dừng phát' : 'Nghe thử lời đọc thông báo qua loa'}
+                    onClick={() => setIsTtsDictOpen(true)}
+                    className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
+                    title="Cấu hình quy tắc đọc viết tắt, ngày tháng, hotline"
                   >
-                    {isPlayingAudio ? (
-                      <Square className="w-2.5 h-2.5 fill-white" />
-                    ) : (
-                      <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
-                    )}
+                    <BookOpen className="w-3.5 h-3.5 text-[#D32F2F]" />
+                    <span>Từ điển cách đọc AI ({ttsRules.length})</span>
                   </button>
-                  <div className="flex flex-col">
-                    <span className="text-[11px] font-bold text-slate-800">
-                      {isPlayingAudio
-                        ? 'Đang phát qua loa...'
-                        : audioUrl
-                        ? 'Nghe thử Audio của thông báo'
-                        : 'Nghe thử giọng AI (Web Speech)'}
+                  <button
+                    type="button"
+                    onClick={() => setIsTtsPreviewOpen(true)}
+                    className="flex-1 py-1.5 px-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 transition shadow-2xs"
+                    title="Kiểm tra văn bản được AI chuẩn hóa trước khi đọc"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Xem trước lời AI đọc</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiAudio}
+                    disabled={isGeneratingAudio}
+                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition"
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>
+                      {isGeneratingAudio ? 'Đang tạo giọng đọc AI...' : 'Tạo / Cập nhật Audio AI'}
                     </span>
-                    {audioUrl && (
-                      <span className="text-[9px] text-emerald-700 font-mono truncate max-w-[140px]" title={audioUrl}>
-                        ✓ {audioUrl.split('/').pop()}
+                  </button>
+                  <div className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={handleTogglePlayAudio}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer shadow-2xs ${
+                        isPlayingAudio
+                          ? 'bg-slate-800 text-white hover:bg-slate-900 animate-pulse'
+                          : 'bg-[#D32F2F] text-white hover:bg-red-700'
+                      }`}
+                      title={isPlayingAudio ? 'Tạm dừng phát' : 'Nghe thử lời đọc thông báo qua loa'}
+                    >
+                      {isPlayingAudio ? (
+                        <Square className="w-2.5 h-2.5 fill-white" />
+                      ) : (
+                        <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+                      )}
+                    </button>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-slate-800">
+                        {isPlayingAudio
+                          ? 'Đang phát qua loa...'
+                          : audioUrl
+                          ? 'Nghe thử Audio của thông báo'
+                          : 'Nghe thử giọng AI (Web Speech)'}
                       </span>
-                    )}
+                      {audioUrl && (
+                        <span className="text-[9px] text-emerald-700 font-mono truncate max-w-[140px]" title={audioUrl}>
+                          ✓ {audioUrl.split('/').pop()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
