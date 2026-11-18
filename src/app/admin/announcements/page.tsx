@@ -1916,9 +1916,9 @@ export default function AnnouncementsStudioPage() {
                       onChange={(e) => setSelectedTone(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none bg-white text-slate-800 focus:ring-1 focus:ring-[#D32F2F]"
                     >
-                      <option value="/sounds/SM1.wav">SM1.wav (🔔 Tone Sương Mai 1)</option>
-                      <option value="/sounds/SM2.wav">SM2.wav (🔔 Tone Sương Mai 2)</option>
-                      <option value="/sounds/SM3.wav">SM3.wav (🔔 Tone Sương Mai 3)</option>
+                      <option value="/sounds/SM1.wav">🔔 Tone Sương Mai 1</option>
+                      <option value="/sounds/SM2.wav">🔔 Tone Sương Mai 2</option>
+                      <option value="/sounds/SM3.wav">🔔 Tone Sương Mai 3</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2 sm:self-end">

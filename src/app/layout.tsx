@@ -63,22 +63,50 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
+                function registerAndAutoUpdate() {
                   navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(
                     function(registration) {
                       // Ép Service Worker kiểm tra phiên bản mới ngay lập tức
                       registration.update().catch(function() {});
+
+                      // Phát hiện worker mới và tự động gửi lệnh SKIP_WAITING
+                      registration.addEventListener('updatefound', function() {
+                        var installingWorker = registration.installing;
+                        if (installingWorker) {
+                          installingWorker.addEventListener('statechange', function() {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                              installingWorker.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                          });
+                        }
+                      });
+
+                      // Tự động kiểm tra cập nhật mỗi khi người dùng mở lại tab/app
                       document.addEventListener('visibilitychange', function() {
                         if (document.visibilityState === 'visible') {
                           registration.update().catch(function() {});
                         }
                       });
+                      window.addEventListener('focus', function() {
+                        registration.update().catch(function() {});
+                      });
+
+                      // Định kỳ kiểm tra cập nhật mỗi 15 phút
+                      setInterval(function() {
+                        registration.update().catch(function() {});
+                      }, 15 * 60 * 1000);
                     },
                     function(err) {
                       console.log('ServiceWorker registration failed: ', err);
                     }
                   );
-                });
+                }
+
+                if (document.readyState === 'complete') {
+                  registerAndAutoUpdate();
+                } else {
+                  window.addEventListener('load', registerAndAutoUpdate);
+                }
               }
 
               // Mở khóa sớm chính sách Autoplay của trình duyệt ngay khi người dùng có tương tác đầu tiên

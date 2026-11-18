@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v11';
+const CACHE_NAME = 'suongmai-pwa-v12';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -13,6 +13,7 @@ const ASSETS_TO_CACHE = [
   '/icons/apple-touch-icon.png',
   '/icon-192.png',
   '/icon-512.png',
+  '/badge.png',
   '/apple-touch-icon.png',
   '/favicon.ico',
   '/sounds/SM1.wav',
@@ -59,11 +60,16 @@ function cacheFirst(request, cacheName) {
   });
 }
 
-// Install Event
+// Install Event - Precache audio assets & core shell immediately
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Đảm bảo cache các file âm thanh và asset cốt lõi, không để 1 asset lỗi làm hỏng toàn bộ SW install
+      await Promise.allSettled(
+        ASSETS_TO_CACHE.map((url) =>
+          cache.add(url).catch((err) => console.warn('[SW Install] Precache item failed:', url, err))
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -81,6 +87,13 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+});
+
+// Lắng nghe tín hiệu cập nhật tức thì từ Client
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
+    self.skipWaiting();
+  }
 });
 
 // Fetch Event - Tối ưu hóa Stale-While-Revalidate, Strict Auth & Next.js RSC Bypass
@@ -202,8 +215,8 @@ self.addEventListener('push', (event) => {
   const origin = self.location.origin;
   const soundPath = payload.sound || '/sounds/SM1.wav';
   const soundUrl = new URL(soundPath, origin).href;
-  const iconUrl = new URL('/icons/icon-192x192.png', origin).href;
-  const badgeUrl = new URL('/icons/icon-192x192.png', origin).href;
+  const iconUrl = '/icon-192.png';
+  const badgeUrl = '/badge.png';
 
   // Thông báo tới tất cả các cửa sổ PWA đang mở để phát tiếng Ting tương tác (Foreground)
   const notifyOpenClients = self.clients
@@ -215,7 +228,7 @@ self.addEventListener('push', (event) => {
             type: 'PLAY_NOTIFICATION_SOUND',
             payload: {
               title,
-              body: payload.body,
+              body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
               notification_channel: channel,
               target_url: targetUrl,
               entity_id: payload.entity_id || null,
@@ -227,20 +240,20 @@ self.addEventListener('push', (event) => {
     });
 
   // Hiển thị thông báo Native với sound property, rung haptic và silent: false
-  // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn trên màn hình khóa
-  const notificationTag = `suongmai-${channel.toLowerCase()}-${payload.entity_id || Date.now()}`;
+  // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn trên màn hình khóa (Android / Samsung One UI)
+  const notificationTag = 'suongmai-notification-v2';
 
   const notificationOptions = {
-    body: payload.body,
+    body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
     icon: iconUrl,
     badge: badgeUrl,
+    sound: soundPath,
+    vibrate: [300, 100, 400, 100, 400],
     tag: notificationTag,
-    vibrate: [300, 100, 400, 100, 400, 100, 500],
-    silent: false,
-    sound: soundUrl,
     renotify: true,
-    requireInteraction: true,
+    silent: false,
     urgency: 'high',
+    requireInteraction: true,
     timestamp: Date.now(),
     dir: 'auto',
     lang: 'vi',
@@ -270,15 +283,16 @@ self.addEventListener('push', (event) => {
     .catch((firstErr) => {
       console.warn('[SW Push] Primary showNotification failed, trying simplified options:', firstErr);
       return self.registration.showNotification(title, {
-        body: payload.body,
+        body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
         icon: iconUrl,
         badge: badgeUrl,
-        tag: notificationTag,
-        vibrate: [300, 100, 400, 100, 400],
-        silent: false,
         sound: soundPath,
+        vibrate: [300, 100, 400, 100, 400],
+        tag: notificationTag,
         renotify: true,
+        silent: false,
         urgency: 'high',
+        requireInteraction: true,
         data: {
           target_url: targetUrl,
           sound: soundUrl,
