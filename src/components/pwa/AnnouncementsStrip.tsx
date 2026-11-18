@@ -111,9 +111,6 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
           if (!record) return;
           mutate();
 
-          new Audio('/sounds/notification-ting.mp3')
-            .play()
-            .catch((e) => console.log('Audio autoplay blocked', e));
           playNotificationSound('/sounds/notification-ting.mp3');
 
           if (

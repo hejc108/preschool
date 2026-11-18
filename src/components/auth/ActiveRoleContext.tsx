@@ -18,6 +18,7 @@ import {
 } from '@/lib/supabase/client';
 import { parseSignedCookieClient } from '@/lib/utils/cookieSigner';
 import { clearVerifiedTeacherClasses } from '@/lib/utils/teacherClassCache';
+import { playNotificationSound } from '@/lib/sound/notificationSound';
 
 export interface LinkedChildSummary extends ParentStudentRelation {
   id: string;
@@ -532,9 +533,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     const handleSwMessage = (event: MessageEvent) => {
       const payload = event.data;
       if (payload?.type === 'PLAY_NOTIFICATION_SOUND') {
-        new Audio('/sounds/notification-ting.mp3')
-          .play()
-          .catch((e) => console.log('Audio autoplay blocked', e));
+        playNotificationSound('/sounds/notification-ting.mp3');
       }
       if (payload?.type === 'SWITCH_ROLE_AND_FOCUS') {
         const ch = normalizeClientRole(payload.notification_channel);

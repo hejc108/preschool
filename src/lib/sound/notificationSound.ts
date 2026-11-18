@@ -151,6 +151,9 @@ export function playSynthesizedPing(targetVolume = 0.3): void {
   }
 }
 
+let lastPlayTimestamp = 0;
+const MIN_PLAY_INTERVAL_MS = 800; // Ngăn ngừa tình trạng phát lặp / chồng âm thanh Ting khi nhiều component cùng lắng nghe
+
 /**
  * Kích hoạt tệp âm thanh chuông báo ngắn (.mp3) đi kèm khi có thông báo mới
  * Thực thi theo đúng chuẩn JavaScript: new Audio('/sounds/notification-ting.mp3').play().catch(e => console.log('Audio autoplay blocked', e))
@@ -163,6 +166,12 @@ export async function playNotificationSound(soundUrl?: string): Promise<boolean>
   if (!isNotificationSoundEnabled()) {
     return false;
   }
+
+  const now = Date.now();
+  if (now - lastPlayTimestamp < MIN_PLAY_INTERVAL_MS) {
+    return true; // Đã phát cách đây dưới 800ms, bỏ qua để tránh vọng âm
+  }
+  lastPlayTimestamp = now;
 
   // Luôn đảm bảo AudioContext sẵn sàng
   unlockAudioContext();
@@ -204,14 +213,6 @@ export async function playNotificationSound(soundUrl?: string): Promise<boolean>
  * Thực thi chính xác: new Audio('/sounds/notification-ting.mp3').play().catch(e => console.log('Audio autoplay blocked', e))
  */
 export function playNotificationTing(): Promise<boolean> {
-  if (typeof window === 'undefined') return Promise.resolve(false);
-  try {
-    new Audio('/sounds/notification-ting.mp3')
-      .play()
-      .catch((e) => console.log('Audio autoplay blocked', e));
-  } catch (e) {
-    console.log('Audio autoplay blocked', e);
-  }
   return playNotificationSound(NOTIFICATION_SOUND_PATH);
 }
 
