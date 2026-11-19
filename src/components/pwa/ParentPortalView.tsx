@@ -11,6 +11,7 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Edit3,
   FileText,
@@ -20,9 +21,13 @@ import {
   Plus,
   Power,
   RefreshCw,
+  Settings,
   ShieldAlert,
+  Sparkles,
   Trash2,
+  User,
   UserCheck,
+  X,
 } from 'lucide-react';
 import { AbsenceRequest, AuthorizedPickup } from '@/lib/types/schema';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -89,6 +94,7 @@ export function ParentPortalView() {
   } = useActiveRole();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<string>('');
   const [activeNav, setActiveNav] = useState<'TIMELINE' | 'ABSENCE' | 'RECONCILIATION' | 'PICKUPS'>(
     'TIMELINE'
@@ -814,48 +820,56 @@ export function ParentPortalView() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
-      {/* Mobile Top Header — Calm UI Hướng A: Sky Blue + Frosted Glass Pill Toggle, Zero /admin links, Zero animate-pulse */}
-      <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md">
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={fullName || 'Phụ huynh'}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white/40 shrink-0"
-            />
-          ) : (
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
-              SM
-            </div>
-          )}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate line-clamp-1">
-              {t('parent.app_title')}
+    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24">
+      {/* Mobile Top Header — Calm & Warm Child-Friendly Teal */}
+      <header className="px-3.5 py-2.5 bg-teal-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-xs border-b border-teal-800/20">
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <div className="relative shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={fullName || 'Phụ huynh'}
+                className="w-8 h-8 rounded-full object-cover border-2 border-white/60 shadow-2xs"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-teal-600 border border-teal-400 flex items-center justify-center font-bold text-xs text-white shadow-2xs">
+                {selectedChild?.avatar_initials || 'SM'}
+              </div>
+            )}
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 border-2 border-teal-700 rounded-full" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate">
+              {selectedChild
+                ? `Chào ba/mẹ bé ${selectedChild.full_name}`
+                : fullName
+                ? `Chào ${fullName}`
+                : t('parent.app_title')}
             </h1>
-            <p className="text-[11px] text-sky-100 font-medium leading-tight truncate line-clamp-1">
+            <p className="text-[11px] text-teal-100 font-medium leading-tight truncate">
               {t('common.school_name')}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <NotificationBell portalRole="PARENT" />
-          <RoleSwitcher currentPortal="PARENT" />
-          <LanguageSwitcher compact />
           <button
-            onClick={logout}
-            className="p-1 sm:p-1.5 bg-white/15 hover:bg-white/25 text-white rounded-full transition-colors cursor-pointer shrink-0"
-            title="Đăng xuất"
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition cursor-pointer shadow-2xs"
+            title="Cài đặt & Hồ sơ"
+            aria-label="Mở cài đặt & hồ sơ"
           >
-            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+            <Settings className="w-4 h-4 text-white" />
           </button>
         </div>
       </header>
 
       {/* Multi-child selector bar */}
       {parentChildren.length >= 2 && selectedChild && (
-        <div className="p-3 bg-white border-b border-slate-200">
+        <div className="p-3 bg-white/90 border-b border-amber-900/5">
           <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 px-1">
             {t('parent.select_child')}
           </div>
@@ -866,15 +880,15 @@ export function ParentPortalView() {
                 <button
                   key={child.id}
                   onClick={() => setSelectedChildId(child.id)}
-                  className={`p-2.5 rounded-xl border transition-all text-left flex items-center gap-2.5 cursor-pointer ${
+                  className={`p-2.5 rounded-2xl border transition-all text-left flex items-center gap-2.5 cursor-pointer ${
                     isSelected
-                      ? 'bg-sky-50 border-sky-400 text-slate-900 shadow-sm font-bold'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
+                      ? 'bg-teal-50/80 border-teal-400 text-slate-900 shadow-xs font-bold'
+                      : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      isSelected ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
+                      isSelected ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-700'
                     }`}
                   >
                     {child.avatar_initials}
@@ -892,55 +906,70 @@ export function ParentPortalView() {
         </div>
       )}
 
-      {/* Child Banner Summary */}
+      {/* Child Status Hero Card */}
       {selectedChild && (
-        <div className="p-4 bg-gradient-to-r from-sky-50 via-white to-cyan-50 border-b border-slate-200 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <span className="text-xs text-sky-700 font-bold block">{t('parent.today_status')}</span>
-            <h2 className="text-lg font-bold text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
-              <span className="truncate">{selectedChild.full_name}</span>
-              <span className="text-xs px-2 py-0.5 bg-sky-100 text-sky-800 rounded-pill font-mono shrink-0">
-                {selectedChild.class_name}
-              </span>
-            </h2>
-            {selectedChild.attendance_status === 'PRESENT' ||
-            selectedChild.attendance_status === 'PRESENT_LATE' ? (
-              <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1 font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                {selectedChild.checked_out_time
-                  ? `Đã đón về lúc ${selectedChild.checked_out_time}`
-                  : `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`}
-              </p>
-            ) : selectedChild.attendance_status === 'ABSENT_EXCUSED' ||
-              selectedChild.attendance_status === 'ABSENT_UNEXCUSED' ? (
-              <p className="text-xs text-slate-600 mt-1 flex items-center gap-1 font-semibold">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Nghỉ học hôm nay
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 font-medium">
-                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Chưa điểm danh hôm nay
-              </p>
-            )}
+        <div className="mx-3.5 mt-3.5 p-4 rounded-2xl bg-gradient-to-br from-teal-50/80 via-white to-amber-50/40 border border-teal-100/80 shadow-[0_4px_20px_rgba(13,148,136,0.06)] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+              {selectedChild.avatar_initials}
+            </div>
+
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                  {selectedChild.full_name}
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 bg-teal-100/80 text-teal-800 rounded-full font-semibold shrink-0">
+                  {selectedChild.class_name}
+                </span>
+              </div>
+
+              {selectedChild.attendance_status === 'PRESENT' ||
+              selectedChild.attendance_status === 'PRESENT_LATE' ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">
+                    {selectedChild.checked_out_time
+                      ? `Đã đón lúc ${selectedChild.checked_out_time}`
+                      : `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`}
+                  </span>
+                </span>
+              ) : selectedChild.attendance_status === 'ABSENT_EXCUSED' ||
+                selectedChild.attendance_status === 'ABSENT_UNEXCUSED' ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Nghỉ học hôm nay</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
+                  <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Chưa điểm danh hôm nay</span>
+                </span>
+              )}
+            </div>
           </div>
 
           <button
+            type="button"
             onClick={() => setShowAbsenceModal(true)}
-            className="flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-pill shadow-md shrink-0 cursor-pointer"
+            className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs shrink-0 cursor-pointer transition"
           >
-            <Plus className="w-4 h-4" />
-            <span>{t('parent.btn_absence')}</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">{t('parent.btn_absence')}</span>
+            <span className="xs:hidden">Nghỉ phép</span>
           </button>
         </div>
       )}
 
-      {/* 4 Main Parent Navigation Tabs */}
-      <div className="grid grid-cols-4 bg-white border-b border-slate-200 text-[11px] font-bold text-center">
+      {/* Modern 4-Item Sub-Navigation Rounded Pill Tabs */}
+      <div className="mx-3.5 mt-3 p-1 bg-slate-200/70 rounded-2xl grid grid-cols-4 gap-1 text-[11px] font-semibold">
         <button
+          type="button"
           onClick={() => setActiveNav('TIMELINE')}
-          className={`py-3 transition-all border-b-2 flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
             activeNav === 'TIMELINE'
-              ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold'
-              : 'border-transparent text-slate-400'
+              ? 'bg-white text-teal-700 font-bold shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
@@ -948,11 +977,12 @@ export function ParentPortalView() {
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveNav('ABSENCE')}
-          className={`py-3 transition-all border-b-2 flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
             activeNav === 'ABSENCE'
-              ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold'
-              : 'border-transparent text-slate-400'
+              ? 'bg-white text-teal-700 font-bold shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
           }`}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -960,11 +990,12 @@ export function ParentPortalView() {
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveNav('RECONCILIATION')}
-          className={`py-3 transition-all border-b-2 flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
             activeNav === 'RECONCILIATION'
-              ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold'
-              : 'border-transparent text-slate-400'
+              ? 'bg-white text-teal-700 font-bold shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
@@ -972,11 +1003,12 @@ export function ParentPortalView() {
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveNav('PICKUPS')}
-          className={`py-3 transition-all border-b-2 flex items-center justify-center gap-1 cursor-pointer ${
+          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
             activeNav === 'PICKUPS'
-              ? 'border-sky-600 text-sky-600 bg-sky-50 font-extrabold'
-              : 'border-transparent text-slate-400'
+              ? 'bg-white text-teal-700 font-bold shadow-xs'
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
           }`}
         >
           <UserCheck className="w-3.5 h-3.5" />
@@ -985,35 +1017,37 @@ export function ParentPortalView() {
       </div>
 
       {/* Role-scoped Announcements Strip */}
-      <div className="px-4 pt-3">
+      <div className="px-3.5 pt-3">
         <AnnouncementsStrip portalRole="PARENT" />
       </div>
 
       {/* --- SECTION 2: CARE TIMELINE FEED & WIDGETS --- */}
       {activeNav === 'TIMELINE' && selectedChild && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-4 shadow-sm text-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-                <Clock className="w-4 h-4 text-sky-600" />
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
+          <div className="bg-white border border-amber-100/80 rounded-2xl p-4 space-y-3.5 shadow-xs text-slate-800">
+            <div className="flex items-center justify-between border-b border-amber-100/60 pb-2.5">
+              <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-600" />
                 <span>{t('parent.timeline_title')}</span>
               </h3>
             </div>
 
             {selectedChildTimelineEvents.length === 0 ? (
-              <div className="py-8 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-xl space-y-2">
-                <div className="w-10 h-10 rounded-full bg-sky-50 text-sky-500 flex items-center justify-center mx-auto">
-                  <Clock className="w-5 h-5" />
+              <div className="py-3 px-3.5 bg-gradient-to-r from-teal-50/40 via-white to-amber-50/30 border border-teal-100/60 rounded-2xl flex items-center gap-3 text-slate-800">
+                <div className="w-8 h-8 rounded-xl bg-teal-100/80 text-teal-700 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-teal-600" />
                 </div>
-                <p className="text-xs font-semibold text-slate-600">
-                  Chưa có hoạt động mới trong ngày hôm nay
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Các mốc điểm danh, ăn uống và chăm sóc của bé sẽ tự động cập nhật khi cô giáo ghi nhận tại lớp.
-                </p>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-800 leading-tight">
+                    Chưa có hoạt động mới trong ngày
+                  </p>
+                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
+                    Các mốc điểm danh, ăn uống sẽ cập nhật khi cô ghi nhận tại lớp.
+                  </p>
+                </div>
               </div>
             ) : (
-              <div className="space-y-4 relative pl-5 border-l-2 border-slate-200 text-xs">
+              <div className="space-y-4 relative pl-5 border-l-2 border-teal-200 text-xs">
                 {selectedChildTimelineEvents.map((ev) => (
                   <div key={ev.id} className="relative">
                     <div
@@ -1021,9 +1055,9 @@ export function ParentPortalView() {
                         ev.type === 'CHECKIN' || ev.type === 'CHECKOUT'
                           ? 'bg-emerald-600'
                           : ev.type === 'MEDICATION'
-                          ? 'bg-sky-600'
+                          ? 'bg-teal-600'
                           : ev.type === 'MEAL'
-                          ? 'bg-slate-600'
+                          ? 'bg-amber-600'
                           : 'bg-rose-500'
                       }`}
                     >
@@ -1054,14 +1088,14 @@ export function ParentPortalView() {
           {/* Growth Tracker */}
           <Link
             href={`/parent/health${selectedChild ? `?student_id=${selectedChild.id}` : ''}`}
-            className="block p-3.5 bg-gradient-to-r from-emerald-50 via-white to-teal-50 border border-emerald-200 rounded-2xl shadow-sm hover:shadow-md transition-all text-xs"
+            className="block p-4 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border border-emerald-200/80 rounded-2xl shadow-xs hover:shadow-sm transition-all text-xs"
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2 text-emerald-950 font-bold">
                 <Activity className="w-4 h-4 text-emerald-600" />
                 <span>Sổ theo dõi thể trạng {latestHealth?.term ? `(${latestHealth.term})` : ''}</span>
               </div>
-              <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+              <span className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold flex items-center gap-1">
                 Xem chi tiết <ArrowRight className="w-3 h-3" />
               </span>
             </div>
@@ -1069,13 +1103,13 @@ export function ParentPortalView() {
             (latestHealth.weight_kg !== null || latestHealth.height_cm !== null) ? (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-slate-700">
                 <div className="flex items-center flex-wrap gap-2 text-slate-900 font-mono text-xs sm:text-sm font-bold">
-                  <span className="bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-100">
+                  <span className="bg-white/95 px-2.5 py-1 rounded-xl border border-emerald-200/80 shadow-2xs">
                     📏{' '}
                     {latestHealth.height_cm !== null && latestHealth.height_cm !== undefined
                       ? `${latestHealth.height_cm} cm`
                       : '--'}
                   </span>
-                  <span className="bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-100">
+                  <span className="bg-white/95 px-2.5 py-1 rounded-xl border border-teal-200/80 shadow-2xs">
                     ⚖️{' '}
                     {latestHealth.weight_kg !== null && latestHealth.weight_kg !== undefined
                       ? `${latestHealth.weight_kg} kg`
@@ -1084,14 +1118,14 @@ export function ParentPortalView() {
                 </div>
                 {healthDisplay && (
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
                   >
                     {healthDisplay.text}
                   </span>
                 )}
               </div>
             ) : (
-              <p className="text-slate-500 text-[11px] italic bg-slate-50/80 p-2 rounded-xl border border-dashed border-slate-200">
+              <p className="text-slate-500 text-[11px] italic bg-white/70 p-2.5 rounded-xl border border-dashed border-emerald-200/60">
                 Nhà trường đang cập nhật số liệu khám sức khỏe đợt này
               </p>
             )}
@@ -1101,35 +1135,35 @@ export function ParentPortalView() {
 
       {/* --- SECTION 3: SMART ABSENCE REQUEST SYSTEM (Postgres-backed) --- */}
       {activeNav === 'ABSENCE' && selectedChild && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between bg-white border border-slate-200 p-3.5 rounded-convent shadow-sm text-slate-800">
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
+          <div className="flex items-center justify-between bg-white border border-amber-900/10 p-3.5 rounded-2xl shadow-xs text-slate-800">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">{t('parent.tab_absence')}</h3>
               <p className="text-xs text-slate-500">
                 {t('common.child')}:{' '}
-                <strong className="text-sky-700">{selectedChild.full_name}</strong>
+                <strong className="text-teal-700">{selectedChild.full_name}</strong>
               </p>
             </div>
 
             <button
               onClick={() => setShowAbsenceModal(true)}
-              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3.5 py-2 rounded-pill shadow transition-all cursor-pointer"
+              className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               <span>{t('parent.btn_absence')}</span>
             </button>
           </div>
 
           <div className="space-y-3">
             {childAbsences.length === 0 ? (
-              <div className="p-6 bg-white border border-slate-200 rounded-convent text-center text-xs text-slate-400">
+              <div className="p-6 bg-white border border-dashed border-amber-200/80 rounded-2xl text-center text-xs text-slate-400">
                 Chưa có đơn xin nghỉ nào được tạo.
               </div>
             ) : (
               childAbsences.map((req) => (
                 <div
                   key={req.id}
-                  className="p-4 bg-white border border-slate-200 rounded-convent space-y-2.5 shadow-sm text-slate-800"
+                  className="p-4 bg-white border border-amber-900/10 rounded-2xl space-y-2.5 shadow-xs text-slate-800"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs font-bold text-slate-900 font-mono">
@@ -1138,22 +1172,22 @@ export function ParentPortalView() {
 
                     <div className="flex items-center gap-1.5">
                       {req.is_fee_credited ? (
-                        <span className="text-[11px] px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-pill font-bold">
+                        <span className="text-[11px] px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-bold">
                           {t('parent.valid_credit_badge')}
                         </span>
                       ) : (
-                        <span className="text-[11px] px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-pill font-bold">
+                        <span className="text-[11px] px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold">
                           {t('parent.late_credit_badge')}
                         </span>
                       )}
 
                       {req.status === 'APPROVED' && (
-                        <span className="text-[11px] px-2 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-pill font-bold">
+                        <span className="text-[11px] px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full font-bold">
                           Cô đã duyệt
                         </span>
                       )}
                       {req.status === 'REJECTED' && (
-                        <span className="text-[11px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-pill font-bold">
+                        <span className="text-[11px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold">
                           Từ chối
                         </span>
                       )}
@@ -1172,14 +1206,14 @@ export function ParentPortalView() {
 
       {/* --- SECTION 4: FEE / ABSENCE RECONCILIATION --- */}
       {activeNav === 'RECONCILIATION' && selectedChild && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-3 shadow-sm text-xs">
-            <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4 text-sky-600" />
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
+          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-3 shadow-xs text-xs">
+            <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
+              <FileText className="w-4 h-4 text-teal-600" />
               <span>Đối soát tiền ăn bán trú ({selectedChild.full_name})</span>
             </h3>
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-xl">
                 <span className="text-[11px] text-emerald-700 block">Nghỉ hợp lệ (&lt;08:30)</span>
                 <strong className="text-lg font-mono text-emerald-800">
                   {childAbsences.filter((a) => a.is_fee_credited).length} đơn
@@ -1201,11 +1235,11 @@ export function ParentPortalView() {
 
       {/* --- SECTION 5: AUTHORIZED PICKUPS SYSTEM --- */}
       {activeNav === 'PICKUPS' && selectedChild && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-convent p-4 space-y-4 shadow-sm text-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
+          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-4 shadow-xs text-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-bold text-sky-900 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-emerald-600" />
                   <span>Danh Sách Người Đón Được Ủy Quyền</span>
                 </h3>
@@ -1217,21 +1251,21 @@ export function ParentPortalView() {
               <button
                 type="button"
                 onClick={handleOpenAddPickupModal}
-                className="flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-3 py-2 rounded-pill shadow shrink-0 cursor-pointer"
+                className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs shrink-0 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 <span>Thêm người đón</span>
               </button>
             </div>
 
             {isLoadingPickups && childPickups.length === 0 ? (
               <div className="py-12 text-center text-slate-400 space-y-2">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-sky-600" />
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-teal-600" />
                 <p className="text-xs">Đang tải danh sách người đón...</p>
               </div>
             ) : childPickups.length === 0 ? (
-              <div className="py-10 px-4 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl space-y-3.5">
-                <div className="w-14 h-14 rounded-full bg-sky-50 text-sky-600 mx-auto flex items-center justify-center border border-sky-100">
+              <div className="py-10 px-4 text-center bg-teal-50/20 border border-dashed border-teal-200/80 rounded-2xl space-y-3.5">
+                <div className="w-14 h-14 rounded-full bg-teal-50 text-teal-600 mx-auto flex items-center justify-center border border-teal-100">
                   <UserCheck className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5 max-w-sm mx-auto">
@@ -1245,9 +1279,9 @@ export function ParentPortalView() {
                 <button
                   type="button"
                   onClick={handleOpenAddPickupModal}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-pill text-xs font-bold shadow-sm cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Thêm người đón ủy quyền</span>
                 </button>
               </div>
@@ -1286,15 +1320,15 @@ export function ParentPortalView() {
                         )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-pill border border-slate-200">
+                            <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-full border border-slate-200">
                               {pickup.relationship}
                             </span>
                             {isActive ? (
-                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-pill border border-emerald-300 flex items-center gap-1">
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-300 flex items-center gap-1">
                                 <Check className="w-3 h-3 text-emerald-700" /> Đang kích hoạt
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-pill border border-slate-300 flex items-center gap-1">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-full border border-slate-300 flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-slate-500" /> Tạm ngưng đón
                               </span>
                             )}
@@ -1302,7 +1336,7 @@ export function ParentPortalView() {
                           <h4 className="font-bold text-slate-900 text-sm truncate">{pickup.name}</h4>
                           <a
                             href={`tel:${pickup.phone}`}
-                            className="text-sky-700 hover:text-sky-900 font-mono text-[11px] inline-flex items-center gap-1 hover:underline"
+                            className="text-teal-700 hover:text-teal-900 font-mono text-[11px] inline-flex items-center gap-1 hover:underline"
                           >
                             <Phone className="w-3 h-3" />
                             <span>{pickup.phone}</span>
@@ -1314,7 +1348,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleTogglePickupActive(pickup)}
-                          className={`px-2.5 py-1.5 rounded-pill text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
                             isActive
                               ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
                               : 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300'
@@ -1327,7 +1361,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleOpenEditPickupModal(pickup)}
-                          className="p-1.5 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg cursor-pointer"
+                          className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
@@ -1348,32 +1382,31 @@ export function ParentPortalView() {
           </div>
         </div>
       )}
-
-      {/* FOOTER HOTLINE */}
-      <footer className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-200 p-3 z-30 flex items-center justify-between shadow-lg">
+      {/* FOOTER HOTLINE — Sleek Floating Bar */}
+      <footer className="fixed bottom-0 max-w-md w-full bg-white/95 backdrop-blur-md border-t border-amber-900/10 p-2.5 z-30 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
         <a
           href="tel:0909123456"
-          className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 px-4 rounded-pill shadow transition-all text-xs"
+          className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all text-xs"
         >
-          <Phone className="w-4 h-4 fill-current" />
-          <span>Hotline / Sơ trực ban</span>
+          <Phone className="w-3.5 h-3.5 fill-current" />
+          <span>Hotline trực ban: 0909 123 456</span>
         </a>
       </footer>
 
       {/* ABSENCE MODAL */}
       {showAbsenceModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-convent max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-              <h3 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-sky-600" />
-                Tạo Đơn Xin Nghỉ Cho Bé
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-amber-900/10 rounded-2xl max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <h3 className="font-bold text-teal-950 text-sm flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-teal-600" />
+                <span>Tạo Đơn Xin Nghỉ Cho Bé</span>
               </h3>
               <button
                 onClick={() => setShowAbsenceModal(false)}
-                className="text-slate-400 hover:text-slate-800 cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer transition"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1385,7 +1418,7 @@ export function ParentPortalView() {
                   required
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-teal-500 focus:outline-none"
                 />
               </div>
 
@@ -1396,7 +1429,7 @@ export function ParentPortalView() {
                   required
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-teal-500 focus:outline-none"
                 />
               </div>
 
@@ -1405,7 +1438,7 @@ export function ParentPortalView() {
                 <select
                   value={selectedReasonTag}
                   onChange={(e) => setSelectedReasonTag(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-teal-500 focus:outline-none font-medium"
                 >
                   <option value="🌡️ Nghỉ ốm / Sốt">🌡️ Nghỉ ốm / Sốt</option>
                   <option value="✈️ Việc gia đình / Về quê">✈️ Việc gia đình / Về quê</option>
@@ -1422,14 +1455,14 @@ export function ParentPortalView() {
                   placeholder="Ví dụ: Bé hơi sốt nhẹ từ tối qua..."
                   value={customReason}
                   onChange={(e) => setCustomReason(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-teal-500 focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submittingAbsence}
-                className="w-full py-3 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white font-bold rounded-pill shadow-md transition-all mt-1 cursor-pointer"
+                className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-bold rounded-xl shadow-xs transition-all mt-1 cursor-pointer"
               >
                 {submittingAbsence ? 'Đang gửi đơn...' : 'Gửi Đơn Xin Nghỉ'}
               </button>
@@ -1440,26 +1473,26 @@ export function ParentPortalView() {
 
       {/* ADD / EDIT AUTHORIZED PICKUP MODAL */}
       {showAddPickupModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-convent max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-              <h3 className="font-bold text-sky-900 text-sm flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4 text-sky-600" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-amber-900/10 rounded-2xl max-w-sm w-full p-5 space-y-4 text-xs shadow-2xl text-slate-800 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <h3 className="font-bold text-teal-950 text-sm flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-teal-600" />
                 <span>{editingPickupId ? 'Chỉnh Sửa Người Đón' : 'Thêm Người Đón Ủy Quyền'}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddPickupModal(false)}
-                className="text-slate-400 hover:text-slate-800 text-sm p-1 rounded-full cursor-pointer"
+                className="w-7 h-7 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer transition"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSavePickupSubmit} className="space-y-3.5 text-xs">
               <div>
                 <span className="text-[11px] text-slate-500 block">
-                  Bé được đón: <strong className="text-sky-700">{selectedChild?.full_name}</strong>
+                  Bé được đón: <strong className="text-teal-700">{selectedChild?.full_name}</strong>
                 </span>
               </div>
 
@@ -1476,11 +1509,11 @@ export function ParentPortalView() {
                 />
 
                 {pickupFormAvatar ? (
-                  <div className="flex items-center gap-3 bg-sky-50/60 border border-sky-200 rounded-2xl p-2.5">
+                  <div className="flex items-center gap-3 bg-teal-50/60 border border-teal-200 rounded-2xl p-2.5">
                     <img
                       src={pickupFormAvatar}
                       alt="Ảnh chân dung"
-                      className="w-14 h-14 rounded-full object-cover border-2 border-sky-500 shrink-0"
+                      className="w-14 h-14 rounded-full object-cover border-2 border-teal-500 shrink-0"
                     />
                     <div className="space-y-1 min-w-0">
                       <span className="text-emerald-700 font-bold text-xs flex items-center gap-1">
@@ -1490,7 +1523,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="text-[11px] text-sky-700 hover:underline font-semibold cursor-pointer"
+                          className="text-[11px] text-teal-700 hover:underline font-semibold cursor-pointer"
                         >
                           Đổi ảnh khác
                         </button>
@@ -1509,9 +1542,9 @@ export function ParentPortalView() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingAvatar}
-                    className="w-full py-3 px-4 border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/40 rounded-2xl flex items-center justify-center gap-2 text-sky-700 font-bold cursor-pointer disabled:opacity-50"
+                    className="w-full py-3 px-4 border-2 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/40 rounded-2xl flex items-center justify-center gap-2 text-teal-700 font-bold cursor-pointer disabled:opacity-50"
                   >
-                    <Camera className="w-4 h-4 text-sky-600" />
+                    <Camera className="w-4 h-4 text-teal-600" />
                     <span>{isUploadingAvatar ? 'Đang xử lý ảnh...' : 'Chụp / Tải ảnh chân dung'}</span>
                   </button>
                 )}
@@ -1527,7 +1560,7 @@ export function ParentPortalView() {
                   placeholder="Ví dụ: Nguyễn Thị Hoa"
                   value={pickupFormName}
                   onChange={(e) => setPickupFormName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-teal-500 focus:outline-none"
                 />
               </div>
 
@@ -1538,7 +1571,7 @@ export function ParentPortalView() {
                 <select
                   value={pickupFormRel}
                   onChange={(e) => setPickupFormRel(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 focus:bg-white focus:border-teal-500 focus:outline-none font-medium"
                 >
                   <option value="Bà Ngoại">Bà Ngoại</option>
                   <option value="Ông Ngoại">Ông Ngoại</option>
@@ -1563,7 +1596,7 @@ export function ParentPortalView() {
                   placeholder="Ví dụ: 0912345678"
                   value={pickupFormPhone}
                   onChange={(e) => setPickupFormPhone(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-mono focus:bg-white focus:border-teal-500 focus:outline-none"
                 />
               </div>
 
@@ -1572,7 +1605,7 @@ export function ParentPortalView() {
                   type="checkbox"
                   checked={pickupFormIsActive}
                   onChange={(e) => setPickupFormIsActive(e.target.checked)}
-                  className="w-4 h-4 text-sky-600 rounded cursor-pointer"
+                  className="w-4 h-4 text-teal-600 rounded cursor-pointer"
                 />
                 <div>
                   <span className="font-bold text-slate-800 text-xs block">
@@ -1585,19 +1618,145 @@ export function ParentPortalView() {
                 <button
                   type="button"
                   onClick={() => setShowAddPickupModal(false)}
-                  className="w-1/3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-pill cursor-pointer"
+                  className="w-1/3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer transition"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={pickupSubmitting}
-                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold rounded-pill shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
                 >
                   <span>{pickupSubmitting ? 'Đang lưu...' : editingPickupId ? 'Lưu thay đổi' : 'Lưu người đón'}</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PROFILE & UTILITIES DRAWER / MODAL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-xs transition-opacity">
+          <div
+            className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-amber-900/10 overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom duration-200"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Drawer Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-teal-700 to-teal-800 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-white">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm leading-tight">Hồ sơ & Tiện ích</h3>
+                  <p className="text-[11px] text-teal-100 font-medium">Cổng thông tin Phụ huynh</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
+                aria-label="Đóng"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* User Profile Card */}
+              <div className="p-3.5 bg-gradient-to-br from-teal-50/70 via-white to-amber-50/40 rounded-2xl border border-teal-100 flex items-center gap-3">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={fullName || 'Phụ huynh'}
+                    className="w-12 h-12 rounded-full object-cover border-2 border-teal-500 shadow-2xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-teal-600 text-white font-bold text-base flex items-center justify-center shrink-0 shadow-2xs">
+                    {fullName ? fullName.charAt(0) : 'SM'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-slate-900 text-sm truncate">{fullName || 'Phụ huynh học sinh'}</h4>
+                  <p className="text-xs text-teal-700 font-medium truncate">Tài khoản Phụ huynh</p>
+                  {parentChildren.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {parentChildren.map((child) => (
+                        <span
+                          key={child.id}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-teal-200 text-teal-800"
+                        >
+                          Bé {child.full_name} ({child.class_name})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Role Switcher Section */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Chuyển đổi vai trò & Cổng
+                </span>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Vai trò hiện tại:</span>
+                  <RoleSwitcher currentPortal="PARENT" />
+                </div>
+              </div>
+
+              {/* Language Switcher Section */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Ngôn ngữ hiển thị
+                </span>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">Ngôn ngữ:</span>
+                  <LanguageSwitcher compact={false} />
+                </div>
+              </div>
+
+              {/* School Support Hotline */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Liên hệ nhà trường
+                </span>
+                <a
+                  href="tel:0909123456"
+                  className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 rounded-2xl flex items-center justify-between transition cursor-pointer text-xs"
+                >
+                  <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                    <Phone className="w-4 h-4 text-amber-700" />
+                    <span>Hotline / Sơ trực ban:</span>
+                  </div>
+                  <strong className="text-amber-800 font-mono">0909 123 456</strong>
+                </a>
+              </div>
+
+              {/* Logout Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    logout();
+                  }}
+                  className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 text-rose-600" />
+                  <span>Đăng xuất khỏi hệ thống</span>
+                </button>
+              </div>
+
+              {/* System Branding Info */}
+              <div className="text-center pt-1 text-[11px] text-slate-400">
+                <span>Hệ thống Quản lý Mầm non Sương Mai • v2.0</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
