@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v12';
+const CACHE_NAME = 'suongmai-pwa-v13';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -241,13 +241,13 @@ self.addEventListener('push', (event) => {
 
   // Hiển thị thông báo Native với sound property, rung haptic và silent: false
   // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn trên màn hình khóa (Android / Samsung One UI)
-  const notificationTag = 'suongmai-notification-v2';
+  const notificationTag = payload.tag || `suongmai-notification-v2-${payload.entity_id || Date.now()}`;
 
   const notificationOptions = {
     body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
     icon: iconUrl,
     badge: badgeUrl,
-    sound: soundPath,
+    sound: soundUrl,
     vibrate: [300, 100, 400, 100, 400],
     tag: notificationTag,
     renotify: true,
