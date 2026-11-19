@@ -266,6 +266,9 @@ export async function fetchAdminUsersWithRoles(
 
   const allUsers = Array.from(profileMap.values());
   const filteredUsers = allUsers.filter((u) => {
+    if ((u.email || '').toLowerCase().trim() === 'push-sub-store@suongmai.local') {
+      return false;
+    }
     if (!isSuperAdmin && !allowTemporaryStaff && u.is_temporary) {
       return false;
     }

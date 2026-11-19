@@ -2,7 +2,7 @@ import * as webpush from 'web-push';
 import fs from 'fs';
 import path from 'path';
 import { NotificationChannel, PushNotificationPayload } from '@/lib/types/schema';
-import { executeWithAdminFallback } from '@/lib/supabase/server';
+import { executeWithAdminFallback, getSupabaseConfig } from '@/lib/supabase/server';
 import { executeWithContextFallback, SessionContext } from '@/lib/auth/sessionContext';
 
 // Default VAPID keypair for Mầm Non Sương Mai PWA (Web Push RFC 8291 / 8292)
@@ -71,10 +71,62 @@ export interface PushSubRecord {
 }
 
 // -----------------------------------------------------------------------------
-// Kho Lưu Trữ Đĩa Cục Bộ Bền Vững (Persistent Local Disk Store)
+// Kho Lưu Trữ Đa Tầng Bền Vững (Cloud Supabase Store + Local Disk Fallback)
 // Bảo toàn 100% các thiết bị iPhone & Android đã đăng ký Web Push
-// ngay cả khi máy chủ khởi động lại hoặc Supabase gặp phân quyền RLS.
+// hoạt động đồng bộ xuyên suốt tất cả các Serverless Container / Lambdas / VPS.
 // -----------------------------------------------------------------------------
+export const SUPABASE_STORE_EMAIL = 'push-sub-store@suongmai.local';
+
+export async function fetchCloudPushSubscriptionsStore(): Promise<PushSubRecord[]> {
+  try {
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return [];
+    const res = await fetch(
+      `${url}/rest/v1/profiles?email=eq.${SUPABASE_STORE_EMAIL}&select=assigned_class_name`,
+      {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
+        cache: 'no-store',
+      }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]?.assigned_class_name) {
+      const parsed = JSON.parse(data[0].assigned_class_name);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('[pushPayload] fetchCloudPushSubscriptionsStore warning:', err);
+  }
+  return [];
+}
+
+export async function persistCloudPushSubscriptionsStore(items: PushSubRecord[]): Promise<void> {
+  try {
+    const { url, anonKey } = getSupabaseConfig();
+    if (!url || !anonKey) return;
+    await fetch(`${url}/rest/v1/profiles?email=eq.${SUPABASE_STORE_EMAIL}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        assigned_class_name: JSON.stringify(items),
+        is_temporary: true,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    console.warn('[pushPayload] persistCloudPushSubscriptionsStore warning:', err);
+  }
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var __SUONGMAI_PUSH_SUBS_STORE__: PushSubRecord[] | undefined;
@@ -140,7 +192,15 @@ export async function savePushSubscription(params: {
   platform?: 'ios' | 'android' | 'desktop' | string | null;
   ctx?: SessionContext;
 }) {
-  const current = readLocalPushSubscriptionsStore();
+  // 1. Hợp nhất danh sách hiện tại từ Cloud Store và Local Disk
+  const cloudSubs = await fetchCloudPushSubscriptionsStore();
+  const diskSubs = readLocalPushSubscriptionsStore();
+
+  const map = new Map<string, PushSubRecord>();
+  diskSubs.forEach((s) => { if (s?.endpoint) map.set(s.endpoint, s); });
+  cloudSubs.forEach((s) => { if (s?.endpoint) map.set(s.endpoint, s); });
+
+  const current = Array.from(map.values());
   const existingIdx = current.findIndex((x) => x.endpoint === params.endpoint);
   const now = new Date().toISOString();
 
@@ -169,12 +229,15 @@ export async function savePushSubscription(params: {
   } else {
     current.push(record);
   }
+
+  // 2. Ghi song song: Cloud Store (cho mọi serverless container) + Local Disk + In-Memory
   writeLocalPushSubscriptionsStore(current);
   LOCAL_PUSH_SUBSCRIPTIONS.set(params.endpoint, record);
+  await persistCloudPushSubscriptionsStore(current);
 
   console.log(`[pushPayload] Đã lưu thiết bị ${record.user_id} (${record.platform}). Tổng số thiết bị đăng ký: ${current.length}`);
 
-  // 2. Thử đồng bộ xuống Supabase Postgres nếu có quyền
+  // 3. Thử đồng bộ xuống Supabase Postgres nếu có quyền
   try {
     const query = async (sb: any) =>
       await sb
@@ -287,14 +350,24 @@ export async function dispatchContextPushNotification(params: {
   successCount?: number;
   payload: PushNotificationPayload;
 }> {
-  // 1. Nạp từ kho lưu trữ đĩa cục bộ bền vững (Persistent Disk Store)
+  // 1. Nạp từ Cloud Store Supabase bền vững (Hoạt động 100% xuyên suốt các Serverless Lambdas / Vercel)
   const endpointMap = new Map<string, PushSubRecord>();
+  try {
+    const cloudSubs = await fetchCloudPushSubscriptionsStore();
+    cloudSubs.forEach((s) => {
+      if (s && s.endpoint) endpointMap.set(s.endpoint, s);
+    });
+  } catch (cloudErr) {
+    console.warn('[dispatchContextPushNotification] fetchCloudPushSubscriptionsStore notice:', cloudErr);
+  }
+
+  // 2. Nạp thêm từ kho lưu trữ đĩa cục bộ bền vững (Persistent Disk Store)
   const diskSubs = readLocalPushSubscriptionsStore();
   diskSubs.forEach((s) => {
-    if (s && s.endpoint) endpointMap.set(s.endpoint, s);
+    if (s && s.endpoint && !endpointMap.has(s.endpoint)) endpointMap.set(s.endpoint, s);
   });
 
-  // 2. Nạp thêm từ Supabase nếu có dữ liệu
+  // 3. Nạp thêm từ Supabase bảng push_subscriptions nếu có dữ liệu
   try {
     const { data } = await executeWithAdminFallback(async (sb) =>
       await sb.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth, active_role_preference')
@@ -310,7 +383,7 @@ export async function dispatchContextPushNotification(params: {
     console.warn('[dispatchContextPushNotification] Lưu ý truy vấn Supabase push_subscriptions (sử dụng kho cục bộ):', fetchErr);
   }
 
-  // 3. Hợp nhất với LOCAL_PUSH_SUBSCRIPTIONS in-memory
+  // 4. Hợp nhất với LOCAL_PUSH_SUBSCRIPTIONS in-memory
   LOCAL_PUSH_SUBSCRIPTIONS.forEach((record, ep) => {
     if (!endpointMap.has(ep) && record.endpoint && record.p256dh && record.auth) {
       endpointMap.set(ep, record);
@@ -412,8 +485,9 @@ export async function dispatchContextPushNotification(params: {
 
   // Dọn dẹp các endpoint không còn hiệu lực khỏi đĩa và database
   if (expiredEndpoints.length > 0) {
-    const updatedDisk = diskSubs.filter((s) => !expiredEndpoints.includes(s.endpoint));
-    writeLocalPushSubscriptionsStore(updatedDisk);
+    const updated = subscriptions.filter((s) => !expiredEndpoints.includes(s.endpoint));
+    writeLocalPushSubscriptionsStore(updated);
+    await persistCloudPushSubscriptionsStore(updated);
     try {
       await executeWithAdminFallback(async (sb) =>
         await sb.from('push_subscriptions').delete().in('endpoint', expiredEndpoints)

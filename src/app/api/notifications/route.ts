@@ -9,6 +9,7 @@ import {
   hasVapidConfig,
   savePushSubscription,
   readLocalPushSubscriptionsStore,
+  fetchCloudPushSubscriptionsStore,
 } from '@/lib/notifications/pushPayload';
 
 export const dynamic = 'force-dynamic';
@@ -72,6 +73,10 @@ export async function GET(request: Request) {
       is_read: readSet.has(n.id),
     }));
 
+    const cloudSubs = await fetchCloudPushSubscriptionsStore().catch(() => []);
+    const localSubs = readLocalPushSubscriptionsStore();
+    const totalCount = Math.max(cloudSubs.length, localSubs.length);
+
     return NextResponse.json(
       {
         success: true,
@@ -80,7 +85,7 @@ export async function GET(request: Request) {
         vapid_public_key: getVapidPublicKey(),
         notifications: mapped,
         unread_count: mapped.filter((n) => !n.is_read).length,
-        subscription_count: readLocalPushSubscriptionsStore().length,
+        subscription_count: totalCount,
       },
       { headers: NO_CACHE_HEADERS }
     );

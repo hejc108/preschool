@@ -958,6 +958,8 @@ export default function AnnouncementsStudioPage() {
         voice_type: getVoiceOption(selectedVoice).id,
         background_music: effectiveAudioUrl ? selectedMusic : null,
         sound: selectedTone,
+        send_push: true,
+        force_push: true,
         metadata: metadataPayload,
       };
 

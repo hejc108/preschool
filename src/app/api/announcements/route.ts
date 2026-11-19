@@ -1384,9 +1384,11 @@ export async function POST(request: Request) {
     // Luôn đồng bộ vào kho dự phòng cục bộ để không bao giờ mất dữ liệu
     upsertLocalAnnouncement(resultItem);
 
-    // Xử lý gửi thông báo đẩy nếu phát hành chính thức (1 lần duy nhất)
+    // Xử lý gửi thông báo đẩy nếu phát hành chính thức (hoặc có cờ phát hành trực tiếp)
     let notificationPayload = null;
-    if (status === 'PUBLISHED' && !mergedMetadata.push_sent) {
+    const shouldSendPush =
+      status === 'PUBLISHED' && (!mergedMetadata.push_sent || body.send_push === true || body.force_push === true);
+    if (shouldSendPush) {
       try {
         notificationPayload = buildPushPayload({
           id: `announcement-${createdId}`,
@@ -1397,7 +1399,8 @@ export async function POST(request: Request) {
           url: notificationChannel === 'TEACHER' ? '/teacher' : '/parent',
           sound: soundChoice,
         });
-        await dispatchContextPushNotification({ payload: notificationPayload });
+        const pushResult = await dispatchContextPushNotification({ payload: notificationPayload });
+        console.log('[api/announcements] POST Web Push broadcast result:', pushResult);
         mergedMetadata.push_sent = true;
         resultItem.metadata = mergedMetadata;
         upsertLocalAnnouncement(resultItem);
@@ -1605,10 +1608,12 @@ export async function PUT(request: Request) {
 
     upsertLocalAnnouncement(updatedItem);
 
-    // Chỉ kích hoạt gửi Push Notification 1 lần duy nhất tại thời điểm thông báo được phát hành chính thức
+    // Kích hoạt gửi Push Notification khi phát hành chính thức (hoặc có cờ phát hành trực tiếp)
     const wasAlreadyPublished =
       Boolean(existing?.status === 'PUBLISHED' || (existing?.metadata as any)?.push_sent || mergedMetadata.push_sent);
-    if (status === 'PUBLISHED' && !wasAlreadyPublished) {
+    const shouldSendPush =
+      status === 'PUBLISHED' && (!wasAlreadyPublished || body.send_push === true || body.force_push === true);
+    if (shouldSendPush) {
       try {
         const notificationPayload = buildPushPayload({
           id: `announcement-${id}`,
@@ -1619,7 +1624,8 @@ export async function PUT(request: Request) {
           url: updatedItem.notification_channel === 'TEACHER' ? '/teacher' : '/parent',
           sound: soundChoice,
         });
-        await dispatchContextPushNotification({ payload: notificationPayload });
+        const pushResult = await dispatchContextPushNotification({ payload: notificationPayload });
+        console.log('[api/announcements] PUT Web Push broadcast result:', pushResult);
         mergedMetadata.push_sent = true;
         updatedItem.metadata = mergedMetadata;
         upsertLocalAnnouncement(updatedItem);
