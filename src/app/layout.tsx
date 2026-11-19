@@ -25,6 +25,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -35,6 +37,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icons/favicon.ico" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -63,6 +66,14 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
+                var refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                  if (!refreshing) {
+                    refreshing = true;
+                    window.location.reload();
+                  }
+                });
+
                 function registerAndAutoUpdate() {
                   navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(
                     function(registration) {

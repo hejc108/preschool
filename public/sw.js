@@ -1,11 +1,10 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v15';
+const CACHE_NAME = 'suongmai-pwa-v16';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
 const ASSETS_TO_CACHE = [
-  '/',
   '/manifest.json',
   '/images/logo.png',
   '/icons/icon-192x192.png',
@@ -104,6 +103,8 @@ self.addEventListener('fetch', (event) => {
 
   // 1. Tuyệt đối không can thiệp các luồng xác thực, PKCE và Supabase Auth
   if (
+    url.pathname === '/' ||
+    url.pathname === '/login' ||
     url.pathname.startsWith('/auth') ||
     url.pathname.startsWith('/api/auth') ||
     url.origin.includes('supabase.co') ||
