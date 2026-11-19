@@ -95,6 +95,19 @@ function mapLinkedStudentsPayload(
   }));
 }
 
+const DEFAULT_VAPID_PUBLIC_KEY =
+  'BGqtFksDUgi_wUJpyr6T-9g-k_qePF26UFE9N5xqDH5XHKUBzVSDZKOoc2zTySiWPpzO9mkZrOHvMrTPFAv3kfg';
+
+function arrayBuffersEqual(buf1: ArrayBuffer | null | undefined, buf2: Uint8Array): boolean {
+  if (!buf1) return false;
+  const u1 = new Uint8Array(buf1);
+  if (u1.byteLength !== buf2.byteLength) return false;
+  for (let i = 0; i < u1.byteLength; i++) {
+    if (u1[i] !== buf2[i]) return false;
+  }
+  return true;
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -569,20 +582,47 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       const metaRes = await fetch('/api/notifications', { cache: 'no-store' }).catch(() => null);
       const metaJson = metaRes && metaRes.ok ? await metaRes.json().catch(() => ({})) : {};
 
+      const vapidKey =
+        metaJson?.vapid_public_key ||
+        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+        DEFAULT_VAPID_PUBLIC_KEY;
+
       if (
-        metaJson?.vapid_enabled &&
-        metaJson?.vapid_public_key &&
+        vapidKey &&
         'serviceWorker' in navigator &&
         'PushManager' in window
       ) {
         const registration = await navigator.serviceWorker.ready;
-        const existingSub = await registration.pushManager.getSubscription();
-        const subscription =
-          existingSub ||
-          (await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(metaJson.vapid_public_key) as BufferSource,
-          }));
+        let existingSub = await registration.pushManager.getSubscription();
+        const targetKeyBytes = urlBase64ToUint8Array(vapidKey);
+
+        if (existingSub && existingSub.options?.applicationServerKey) {
+          if (!arrayBuffersEqual(existingSub.options.applicationServerKey, targetKeyBytes)) {
+            console.log('[PUSH_TRACE][1-SUBSCRIBE] VAPID Key của subscription cũ không khớp key hiện tại, đang hủy đăng ký cũ...');
+            await existingSub.unsubscribe().catch(() => {});
+            existingSub = null;
+          }
+        }
+
+        let subscription = existingSub;
+        if (!subscription) {
+          try {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: targetKeyBytes as BufferSource,
+            });
+          } catch (subErr) {
+            console.warn('[PUSH_TRACE][1-SUBSCRIBE] Lỗi đăng ký ban đầu, tiến hành reset sạch subscription cũ và đăng ký lại:', subErr);
+            const staleSub = await registration.pushManager.getSubscription().catch(() => null);
+            if (staleSub) {
+              await staleSub.unsubscribe().catch(() => {});
+            }
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: targetKeyBytes as BufferSource,
+            });
+          }
+        }
 
         const jsonSub = subscription.toJSON();
         if (jsonSub.endpoint && jsonSub.keys?.p256dh && jsonSub.keys?.auth) {
@@ -590,6 +630,8 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
           const isIos = /iPhone|iPad|iPod/i.test(ua);
           const isAndroid = /Android/i.test(ua);
           const platform = isIos ? 'ios' : isAndroid ? 'android' : 'desktop';
+
+          console.log(`[PUSH_TRACE][1-SUBSCRIBE] Đồng bộ subscription lên máy chủ: platform=${platform}, user_id=${profileId || 'device-pwa'}, role=${activeRoleRef.current}, endpoint=${jsonSub.endpoint.substring(0, 48)}...`);
 
           await fetch('/api/notifications', {
             method: 'POST',
@@ -601,6 +643,8 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
                 auth: jsonSub.keys.auth,
               },
               platform,
+              user_id: profileId || 'device-pwa',
+              active_role: activeRoleRef.current,
             }),
           });
         }
@@ -612,7 +656,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       console.warn('[ActiveRoleProvider] enableNotifications notice:', err);
       setPushStatus(Notification.permission === 'granted' ? 'fallback' : 'default');
     }
-  }, []);
+  }, [profileId]);
 
   const logout = useCallback(async () => {
     try {

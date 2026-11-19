@@ -70,6 +70,15 @@ export interface PushSubRecord {
   updated_at: string;
 }
 
+export interface PushDispatchDetail {
+  endpoint: string;
+  endpointPrefix: string;
+  platform: string;
+  success: boolean;
+  statusCode?: number;
+  error?: string;
+}
+
 // -----------------------------------------------------------------------------
 // Kho Lưu Trữ Đa Tầng Bền Vững (Cloud Supabase Store + Local Disk Fallback)
 // Bảo toàn 100% các thiết bị iPhone & Android đã đăng ký Web Push
@@ -77,10 +86,16 @@ export interface PushSubRecord {
 // -----------------------------------------------------------------------------
 export const SUPABASE_STORE_EMAIL = 'push-sub-store@suongmai.local';
 
-export async function fetchCloudPushSubscriptionsStore(): Promise<PushSubRecord[]> {
+export async function fetchCloudPushSubscriptionsStoreDetailed(): Promise<{
+  ok: boolean;
+  items: PushSubRecord[];
+  error?: string;
+}> {
   try {
     const { url, anonKey } = getSupabaseConfig();
-    if (!url || !anonKey) return [];
+    if (!url || !anonKey) {
+      return { ok: false, items: [], error: 'Thiếu cấu hình Supabase URL / Anon Key' };
+    }
     const res = await fetch(
       `${url}/rest/v1/profiles?email=eq.${SUPABASE_STORE_EMAIL}&select=assigned_class_name`,
       {
@@ -91,25 +106,35 @@ export async function fetchCloudPushSubscriptionsStore(): Promise<PushSubRecord[
         cache: 'no-store',
       }
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return { ok: false, items: [], error: `HTTP ${res.status}: ${errText}` };
+    }
     const data = await res.json();
     if (Array.isArray(data) && data[0]?.assigned_class_name) {
       const parsed = JSON.parse(data[0].assigned_class_name);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return { ok: true, items: parsed };
       }
     }
-  } catch (err) {
-    console.warn('[pushPayload] fetchCloudPushSubscriptionsStore warning:', err);
+    return { ok: true, items: [] };
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    console.warn('[PUSH_TRACE][2-STORE] Lỗi nạp Cloud Store:', msg);
+    return { ok: false, items: [], error: msg };
   }
-  return [];
 }
 
-export async function persistCloudPushSubscriptionsStore(items: PushSubRecord[]): Promise<void> {
+export async function fetchCloudPushSubscriptionsStore(): Promise<PushSubRecord[]> {
+  const result = await fetchCloudPushSubscriptionsStoreDetailed();
+  return result.items;
+}
+
+export async function persistCloudPushSubscriptionsStore(items: PushSubRecord[]): Promise<boolean> {
   try {
     const { url, anonKey } = getSupabaseConfig();
-    if (!url || !anonKey) return;
-    await fetch(`${url}/rest/v1/profiles?email=eq.${SUPABASE_STORE_EMAIL}`, {
+    if (!url || !anonKey) return false;
+    const res = await fetch(`${url}/rest/v1/profiles?email=eq.${SUPABASE_STORE_EMAIL}`, {
       method: 'PATCH',
       headers: {
         apikey: anonKey,
@@ -122,8 +147,16 @@ export async function persistCloudPushSubscriptionsStore(items: PushSubRecord[])
         updated_at: new Date().toISOString(),
       }),
     });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn(`[PUSH_TRACE][2-STORE] Lỗi ghi Cloud Store HTTP ${res.status}:`, errText);
+      return false;
+    }
+    console.log(`[PUSH_TRACE][2-STORE] Ghi Cloud Store thành công (${items.length} thiết bị).`);
+    return true;
   } catch (err) {
-    console.warn('[pushPayload] persistCloudPushSubscriptionsStore warning:', err);
+    console.warn('[PUSH_TRACE][2-STORE] persistCloudPushSubscriptionsStore warning:', err);
+    return false;
   }
 }
 
@@ -192,16 +225,27 @@ export async function savePushSubscription(params: {
   platform?: 'ios' | 'android' | 'desktop' | string | null;
   ctx?: SessionContext;
 }) {
-  // 1. Hợp nhất danh sách hiện tại từ Cloud Store và Local Disk
-  const cloudSubs = await fetchCloudPushSubscriptionsStore();
+  // 1. Hợp nhất danh sách hiện tại từ Cloud Store và Local Disk một cách an toàn
+  const cloudResult = await fetchCloudPushSubscriptionsStoreDetailed();
   const diskSubs = readLocalPushSubscriptionsStore();
 
   const map = new Map<string, PushSubRecord>();
-  diskSubs.forEach((s) => { if (s?.endpoint) map.set(s.endpoint, s); });
-  cloudSubs.forEach((s) => { if (s?.endpoint) map.set(s.endpoint, s); });
 
-  const current = Array.from(map.values());
-  const existingIdx = current.findIndex((x) => x.endpoint === params.endpoint);
+  // Chỉ nạp từ Cloud nếu fetch thành công
+  if (cloudResult.ok) {
+    cloudResult.items.forEach((s) => {
+      if (s?.endpoint) map.set(s.endpoint, s);
+    });
+  }
+
+  // Hợp nhất với Disk Store cục bộ
+  diskSubs.forEach((s) => {
+    if (s?.endpoint && !map.has(s.endpoint)) {
+      map.set(s.endpoint, s);
+    }
+  });
+
+  const countBefore = map.size;
   const now = new Date().toISOString();
 
   let detectedPlatform = params.platform || 'unknown';
@@ -212,30 +256,37 @@ export async function savePushSubscription(params: {
     else detectedPlatform = 'desktop';
   }
 
+  const existing = map.get(params.endpoint);
   const record: PushSubRecord = {
-    id: existingIdx >= 0 ? current[existingIdx].id : `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    id: existing?.id || `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     user_id: params.userId || 'anonymous-device',
     endpoint: params.endpoint,
     p256dh: params.p256dh,
     auth: params.auth,
-    active_role_preference: params.activeRolePreference || null,
-    user_agent: params.userAgent || null,
-    platform: detectedPlatform,
+    active_role_preference: params.activeRolePreference || existing?.active_role_preference || null,
+    user_agent: params.userAgent || existing?.user_agent || null,
+    platform: detectedPlatform !== 'unknown' ? detectedPlatform : (existing?.platform || 'unknown'),
     updated_at: now,
   };
 
-  if (existingIdx >= 0) {
-    current[existingIdx] = { ...current[existingIdx], ...record };
-  } else {
-    current.push(record);
-  }
+  map.set(params.endpoint, record);
+  const merged = Array.from(map.values());
+  const countAfter = merged.length;
 
-  // 2. Ghi song song: Cloud Store (cho mọi serverless container) + Local Disk + In-Memory
-  writeLocalPushSubscriptionsStore(current);
+  console.log(
+    `[PUSH_TRACE][2-STORE] Lưu thiết bị: endpoint=${params.endpoint.substring(0, 48)}..., platform=${record.platform}, user_id=${record.user_id}. Số lượng thiết bị: ${countBefore} -> ${countAfter}`
+  );
+
+  // 2. Ghi song song: In-Memory + Disk + Cloud Store
   LOCAL_PUSH_SUBSCRIPTIONS.set(params.endpoint, record);
-  await persistCloudPushSubscriptionsStore(current);
+  writeLocalPushSubscriptionsStore(merged);
 
-  console.log(`[pushPayload] Đã lưu thiết bị ${record.user_id} (${record.platform}). Tổng số thiết bị đăng ký: ${current.length}`);
+  // Chỉ ghi Cloud Store nếu đọc trước đó thành công (bảo vệ chống ghi đè rỗng do mất mạng / lỗi tạm thời)
+  if (cloudResult.ok) {
+    await persistCloudPushSubscriptionsStore(merged);
+  } else {
+    console.warn(`[PUSH_TRACE][2-STORE] Tạm hoãn đồng bộ Cloud Store vì đọc thất bại (${cloudResult.error}). Bảo toàn dữ liệu Disk Store.`);
+  }
 
   // 3. Thử đồng bộ xuống Supabase Postgres nếu có quyền
   try {
@@ -325,13 +376,15 @@ export async function dispatchDirectWebPush(params: {
         urgency: 'high',
         headers: {
           Urgency: 'high',
+          'apns-priority': '10',
+          'apns-push-type': 'alert',
         },
       }
     );
-    console.log(`[dispatchDirectWebPush] Direct Web Push sent (${res.statusCode}) to ${params.subscription.endpoint.substring(0, 45)}...`);
+    console.log(`[PUSH_TRACE][4-DISPATCH] Direct Web Push sent (${res.statusCode}) to ${params.subscription.endpoint.substring(0, 48)}...`);
     return { success: true, statusCode: res.statusCode };
   } catch (err: any) {
-    console.error('[dispatchDirectWebPush] error:', err?.message || err);
+    console.error('[PUSH_TRACE][4-DISPATCH] Direct Web Push error:', err?.message || err);
     return { success: false, error: err?.message || 'Lỗi gửi Web Push trực tiếp', statusCode: err?.statusCode };
   }
 }
@@ -347,7 +400,9 @@ export async function dispatchContextPushNotification(params: {
 }): Promise<{
   mode: 'web_push' | 'realtime_fallback';
   subscriptionCount: number;
-  successCount?: number;
+  successCount: number;
+  failedCount: number;
+  details: PushDispatchDetail[];
   payload: PushNotificationPayload;
 }> {
   // 1. Nạp từ Cloud Store Supabase bền vững (Hoạt động 100% xuyên suốt các Serverless Lambdas / Vercel)
@@ -358,7 +413,7 @@ export async function dispatchContextPushNotification(params: {
       if (s && s.endpoint) endpointMap.set(s.endpoint, s);
     });
   } catch (cloudErr) {
-    console.warn('[dispatchContextPushNotification] fetchCloudPushSubscriptionsStore notice:', cloudErr);
+    console.warn('[PUSH_TRACE][3-PUBLISH] fetchCloudPushSubscriptionsStore notice:', cloudErr);
   }
 
   // 2. Nạp thêm từ kho lưu trữ đĩa cục bộ bền vững (Persistent Disk Store)
@@ -380,7 +435,7 @@ export async function dispatchContextPushNotification(params: {
       });
     }
   } catch (fetchErr) {
-    console.warn('[dispatchContextPushNotification] Lưu ý truy vấn Supabase push_subscriptions (sử dụng kho cục bộ):', fetchErr);
+    // Dự phòng khi bảng Postgres chưa sẵn sàng hoặc RLS chặn
   }
 
   // 4. Hợp nhất với LOCAL_PUSH_SUBSCRIPTIONS in-memory
@@ -392,7 +447,7 @@ export async function dispatchContextPushNotification(params: {
 
   let subscriptions = Array.from(endpointMap.values());
 
-  // 4. Nếu có targetProfileIds cụ thể (e.g. thông báo riêng cho phụ huynh của 1 bé),
+  // 5. Nếu có targetProfileIds cụ thể (e.g. thông báo riêng cho phụ huynh của 1 bé),
   // lọc theo targetProfileIds HOẶC giữ lại thiết bị BGH/Admin để giám sát.
   // Ngược lại nếu là thông báo chung / diện rộng (Toàn trường, Khối, Lớp) -> GỬI TỚI 100% CÁC THIẾT BỊ ĐÃ ĐĂNG KÝ!
   if (params.targetProfileIds && params.targetProfileIds.length > 0) {
@@ -404,12 +459,18 @@ export async function dispatchContextPushNotification(params: {
   }
 
   const subscriptionCount = subscriptions.length;
-  console.log(`[dispatchContextPushNotification] Tìm thấy ${subscriptionCount} thiết bị đăng ký. Bắt đầu phát sóng Web Push khẩn cấp...`);
+  const soundChoice = params.payload.sound || '/sounds/SM1.wav';
+  console.log(
+    `[PUSH_TRACE][3-PUBLISH] Bắt đầu phát sóng thông báo: id=${params.payload.id}, sound=${soundChoice}, targetProfiles=${params.targetProfileIds?.length || 'ALL'}, tìm thấy ${subscriptionCount} thiết bị đăng ký.`
+  );
 
   if (!hasVapidConfig() || subscriptionCount === 0) {
     return {
       mode: 'realtime_fallback',
       subscriptionCount,
+      successCount: 0,
+      failedCount: subscriptionCount,
+      details: [],
       payload: params.payload,
     };
   }
@@ -422,10 +483,9 @@ export async function dispatchContextPushNotification(params: {
       getVapidPrivateKey()
     );
   } catch (vapidErr) {
-    console.warn('[dispatchContextPushNotification] setVapidDetails warning:', vapidErr);
+    console.warn('[PUSH_TRACE][3-PUBLISH] setVapidDetails warning:', vapidErr);
   }
 
-  const soundChoice = params.payload.sound || '/sounds/SM1.wav';
   const uniqueTag = `suongmai-alert-${params.payload.id || Date.now()}`;
   const targetUrl = params.payload.url || (params.payload.notification_channel === 'TEACHER' ? '/teacher' : '/parent');
 
@@ -448,10 +508,14 @@ export async function dispatchContextPushNotification(params: {
 
   let successCount = 0;
   const expiredEndpoints: string[] = [];
+  const dispatchDetails: PushDispatchDetail[] = [];
 
   await Promise.allSettled(
     subscriptions.map(async (sub) => {
       if (!sub.endpoint || !sub.p256dh || !sub.auth) return;
+      const platform = sub.platform || 'unknown';
+      const endpointPrefix = sub.endpoint.substring(0, 48);
+
       try {
         const res = await webpush.sendNotification(
           {
@@ -467,17 +531,40 @@ export async function dispatchContextPushNotification(params: {
             urgency: 'high', // Bắt buộc 'high' để đánh thức màn hình khóa thiết bị di động
             headers: {
               Urgency: 'high',
+              'apns-priority': '10',
+              'apns-push-type': 'alert',
             },
           }
         );
         successCount++;
-        console.log(`[dispatchContextPushNotification] Đã gửi thông báo tới ${sub.endpoint.substring(0, 45)}... [Platform: ${sub.platform || 'device'}, HTTP ${res.statusCode}]`);
+        dispatchDetails.push({
+          endpoint: sub.endpoint,
+          endpointPrefix,
+          platform,
+          success: true,
+          statusCode: res.statusCode,
+        });
+        console.log(
+          `[PUSH_TRACE][4-DISPATCH] Gửi thành công tới [platform=${platform}]: ${endpointPrefix}... (HTTP ${res.statusCode})`
+        );
       } catch (pushErr: any) {
+        const statusCode = pushErr?.statusCode;
+        const errMsg = pushErr?.message || String(pushErr);
+        dispatchDetails.push({
+          endpoint: sub.endpoint,
+          endpointPrefix,
+          platform,
+          success: false,
+          statusCode,
+          error: errMsg,
+        });
+        console.warn(
+          `[PUSH_TRACE][4-DISPATCH] Gửi thất bại tới [platform=${platform}]: ${endpointPrefix}... (Error: ${errMsg}, statusCode: ${statusCode || 'none'})`
+        );
+
         // Gỡ bỏ subscription đã hết hạn hoặc bị người dùng thu hồi quyền (410 Gone / 404 Not Found)
-        if (pushErr?.statusCode === 410 || pushErr?.statusCode === 404) {
+        if (statusCode === 410 || statusCode === 404) {
           expiredEndpoints.push(sub.endpoint);
-        } else {
-          console.warn('[dispatchContextPushNotification] Gửi thông báo đẩy thất bại:', pushErr?.message || pushErr);
         }
       }
     })
@@ -493,16 +580,21 @@ export async function dispatchContextPushNotification(params: {
         await sb.from('push_subscriptions').delete().in('endpoint', expiredEndpoints)
       );
     } catch (cleanupErr) {
-      console.warn('[dispatchContextPushNotification] cleanup expired subscriptions warning:', cleanupErr);
+      console.warn('[PUSH_TRACE][4-DISPATCH] cleanup expired subscriptions warning:', cleanupErr);
     }
   }
 
-  console.log(`[dispatchContextPushNotification] Hoàn tất: ${successCount}/${subscriptionCount} thiết bị nhận thành công.`);
+  const failedCount = subscriptionCount - successCount;
+  console.log(
+    `[PUSH_TRACE][4-DISPATCH] Hoàn tất phát sóng: ${successCount}/${subscriptionCount} thành công, ${failedCount} thất bại.`
+  );
 
   return {
     mode: 'web_push',
     subscriptionCount,
     successCount,
+    failedCount,
+    details: dispatchDetails,
     payload: params.payload,
   };
 }

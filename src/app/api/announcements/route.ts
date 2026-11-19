@@ -1388,6 +1388,7 @@ export async function POST(request: Request) {
     let notificationPayload = null;
     const shouldSendPush =
       status === 'PUBLISHED' && (!mergedMetadata.push_sent || body.send_push === true || body.force_push === true);
+    let pushResultData: any = null;
     if (shouldSendPush) {
       try {
         notificationPayload = buildPushPayload({
@@ -1401,7 +1402,15 @@ export async function POST(request: Request) {
         });
         const pushResult = await dispatchContextPushNotification({ payload: notificationPayload });
         console.log('[api/announcements] POST Web Push broadcast result:', pushResult);
+        pushResultData = pushResult;
         mergedMetadata.push_sent = true;
+        mergedMetadata.push_result = {
+          mode: pushResult.mode,
+          subscriptionCount: pushResult.subscriptionCount,
+          successCount: pushResult.successCount,
+          failedCount: pushResult.failedCount,
+          details: pushResult.details,
+        };
         resultItem.metadata = mergedMetadata;
         upsertLocalAnnouncement(resultItem);
       } catch (pushErr) {
@@ -1414,6 +1423,7 @@ export async function POST(request: Request) {
         success: true,
         announcement: resultItem,
         notification_payload: notificationPayload,
+        push_result: pushResultData || resultItem.metadata?.push_result || null,
       },
       { status: 201, headers: NO_CACHE_HEADERS }
     );
@@ -1609,6 +1619,7 @@ export async function PUT(request: Request) {
     upsertLocalAnnouncement(updatedItem);
 
     // Kích hoạt gửi Push Notification khi phát hành chính thức (hoặc có cờ phát hành trực tiếp)
+    let pushResultData: any = null;
     const wasAlreadyPublished =
       Boolean(existing?.status === 'PUBLISHED' || (existing?.metadata as any)?.push_sent || mergedMetadata.push_sent);
     const shouldSendPush =
@@ -1626,7 +1637,15 @@ export async function PUT(request: Request) {
         });
         const pushResult = await dispatchContextPushNotification({ payload: notificationPayload });
         console.log('[api/announcements] PUT Web Push broadcast result:', pushResult);
+        pushResultData = pushResult;
         mergedMetadata.push_sent = true;
+        mergedMetadata.push_result = {
+          mode: pushResult.mode,
+          subscriptionCount: pushResult.subscriptionCount,
+          successCount: pushResult.successCount,
+          failedCount: pushResult.failedCount,
+          details: pushResult.details,
+        };
         updatedItem.metadata = mergedMetadata;
         upsertLocalAnnouncement(updatedItem);
       } catch (pushErr) {
@@ -1635,7 +1654,11 @@ export async function PUT(request: Request) {
     }
 
     return NextResponse.json(
-      { success: true, announcement: updatedItem },
+      {
+        success: true,
+        announcement: updatedItem,
+        push_result: pushResultData || updatedItem.metadata?.push_result || null,
+      },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err: any) {

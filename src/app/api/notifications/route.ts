@@ -18,16 +18,44 @@ export const revalidate = 0;
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireActiveRole(request, [
-      'PARENT',
-      'TEACHER',
-      'STAFF',
-      'SCHOOL_ADMIN',
-      'SUPER_ADMIN',
-    ]);
-    if ('response' in auth) return auth.response;
-    const { ctx } = auth;
+    const cloudSubs = await fetchCloudPushSubscriptionsStore().catch(() => []);
+    const localSubs = readLocalPushSubscriptionsStore();
+    const totalCount = Math.max(cloudSubs.length, localSubs.length);
 
+    let authCtx: SessionContext | undefined = undefined;
+    try {
+      const auth = await requireActiveRole(request, [
+        'PARENT',
+        'TEACHER',
+        'STAFF',
+        'SCHOOL_ADMIN',
+        'SUPER_ADMIN',
+      ]);
+      if (!('response' in auth)) {
+        authCtx = auth.ctx;
+      }
+    } catch {
+      // Cho phép client chưa đăng nhập hoặc đang re-sync cookie vẫn lấy được VAPID Public Config
+    }
+
+    if (!authCtx) {
+      console.log(`[PUSH_TRACE][2-STORE] GET /api/notifications phục vụ VAPID config công khai (Khách/Chưa xác thực). Tổng thiết bị: ${totalCount}`);
+      return NextResponse.json(
+        {
+          success: true,
+          authenticated: false,
+          active_role: null,
+          vapid_enabled: hasVapidConfig(),
+          vapid_public_key: getVapidPublicKey(),
+          notifications: [],
+          unread_count: 0,
+          subscription_count: totalCount,
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const ctx = authCtx;
     const targetFilter =
       ctx.activeRole === 'TEACHER'
         ? ['ALL', 'TEACHER']
@@ -46,7 +74,13 @@ export async function GET(request: Request) {
 
     if (noticesErr && isAuthOrRlsError(noticesErr)) {
       return NextResponse.json(
-        { success: false, error: noticesErr.message, notifications: [] },
+        {
+          success: false,
+          error: noticesErr.message,
+          vapid_enabled: hasVapidConfig(),
+          vapid_public_key: getVapidPublicKey(),
+          notifications: [],
+        },
         { status: 403, headers: NO_CACHE_HEADERS }
       );
     }
@@ -74,13 +108,10 @@ export async function GET(request: Request) {
       is_read: readSet.has(n.id),
     }));
 
-    const cloudSubs = await fetchCloudPushSubscriptionsStore().catch(() => []);
-    const localSubs = readLocalPushSubscriptionsStore();
-    const totalCount = Math.max(cloudSubs.length, localSubs.length);
-
     return NextResponse.json(
       {
         success: true,
+        authenticated: true,
         active_role: ctx.activeRole,
         vapid_enabled: hasVapidConfig(),
         vapid_public_key: getVapidPublicKey(),
@@ -93,7 +124,13 @@ export async function GET(request: Request) {
   } catch (err: any) {
     console.error('[api/notifications] GET error:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Internal Server Error', notifications: [] },
+      {
+        success: false,
+        error: err?.message || 'Internal Server Error',
+        vapid_enabled: hasVapidConfig(),
+        vapid_public_key: getVapidPublicKey(),
+        notifications: [],
+      },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
@@ -101,9 +138,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // 1. Nhận diện phiên người dùng nếu có (Không chặn thiết bị PWA chưa đăng nhập hoặc đang chờ duyệt)
-    let profileId = 'device-pwa';
-    let activeRole: UserRole = 'PARENT';
+    const body = await request.json().catch(() => ({}));
+
+    // 1. Nhận diện phiên người dùng nếu có (Ưu tiên cookie session, dự phòng payload client gửi)
+    let profileId = String(body.user_id || 'device-pwa').trim();
+    let activeRole: UserRole = (body.active_role as UserRole) || 'PARENT';
     let authCtx: SessionContext | undefined = undefined;
 
     try {
@@ -122,8 +161,6 @@ export async function POST(request: Request) {
     } catch {
       // Cho phép thiết bị PWA đăng ký nhận chuông trước khi đăng nhập
     }
-
-    const body = await request.json().catch(() => ({}));
 
     // Hỗ trợ kiểm thử chuông báo Web Push trực tiếp tới thiết bị của người dùng
     if (body.action === 'test' || body.send_test === true) {
@@ -144,6 +181,7 @@ export async function POST(request: Request) {
       // Nếu client gửi kèm PushSubscription cụ thể của máy hiện tại, lưu ngay và gửi trực tiếp tới máy đó!
       const directSub = body.subscription;
       if (directSub?.endpoint && directSub?.keys?.p256dh && directSub?.keys?.auth) {
+        console.log(`[PUSH_TRACE][2-STORE] Nhận yêu cầu Test Push trực tiếp từ thiết bị [${body.platform || 'device'}]: ${directSub.endpoint.substring(0, 48)}...`);
         await savePushSubscription({
           userId: profileId,
           endpoint: directSub.endpoint,
@@ -174,6 +212,7 @@ export async function POST(request: Request) {
         );
       }
 
+      console.log(`[PUSH_TRACE][2-STORE] Phát sóng Test Push tới tất cả thiết bị đã đăng ký...`);
       const pushRes = await dispatchContextPushNotification({
         targetProfileIds: profileId !== 'device-pwa' ? [profileId] : undefined,
         payload: testPayload,
@@ -203,6 +242,7 @@ export async function POST(request: Request) {
     }
 
     const platform = body.platform || (request.headers.get('user-agent')?.includes('iPhone') ? 'ios' : 'android');
+    console.log(`[PUSH_TRACE][2-STORE] Client gửi subscription đăng ký: platform=${platform}, user_id=${profileId}, endpoint=${endpoint.substring(0, 48)}...`);
 
     const { data, error } = await savePushSubscription({
       userId: profileId,
@@ -216,17 +256,21 @@ export async function POST(request: Request) {
     });
 
     if (error) {
+      console.warn('[PUSH_TRACE][2-STORE] Lỗi lưu subscription:', error.message);
       return NextResponse.json(
         { success: false, error: error.message },
         { status: isAuthOrRlsError(error) ? 403 : 500, headers: NO_CACHE_HEADERS }
       );
     }
 
+    const currentTotal = readLocalPushSubscriptionsStore().length;
+    console.log(`[PUSH_TRACE][2-STORE] Đăng ký thành công! Tổng số thiết bị trong kho: ${currentTotal}`);
+
     return NextResponse.json(
       {
         success: true,
         subscription: data,
-        total_registered: readLocalPushSubscriptionsStore().length,
+        total_registered: currentTotal,
         vapid_enabled: hasVapidConfig(),
       },
       { headers: NO_CACHE_HEADERS }

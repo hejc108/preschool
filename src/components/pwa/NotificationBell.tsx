@@ -53,6 +53,19 @@ export interface NotificationItem {
   };
 }
 
+const DEFAULT_VAPID_PUBLIC_KEY =
+  'BGqtFksDUgi_wUJpyr6T-9g-k_qePF26UFE9N5xqDH5XHKUBzVSDZKOoc2zTySiWPpzO9mkZrOHvMrTPFAv3kfg';
+
+function arrayBuffersEqual(buf1: ArrayBuffer | null | undefined, buf2: Uint8Array): boolean {
+  if (!buf1) return false;
+  const u1 = new Uint8Array(buf1);
+  if (u1.byteLength !== buf2.byteLength) return false;
+  for (let i = 0; i < u1.byteLength; i++) {
+    if (u1[i] !== buf2[i]) return false;
+  }
+  return true;
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -124,21 +137,44 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
         try {
           const reg = await navigator.serviceWorker.ready;
           let sub = await reg.pushManager.getSubscription();
-          if (!sub) {
-            const metaRes = await fetch('/api/notifications', { cache: 'no-store' }).catch(() => null);
-            const metaJson = metaRes && metaRes.ok ? await metaRes.json().catch(() => ({})) : {};
-            if (metaJson?.vapid_public_key) {
-              sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(metaJson.vapid_public_key) as BufferSource,
-              });
+          const metaRes = await fetch('/api/notifications', { cache: 'no-store' }).catch(() => null);
+          const metaJson = metaRes && metaRes.ok ? await metaRes.json().catch(() => ({})) : {};
+          const vapidKey =
+            metaJson?.vapid_public_key ||
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+            DEFAULT_VAPID_PUBLIC_KEY;
+
+          if (vapidKey) {
+            const keyArray = urlBase64ToUint8Array(vapidKey);
+            if (sub && sub.options?.applicationServerKey) {
+              if (!arrayBuffersEqual(sub.options.applicationServerKey, keyArray)) {
+                console.log('[PUSH_TRACE][1-SUBSCRIBE] [Bell] Key mismatch, đang hủy đăng ký cũ...');
+                await sub.unsubscribe().catch(() => {});
+                sub = null;
+              }
+            }
+            if (!sub) {
+              try {
+                sub = await reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: keyArray as BufferSource,
+                });
+              } catch (subErr) {
+                console.warn('[PUSH_TRACE][1-SUBSCRIBE] [Bell] subscribe retry sau khi reset:', subErr);
+                const stale = await reg.pushManager.getSubscription().catch(() => null);
+                if (stale) await stale.unsubscribe().catch(() => {});
+                sub = await reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: keyArray as BufferSource,
+                });
+              }
             }
           }
           if (sub) {
             directSub = sub.toJSON();
           }
         } catch (subErr) {
-          console.warn('[NotificationBell] getSubscription notice:', subErr);
+          console.warn('[PUSH_TRACE][1-SUBSCRIBE] [Bell] getSubscription notice:', subErr);
         }
       }
 

@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v13';
+const CACHE_NAME = 'suongmai-pwa-v14';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -243,6 +243,13 @@ self.addEventListener('push', (event) => {
   // để đánh thức điện thoại và phát âm thanh chuông Ting chuẩn trên màn hình khóa (Android / Samsung One UI)
   const notificationTag = payload.tag || `suongmai-notification-v2-${payload.entity_id || Date.now()}`;
 
+  console.log('[PUSH_TRACE][5-SW] Nhận Push Event:', {
+    title,
+    tag: notificationTag,
+    sound: soundUrl,
+    target_url: targetUrl,
+  });
+
   const notificationOptions = {
     body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
     icon: iconUrl,
@@ -252,7 +259,6 @@ self.addEventListener('push', (event) => {
     tag: notificationTag,
     renotify: true,
     silent: false,
-    urgency: 'high',
     requireInteraction: true,
     timestamp: Date.now(),
     dir: 'auto',
@@ -280,8 +286,11 @@ self.addEventListener('push', (event) => {
 
   const showNotificationPromise = self.registration
     .showNotification(title, notificationOptions)
+    .then(() => {
+      console.log('[PUSH_TRACE][5-SW] Hiển thị Native Notification thành công:', notificationTag);
+    })
     .catch((firstErr) => {
-      console.warn('[SW Push] Primary showNotification failed, trying simplified options:', firstErr);
+      console.warn('[PUSH_TRACE][5-SW] Primary showNotification failed, trying simplified options:', firstErr);
       return self.registration.showNotification(title, {
         body: payload.body || 'Thông báo mới từ Mầm non Sương Mai',
         icon: iconUrl,
@@ -291,12 +300,15 @@ self.addEventListener('push', (event) => {
         tag: notificationTag,
         renotify: true,
         silent: false,
-        urgency: 'high',
         requireInteraction: true,
         data: {
           target_url: targetUrl,
           sound: soundUrl,
         },
+      }).then(() => {
+        console.log('[PUSH_TRACE][5-SW] Hiển thị Native Notification dự phòng thành công:', notificationTag);
+      }).catch((fallbackErr) => {
+        console.error('[PUSH_TRACE][5-SW] Hiển thị Native Notification dự phòng thất bại:', fallbackErr);
       });
     });
 
