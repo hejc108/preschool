@@ -222,3 +222,65 @@ export function playNotificationTing(): Promise<boolean> {
 export async function playAcbZaloTing(): Promise<boolean> {
   return playNotificationTing();
 }
+
+// ==============================================================================
+// CHIME DEDUPLICATION & PERSISTENCE PER USER/ROLE (PREVENTS FALSE CHIMES ON LOGIN)
+// ==============================================================================
+const CHIME_NOTIFIED_PREFIX = 'suongmai_pwa_chimed_announcements_';
+
+function getChimeStorageKey(portalRole: string, userIdentifier?: string): string {
+  const cleanRole = (portalRole || 'parent').toLowerCase().trim();
+  const cleanUser = (userIdentifier || 'default').toLowerCase().trim();
+  return `${CHIME_NOTIFIED_PREFIX}${cleanRole}_${cleanUser}`;
+}
+
+/**
+ * Lấy danh sách ID thông báo đã từng phát chuông cho user/role này trên thiết bị
+ */
+export function getChimedAnnouncementIds(portalRole: string, userIdentifier?: string): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const key = getChimeStorageKey(portalRole, userIdentifier);
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Lưu các ID thông báo đã phát chuông hoặc đã ghi nhận khi tải app ban đầu
+ */
+export function recordChimedAnnouncementIds(
+  ids: string[],
+  portalRole: string,
+  userIdentifier?: string
+): void {
+  if (typeof window === 'undefined' || !ids || ids.length === 0) return;
+  try {
+    const key = getChimeStorageKey(portalRole, userIdentifier);
+    const existing = getChimedAnnouncementIds(portalRole, userIdentifier);
+    ids.forEach((id) => {
+      const cleanId = String(id || '').trim();
+      if (cleanId) existing.add(cleanId);
+    });
+    // Giới hạn 300 ID gần nhất để tránh phình dung lượng localStorage
+    const trimmed = Array.from(existing).slice(-300);
+    localStorage.setItem(key, JSON.stringify(trimmed));
+  } catch {}
+}
+
+/**
+ * Kiểm tra một thông báo đã từng phát chuông hay chưa
+ */
+export function hasAnnouncementChimed(
+  announcementId: string,
+  portalRole: string,
+  userIdentifier?: string
+): boolean {
+  if (!announcementId) return true;
+  const set = getChimedAnnouncementIds(portalRole, userIdentifier);
+  return set.has(announcementId);
+}

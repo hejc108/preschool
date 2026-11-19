@@ -36,17 +36,19 @@ export interface MenuTodayCardProps {
 
 interface MealThumbnailProps {
   meal: WeeklyMenu;
-  fallbackIcon: any;
+  fallbackIcon?: any;
   alt: string;
 }
 
-function MealThumbnail({ meal, fallbackIcon: FallbackIcon, alt }: MealThumbnailProps) {
+function MealThumbnail({ meal, fallbackIcon, alt }: MealThumbnailProps) {
   const [hasError, setHasError] = useState(false);
+  const FallbackIcon = fallbackIcon || Utensils;
 
-  // Priority (a): custom_image_url / image_url from DB/Storage
+  // Priority (a): custom_image_url / image_url from DB/Storage (future admin/teacher upload override)
   // Priority (b): matched preset image under /images/meals/
   const typeKey = (meal.meal_type || '').toLowerCase().replace(/_/g, '-');
   const presetSrc = `/images/meals/${typeKey}.svg`;
+  const defaultFallbackSrc = '/images/meals/default.svg';
   const primarySrc = meal.custom_image_url || meal.image_url || presetSrc;
 
   const [imgSrc, setImgSrc] = useState(primarySrc);
@@ -61,6 +63,9 @@ function MealThumbnail({ meal, fallbackIcon: FallbackIcon, alt }: MealThumbnailP
     if (imgSrc !== presetSrc) {
       // Step down to preset fallback before placeholder icon
       setImgSrc(presetSrc);
+    } else if (imgSrc !== defaultFallbackSrc) {
+      // Step down to default SVG fallback
+      setImgSrc(defaultFallbackSrc);
     } else {
       // Step down to safe fallback icon (c)
       setHasError(true);
@@ -91,6 +96,7 @@ function MealThumbnail({ meal, fallbackIcon: FallbackIcon, alt }: MealThumbnailP
 interface SessionConfig {
   sessionKey: 'BREAKFAST' | 'LUNCH' | 'SNACK';
   title: string;
+  timeSlot: string;
   sessionBadge: string;
   badgeBg: string;
   badgeText: string;
@@ -102,6 +108,7 @@ const SESSION_META: Record<string, SessionConfig> = {
   BREAKFAST: {
     sessionKey: 'BREAKFAST',
     title: 'Bữa sáng',
+    timeSlot: '07:30',
     sessionBadge: 'Sáng',
     badgeBg: 'bg-amber-100',
     badgeText: 'text-amber-800',
@@ -111,6 +118,7 @@ const SESSION_META: Record<string, SessionConfig> = {
   LUNCH: {
     sessionKey: 'LUNCH',
     title: 'Bữa trưa',
+    timeSlot: '11:00',
     sessionBadge: 'Trưa',
     badgeBg: 'bg-emerald-100',
     badgeText: 'text-emerald-800',
@@ -120,6 +128,7 @@ const SESSION_META: Record<string, SessionConfig> = {
   SNACK: {
     sessionKey: 'SNACK',
     title: 'Bữa xế',
+    timeSlot: '14:15',
     sessionBadge: 'Xế',
     badgeBg: 'bg-orange-100',
     badgeText: 'text-orange-800',
@@ -131,17 +140,17 @@ const SESSION_META: Record<string, SessionConfig> = {
 /** Clean dish sub-labels without repetitive prefixes */
 const DISH_ROLE_LABEL: Record<MealCategory, { roleLabel: string; chipBg: string; chipText: string }> = {
   BREAKFAST: {
-    roleLabel: 'Món sáng chính',
+    roleLabel: 'Chính',
     chipBg: 'bg-amber-50',
     chipText: 'text-amber-700',
   },
   LUNCH_MAIN: {
-    roleLabel: 'Món chính',
+    roleLabel: 'Chính',
     chipBg: 'bg-emerald-50',
     chipText: 'text-emerald-700',
   },
   LUNCH_SOUP: {
-    roleLabel: 'Món canh',
+    roleLabel: 'Canh',
     chipBg: 'bg-teal-50',
     chipText: 'text-teal-700',
   },
@@ -151,7 +160,7 @@ const DISH_ROLE_LABEL: Record<MealCategory, { roleLabel: string; chipBg: string;
     chipText: 'text-rose-700',
   },
   AFTERNOON_SNACK: {
-    roleLabel: 'Bữa phụ',
+    roleLabel: 'Phụ',
     chipBg: 'bg-orange-50',
     chipText: 'text-orange-700',
   },
@@ -223,15 +232,15 @@ export function MenuTodayCard({
         <div className="space-y-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             <Utensils className="w-4 h-4 text-teal-600 shrink-0" />
-            <h3 className="font-bold text-teal-950 text-sm sm:text-base leading-tight truncate">
+            <h3 className="font-bold text-teal-950 text-base sm:text-lg leading-tight truncate">
               Thực đơn hôm nay
             </h3>
-            <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-teal-50 text-teal-800 border border-teal-200/80 shrink-0">
+            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-teal-50 text-teal-800 border border-teal-200/80 shrink-0">
               {cycleResolution.short_display_label}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 min-w-0">
+          <div className="flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold text-slate-500 min-w-0">
             <CalendarDays className="w-3.5 h-3.5 text-amber-600 shrink-0" />
             <span className="truncate">
               {cycleResolution.weekday_vi}, ngày {cycleResolution.effective_date_formatted}
@@ -242,7 +251,7 @@ export function MenuTodayCard({
         <div className="flex items-center gap-2 shrink-0 self-center">
           <Link
             href={fullViewHref}
-            className="text-xs text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5 whitespace-nowrap px-2 py-1 rounded-lg hover:bg-teal-50 transition"
+            className="text-xs sm:text-[13px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 whitespace-nowrap px-2.5 py-1.5 rounded-xl hover:bg-teal-50 transition min-h-[36px]"
           >
             <span>Xem 4 tuần</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -268,7 +277,7 @@ export function MenuTodayCard({
 
       {/* Weekend Notice */}
       {cycleResolution.is_weekend && (
-        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs sm:text-[13px]">
           <span className="font-semibold text-amber-900 flex items-center gap-1.5 min-w-0">
             <Moon className="w-4 h-4 text-amber-600 shrink-0" />
             <span className="truncate">{cycleResolution.weekend_notice || 'Trường nghỉ cuối tuần'}</span>
@@ -286,7 +295,7 @@ export function MenuTodayCard({
         <button
           type="button"
           onClick={() => setIsCollapsed(false)}
-          className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs transition cursor-pointer text-left"
+          className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs sm:text-[13px] transition cursor-pointer text-left"
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
@@ -307,7 +316,7 @@ export function MenuTodayCard({
         <>
           {todayMeals.length === 0 ? (
             <div className="py-5 px-3 text-center bg-amber-50/30 border border-dashed border-amber-200/80 rounded-xl">
-              <p className="text-xs font-semibold text-slate-600">
+              <p className="text-[13px] sm:text-sm font-semibold text-slate-600">
                 Nhà trường đang cập nhật thực đơn dinh dưỡng hôm nay
               </p>
             </div>
@@ -318,13 +327,14 @@ export function MenuTodayCard({
 
                 return (
                   <div key={meta.sessionKey} className="space-y-2">
-                    {/* Session Sub-header */}
-                    <div className="flex items-center gap-2 px-0.5">
+                    {/* Session Sub-header with Serving Time */}
+                    <div className="flex items-center justify-between gap-2 px-0.5">
                       <span
-                        className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full border ${meta.badgeBg} ${meta.badgeText} ${meta.badgeBorder} shrink-0`}
+                        className={`inline-flex items-center gap-1.5 text-xs sm:text-[13px] font-bold px-3 py-1 rounded-full border ${meta.badgeBg} ${meta.badgeText} ${meta.badgeBorder} shrink-0`}
                       >
                         <SessionIcon className="w-3.5 h-3.5" />
                         <span>{meta.title}</span>
+                        <span className="opacity-70 font-mono text-xs font-semibold">• {meta.timeSlot}</span>
                       </span>
                       <div className="h-px bg-slate-100 flex-1 min-w-0" />
                     </div>
@@ -345,13 +355,13 @@ export function MenuTodayCard({
                         return (
                           <div
                             key={meal.id}
-                            className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all ${
+                            className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
                               allergenCheck.hasAllergen
                                 ? 'bg-rose-50/40 border-rose-200'
-                                : 'bg-slate-50/50 hover:bg-slate-50 border-slate-200/80'
+                                : 'bg-slate-50/60 hover:bg-slate-50 border-slate-200/80'
                             }`}
                           >
-                            {/* Square thumbnail: 12x12 (48px) with 3-tier fallback */}
+                            {/* Square thumbnail: w-12 h-12 rounded-xl object-cover shrink-0 */}
                             <MealThumbnail
                               meal={meal}
                               fallbackIcon={meta.icon}
@@ -362,20 +372,20 @@ export function MenuTodayCard({
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                 <span
-                                  className={`text-xs px-2 py-0.5 rounded-md font-semibold ${dishRole.chipBg} ${dishRole.chipText} shrink-0`}
+                                  className={`text-xs px-2.5 py-0.5 rounded-md font-bold whitespace-nowrap ${dishRole.chipBg} ${dishRole.chipText} shrink-0`}
                                 >
                                   {dishRole.roleLabel}
                                 </span>
 
                                 {allergenCheck.hasAllergen && (
-                                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-bold flex items-center gap-1 shrink-0">
+                                  <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
                                     <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
                                     <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
                                   </span>
                                 )}
                               </div>
 
-                              <p className="font-bold text-slate-800 text-sm leading-snug line-clamp-2 min-w-0">
+                              <p className="font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2 min-w-0">
                                 {meal.dish_name}
                               </p>
                             </div>

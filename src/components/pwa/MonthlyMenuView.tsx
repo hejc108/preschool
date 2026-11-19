@@ -50,11 +50,11 @@ const DAY_LABELS_SHORT: Record<DayOfWeek, string> = {
 };
 
 const MEAL_CATEGORIES: { key: MealCategory; label: string; icon: string }[] = [
-  { key: 'BREAKFAST', label: 'Bữa sáng (07:30)', icon: '🥣' },
-  { key: 'LUNCH_MAIN', label: 'Bữa trưa - Món mặn (11:00)', icon: '🍲' },
-  { key: 'LUNCH_SOUP', label: 'Bữa trưa - Món canh (11:00)', icon: '🥣' },
-  { key: 'DESSERT', label: 'Tráng miệng (11:30)', icon: '🍎' },
-  { key: 'AFTERNOON_SNACK', label: 'Bữa xế (14:15)', icon: '🥛' },
+  { key: 'BREAKFAST', label: 'Bữa sáng • Món chính (07:30)', icon: '🥣' },
+  { key: 'LUNCH_MAIN', label: 'Bữa trưa • Món chính (11:00)', icon: '🍲' },
+  { key: 'LUNCH_SOUP', label: 'Bữa trưa • Món canh (11:00)', icon: '🥣' },
+  { key: 'DESSERT', label: 'Bữa trưa • Tráng miệng (11:30)', icon: '🍎' },
+  { key: 'AFTERNOON_SNACK', label: 'Bữa xế • Món phụ (14:15)', icon: '🥛' },
 ];
 
 const jsonFetcher = async (url: string) => {
@@ -460,8 +460,8 @@ export function MonthlyMenuView({ role, backHref }: MonthlyMenuViewProps) {
                   </span>
 
                   {allergenCheck.hasAllergen && (
-                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-pill text-[10px] font-bold flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-bold flex items-center gap-1 shrink-0">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span>{allergenCheck.warningLabel || 'Cảnh báo dị ứng'}</span>
                     </span>
                   )}
@@ -474,18 +474,25 @@ export function MonthlyMenuView({ role, backHref }: MonthlyMenuViewProps) {
                       alt={dishName}
                       loading="lazy"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `/images/meals/${cat.key.toLowerCase().replace(/_/g, '-')}.svg`;
+                        const img = e.currentTarget;
+                        const preset = `/images/meals/${cat.key.toLowerCase().replace(/_/g, '-')}.svg`;
+                        const fallback = '/images/meals/default.svg';
+                        if (!img.src.endsWith(preset) && !img.src.endsWith(fallback)) {
+                          img.src = preset;
+                        } else if (!img.src.endsWith(fallback)) {
+                          img.src = fallback;
+                        }
                       }}
                       className="w-12 h-12 rounded-xl object-cover shrink-0"
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{dishName}</h3>
+                    <h3 className="text-sm sm:text-[15px] font-bold text-slate-900 line-clamp-2 leading-snug">{dishName}</h3>
                   </div>
                 </div>
 
                 {allergenCheck.hasAllergen && (
-                  <p className="text-[11px] text-rose-700 italic border-t border-rose-100 pt-1.5">
+                  <p className="text-xs text-rose-700 italic border-t border-rose-100 pt-1.5 leading-relaxed">
                     * Lưu ý: Món ăn này chứa thành phần dị ứng trùng với hồ sơ của bé. Nhân sự bếp
                     sẽ tự động chuyển đổi món thay thế an toàn.
                   </p>

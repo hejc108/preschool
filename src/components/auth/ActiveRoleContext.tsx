@@ -422,19 +422,16 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     ): Promise<boolean> => {
       if (!roles.includes(targetRole)) return false;
       const previousRole = activeRoleRef.current;
-
-      if (options?.syncUrl !== false && typeof window !== 'undefined') {
-        const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
-        if (window.location.pathname !== targetPath) {
-          window.history.replaceState(null, '', targetPath);
-        }
-      }
+      const targetPath = targetRole === 'TEACHER' ? '/teacher' : '/parent';
 
       if (previousRole === targetRole && serverSyncedRoleRef.current === targetRole) {
+        if (options?.syncUrl !== false && typeof window !== 'undefined' && window.location.pathname !== targetPath) {
+          window.location.assign(targetPath);
+        }
         return true;
       }
 
-      // 1. Optimistic UI swap (< 100ms): immediately switch role & preserve all role-prefixed SWR caches!
+      // 1. Optimistic UI swap (< 100ms): immediately switch role & preserve in-memory state
       setActiveRole(targetRole);
       activeRoleRef.current = targetRole;
 
@@ -449,7 +446,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
         // Ignore storage errors
       }
 
-      // 2. Background cookie + Realtime JWT synchronization (non-blocking for UI)
+      // 2. Cookie + Realtime JWT synchronization via server API
       const seq = ++switchSeqRef.current;
       setIsSwitching(true);
 
@@ -518,6 +515,14 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
           }
 
           void getBrowserSupabaseClient().then(syncRealtimeAuth);
+
+          // Clean, deterministic route navigation when switching portals
+          if (options?.syncUrl !== false && typeof window !== 'undefined') {
+            if (window.location.pathname !== targetPath) {
+              window.location.assign(targetPath);
+            }
+          }
+
           return targetRole;
         } catch (err) {
           console.warn('[ActiveRoleProvider] switchRole background sync error:', err);

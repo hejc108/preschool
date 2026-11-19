@@ -14,9 +14,13 @@ export function RoleSwitcher({
 }: {
   currentPortal?: MobilePortalRole;
 }) {
-  const { isDualRole, activeRole, switchRole } = useActiveRole();
+  const { roles, isDualRole, activeRole, switchRole, isSwitching } = useActiveRole();
 
-  if (!isDualRole) {
+  // Show multi-role switcher whenever user holds both TEACHER and PARENT
+  const hasBothRoles =
+    isDualRole || (roles.includes('TEACHER') && roles.includes('PARENT'));
+
+  if (!hasBothRoles) {
     return null;
   }
 
@@ -43,14 +47,15 @@ export function RoleSwitcher({
             type="button"
             role="tab"
             aria-selected={isActive}
+            disabled={isSwitching}
             onClick={() => {
-              if (!isActive) {
+              if (!isActive && !isSwitching) {
                 void switchRole(tab.role, { syncUrl: true });
               }
             }}
-            className={`px-1.5 sm:px-2 py-1 rounded-full text-[10px] sm:text-[11px] leading-none whitespace-nowrap transition-colors duration-150 inline-flex items-center gap-1 cursor-pointer ${
+            className={`px-2 sm:px-2.5 py-1.5 rounded-full text-xs font-bold leading-none whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1 cursor-pointer min-h-[38px] sm:min-h-[40px] disabled:opacity-60 ${
               isActive
-                ? 'bg-white text-slate-900 font-bold shadow-xs'
+                ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'
             }`}
           >

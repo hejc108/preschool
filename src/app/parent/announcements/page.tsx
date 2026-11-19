@@ -28,6 +28,7 @@ import {
 import { AnnouncementPosterCard } from '@/components/announcements/AnnouncementPosterCard';
 import { AnnouncementAudioPlayer } from '@/components/announcements/AnnouncementAudioPlayer';
 import { NotificationBell } from '@/components/pwa/NotificationBell';
+import { useAutoMarkReadTimer } from '@/lib/announcements/useAutoMarkReadTimer';
 
 function ParentAnnouncementsSkeleton() {
   return (
@@ -198,45 +199,36 @@ function ParentAnnouncementsInner() {
   // Current active announcement for detail view
   const currentAnnouncement = detailAnnouncement || (requestedId ? announcements.find((a) => a.id === requestedId) || null : null);
 
-  // Automatic Read-Receipt khi người dùng xem thông báo trên PWA
-  const hasMarkedReadRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    const targetId = requestedId || currentAnnouncement?.id;
-    if (!targetId) return;
-
-    if (hasMarkedReadRef.current.has(targetId)) return;
-    hasMarkedReadRef.current.add(targetId);
-
-    // Kích hoạt ngay lập tức API POST /api/announcements/[id]/read và PATCH /api/announcements
-    const recordRead = async () => {
-      try {
-        await fetch(`/api/announcements/${targetId}/read`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ announcement_id: targetId }),
-        }).catch(() => {});
-
-        await fetch('/api/announcements', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ announcement_id: targetId }),
-        }).catch(() => {});
-
-        // Cập nhật trạng thái hiển thị cục bộ mượt mà
-        setAnnouncements((prev) =>
-          prev.map((a) => (a.id === targetId ? { ...a, is_read: true } : a))
-        );
-        if (detailAnnouncement && detailAnnouncement.id === targetId) {
-          setDetailAnnouncement((prev) => (prev ? { ...prev, is_read: true } : null));
-        }
-      } catch (err) {
-        console.error('Lỗi tự động ghi nhận đã đọc:', err);
+  // FR-02: Tự động ghi nhận lượt đọc sau 3 giây xem thực tế trên màn hình (document.visibilityState === 'visible')
+  // Nếu rời màn hình hoặc ẩn tab trước 3 giây, timer bị hủy và không ghi nhận đã đọc.
+  useAutoMarkReadTimer({
+    announcementId: requestedId || currentAnnouncement?.id,
+    isRead: currentAnnouncement?.is_read,
+    portalRole: 'PARENT',
+    delayMs: 3000,
+    onMarkRead: (readId) => {
+      setAnnouncements((prev) =>
+        prev.map((a) => (a.id === readId ? { ...a, is_read: true, read_at: new Date().toISOString() } : a))
+      );
+      setDetailAnnouncement((prev) =>
+        prev && prev.id === readId ? { ...prev, is_read: true, read_at: new Date().toISOString() } : prev
+      );
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = sessionStorage.getItem('suongmai_parent_announcements');
+          if (cached) {
+            const arr = JSON.parse(cached);
+            if (Array.isArray(arr)) {
+              const updated = arr.map((a: any) =>
+                a.id === readId ? { ...a, is_read: true, read_at: new Date().toISOString() } : a
+              );
+              sessionStorage.setItem('suongmai_parent_announcements', JSON.stringify(updated));
+            }
+          }
+        } catch (_) {}
       }
-    };
-
-    recordRead();
-  }, [requestedId, currentAnnouncement?.id]);
+    },
+  });
 
   // Download Poster as PNG (Header icon button)
   const handleDownloadPosterPng = async () => {

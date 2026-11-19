@@ -620,32 +620,41 @@ export async function GET(request: Request) {
       // 5.1 Đọc từ Supabase (read_receipts & announcement_reads) cho người dùng hiện tại (Parallelized)
       if (uuidAnnIds.length > 0 && !ctx.profileId.startsWith('bootstrap-')) {
         try {
-          const [receiptRes, readRes] = await Promise.allSettled([
-            executeWithContextFallback(ctx, async (sb) =>
-              await sb
+          const fetchUserReads = async (sb: any) => {
+            const [receiptQuery, readQuery] = await Promise.all([
+              sb
                 .from('read_receipts')
                 .select('announcement_id, read_at')
                 .eq('user_id', ctx.profileId)
                 .eq('role_context', ctx.activeRole)
-                .in('announcement_id', uuidAnnIds)
-            ),
-            executeWithContextFallback(ctx, async (sb) =>
-              await sb
+                .in('announcement_id', uuidAnnIds),
+              sb
                 .from('announcement_reads')
                 .select('announcement_id, read_at')
                 .eq('user_id', ctx.profileId)
                 .eq('role_context', ctx.activeRole)
-                .in('announcement_id', uuidAnnIds)
-            ),
-          ]);
+                .in('announcement_id', uuidAnnIds),
+            ]);
+            return {
+              data: {
+                receipts: (receiptQuery?.data as any[]) || [],
+                reads: (readQuery?.data as any[]) || [],
+              },
+              error: receiptQuery?.error || readQuery?.error || null,
+            };
+          };
 
-          if (receiptRes.status === 'fulfilled' && Array.isArray((receiptRes.value as any)?.data)) {
-            ((receiptRes.value as any).data as any[]).forEach((r) => {
+          let userReadResults = await executeWithContextFallback<{ receipts: any[]; reads: any[] }>(ctx, fetchUserReads).catch(() => null);
+          if (!userReadResults?.data || (userReadResults.data.receipts.length === 0 && userReadResults.data.reads.length === 0)) {
+            // Privileged fallback for exact user_id + role_context to prevent RLS mismatches
+            userReadResults = await executeWithPrivilegedFallback<{ receipts: any[]; reads: any[] }>(fetchUserReads).catch(() => null);
+          }
+
+          if (userReadResults?.data) {
+            userReadResults.data.receipts.forEach((r: any) => {
               if (r.announcement_id && r.read_at) readMap.set(r.announcement_id, r.read_at);
             });
-          }
-          if (readRes.status === 'fulfilled' && Array.isArray((readRes.value as any)?.data)) {
-            ((readRes.value as any).data as any[]).forEach((r) => {
+            userReadResults.data.reads.forEach((r: any) => {
               if (r.announcement_id && r.read_at) readMap.set(r.announcement_id, r.read_at);
             });
           }
@@ -841,7 +850,17 @@ export async function GET(request: Request) {
       }
     }
 
-    // 5.2 Đọc bổ sung từ kho lưu trữ cục bộ cho tài khoản hiện tại
+    // 5.2 Đọc bổ sung từ bộ đệm bộ nhớ và kho lưu trữ cục bộ cho tài khoản hiện tại
+    const memCache = globalThis.__SUONGMAI_ANNOUNCEMENT_READS_CACHE__ || {};
+    Object.entries(memCache).forEach(([aid, userMap]) => {
+      const entry = userMap[ctx.profileId];
+      if (entry && (!entry.role_context || entry.role_context === ctx.activeRole)) {
+        if (!readMap.has(aid)) {
+          readMap.set(aid, entry.read_at || new Date().toISOString());
+        }
+      }
+    });
+
     const localReads = getAnnouncementReadsLocally(ctx.profileId, ctx.activeRole);
     localReads.forEach((aid) => {
       if (!readMap.has(aid)) {

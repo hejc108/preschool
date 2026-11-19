@@ -31,6 +31,8 @@ import {
   unlockAudioContext,
   isNotificationSoundEnabled,
   setNotificationSoundEnabled,
+  getChimedAnnouncementIds,
+  recordChimedAnnouncementIds,
 } from '@/lib/sound/notificationSound';
 
 export interface NotificationItem {
@@ -111,7 +113,16 @@ const formatTimeAgo = (dateStr?: string) => {
 
 export function NotificationBell({ portalRole, className = '' }: NotificationBellProps) {
   const router = useRouter();
-  const { activeRole, serverSyncedRole, waitForRoleSync, pushStatus, enableNotifications } = useActiveRole();
+  const { activeRole, serverSyncedRole, profileId, email, waitForRoleSync, pushStatus, enableNotifications } = useActiveRole();
+  const userIdentifier = profileId || email || 'default';
+  const hasHydratedInitialListRef = useRef(false);
+  const chimedIdsRef = useRef<Set<string>>(new Set());
+
+  // Nạp danh sách ID đã từng phát chuông từ localStorage theo vai trò & tài khoản
+  useEffect(() => {
+    chimedIdsRef.current = getChimedAnnouncementIds(portalRole, userIdentifier);
+  }, [portalRole, userIdentifier]);
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [isSoundActive, setIsSoundActive] = useState<boolean>(true);
@@ -119,7 +130,6 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const prevUnreadRef = useRef<number | null>(null);
 
   const [testPushMessage, setTestPushMessage] = useState<string>('');
 
@@ -258,13 +268,38 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
     return announcements.filter((a) => !a.is_read).length;
   }, [data, announcements]);
 
-  // Kích hoạt tiếng Ting khi danh sách nhận được bản ghi mới mà người dùng đang mở sẵn app (Foreground)
+  // Kích hoạt tiếng Ting duy nhất cho thông báo THỰC SỰ MỚI
+  // Tuyệt đối KHÔNG phát chuông khi vừa đăng nhập, vừa mở app hoặc khi revalidate dữ liệu cũ
   useEffect(() => {
-    if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
+    if (!data?.announcements || !Array.isArray(data.announcements)) return;
+    const currentList = data.announcements as NotificationItem[];
+
+    if (!hasHydratedInitialListRef.current) {
+      // LẦN TẢI ĐẦU TIÊN (HOẶC VỪA ĐĂNG NHẬP / RE-FETCH BAN ĐẦU):
+      // Ghi nhận toàn bộ thông báo hiện có vào chimedIdsRef và localStorage
+      // KHÔNG phát chuông cho các thông báo cũ đã tồn tại trước đó!
+      hasHydratedInitialListRef.current = true;
+      const allCurrentIds = currentList.map((a) => a.id);
+      allCurrentIds.forEach((id) => chimedIdsRef.current.add(id));
+      recordChimedAnnouncementIds(allCurrentIds, portalRole, userIdentifier);
+      return;
+    }
+
+    // CÁC LẦN CẬP NHẬT TIẾP THEO (POLLING HOẶC SWR REVALIDATE):
+    // Chỉ phát chuông khi có thông báo THỰC SỰ MỚI:
+    // 1. Chưa đọc (!item.is_read)
+    // 2. Chưa từng phát chuông cho user/role này (!chimedIdsRef.current.has(item.id))
+    const genuinelyNewUnread = currentList.filter(
+      (item) => !item.is_read && !chimedIdsRef.current.has(item.id)
+    );
+
+    if (genuinelyNewUnread.length > 0) {
+      const newIds = genuinelyNewUnread.map((a) => a.id);
+      newIds.forEach((id) => chimedIdsRef.current.add(id));
+      recordChimedAnnouncementIds(newIds, portalRole, userIdentifier);
       playNotificationSound('/sounds/SM1.wav');
     }
-    prevUnreadRef.current = unreadCount;
-  }, [unreadCount]);
+  }, [data, portalRole, userIdentifier]);
 
   // Sắp xếp: Tin chưa đọc lên trước, sau đó theo thời gian mới nhất
   const sortedNotifications = useMemo(() => {
@@ -285,8 +320,15 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
       {
         table: 'announcements',
         event: 'INSERT',
-        onEvent: () => {
-          playNotificationSound('/sounds/SM1.wav');
+        onEvent: (payload: any) => {
+          const record = payload?.new as NotificationItem | undefined;
+          if (record?.id) {
+            if (!chimedIdsRef.current.has(record.id)) {
+              chimedIdsRef.current.add(record.id);
+              recordChimedAnnouncementIds([record.id], portalRole, userIdentifier);
+              playNotificationSound('/sounds/SM1.wav');
+            }
+          }
           mutate();
         },
       },
@@ -354,39 +396,10 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   }, [isOpen]);
 
   // 4. Xử lý khi bấm xem chi tiết thông báo
-  const handleItemClick = async (announcement: NotificationItem) => {
-    // Nếu chưa đọc, cập nhật lạc quan (Optimistic UI) và gọi API PATCH
-    if (!announcement.is_read) {
-      await mutate(
-        (prev: any) => {
-          if (!prev?.announcements) return prev;
-          const updated = prev.announcements.map((a: NotificationItem) =>
-            a.id === announcement.id ? { ...a, is_read: true } : a
-          );
-          return {
-            ...prev,
-            announcements: updated,
-            unread_count: Math.max(0, (prev.unread_count ?? updated.filter((x: any) => !x.is_read).length) - 1),
-          };
-        },
-        { revalidate: false }
-      );
-
-      try {
-        await fetch(`/api/announcements/${announcement.id}/read`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(() => {});
-        await fetch('/api/announcements', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ announcement_id: announcement.id }),
-        });
-      } catch (err) {
-        console.warn('[NotificationBell] Mark read warning:', err);
-      }
-    }
-
+  const handleItemClick = (announcement: NotificationItem) => {
+    // Đóng dropdown và chuyển hướng đến trang chi tiết thông báo.
+    // Việc ghi nhận đã đọc sẽ do bộ đếm 3 giây xem thực tế (useAutoMarkReadTimer)
+    // trên màn hình chi tiết thực thi khi người dùng xem liên tục >= 3s.
     setIsOpen(false);
     const detailUrl =
       portalRole === 'TEACHER'

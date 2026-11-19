@@ -797,10 +797,10 @@ export function ParentPortalView() {
               SM
             </div>
             <div className="flex-1 min-w-0 overflow-hidden">
-              <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate line-clamp-1">
+              <h1 className="font-bold text-white text-sm sm:text-base leading-tight truncate line-clamp-1">
                 {t('parent.app_title')}
               </h1>
-              <p className="text-[11px] text-sky-100 font-medium leading-tight truncate line-clamp-1">
+              <p className="text-xs text-sky-100 font-medium leading-tight truncate line-clamp-1">
                 {t('common.school_name')}
               </p>
             </div>
@@ -820,7 +820,7 @@ export function ParentPortalView() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24 overflow-x-hidden min-w-0 w-full">
+    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
       {/* Mobile Top Header — Calm & Warm Child-Friendly Teal */}
       <header className="px-3.5 py-2.5 bg-teal-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-xs border-b border-teal-800/20 overflow-x-hidden min-w-0">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -854,11 +854,12 @@ export function ParentPortalView() {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <RoleSwitcher currentPortal="PARENT" />
           <NotificationBell portalRole="PARENT" />
           <button
             type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition cursor-pointer shadow-2xs"
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition cursor-pointer shadow-2xs shrink-0"
             title="Cài đặt & Hồ sơ"
             aria-label="Mở cài đặt & hồ sơ"
           >
@@ -954,7 +955,7 @@ export function ParentPortalView() {
           <button
             type="button"
             onClick={() => setShowAbsenceModal(true)}
-            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs shrink-0 cursor-pointer transition whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[44px] rounded-xl shadow-xs shrink-0 cursor-pointer transition whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
             <span>Nghỉ phép</span>
@@ -963,7 +964,7 @@ export function ParentPortalView() {
       )}
 
       {/* Modern 4-Item Sub-Navigation Rounded Pill Tabs — Shortened Labels & 44px Touch Targets */}
-      <div className="mx-3.5 mt-3 p-1.5 bg-slate-200/80 rounded-2xl grid grid-cols-4 gap-1 text-[13px] font-semibold overflow-x-hidden min-w-0">
+      <div className="mx-3.5 mt-3 p-1.5 bg-slate-200/80 rounded-2xl grid grid-cols-4 gap-1 text-[13px] sm:text-sm font-semibold overflow-x-hidden min-w-0">
         <button
           type="button"
           onClick={() => setActiveNav('TIMELINE')}
@@ -1024,10 +1025,10 @@ export function ParentPortalView() {
 
       {/* --- SECTION 2: CARE TIMELINE FEED & WIDGETS --- */}
       {activeNav === 'TIMELINE' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
           <div className="bg-white border border-amber-100/90 rounded-2xl p-4 space-y-3.5 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
             <div className="flex items-center justify-between border-b border-amber-100/60 pb-3">
-              <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2">
+              <h3 className="font-bold text-teal-950 text-base sm:text-lg flex items-center gap-2">
                 <Clock className="w-4 h-4 text-teal-600 shrink-0" />
                 <span>{t('parent.timeline_title')}</span>
               </h3>
@@ -1035,14 +1036,14 @@ export function ParentPortalView() {
 
             {/* Seamless Timeline: Automatically collapse / hide empty intervals */}
             {selectedChildTimelineEvents.length === 0 ? (
-              <div className="py-2.5 px-3 bg-teal-50/50 border border-teal-100/80 rounded-xl flex items-center justify-between gap-2 text-xs">
+              <div className="py-2.5 px-3 bg-teal-50/50 border border-teal-100/80 rounded-xl flex items-center justify-between gap-2 text-xs sm:text-[13px]">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
-                  <p className="text-xs font-semibold text-slate-700 truncate">
+                  <p className="font-semibold text-slate-700 truncate">
                     Chưa có hoạt động mới ghi nhận hôm nay
                   </p>
                 </div>
-                <span className="text-xs text-teal-700 font-bold shrink-0">Tự động cập nhật</span>
+                <span className="text-teal-700 font-bold shrink-0 whitespace-nowrap">Tự động cập nhật</span>
               </div>
             ) : (
               <div className="space-y-4 relative pl-5 border-l-2 border-teal-200 text-xs">
@@ -1068,8 +1069,8 @@ export function ParentPortalView() {
                     <span className="font-mono text-xs text-slate-400 font-bold block">
                       {ev.time}
                     </span>
-                    <h4 className="font-bold text-slate-900 text-sm mt-0.5 leading-snug">{ev.title}</h4>
-                    <p className="text-slate-600 text-[13px] mt-0.5 leading-snug line-clamp-2">{ev.subtitle}</p>
+                    <h4 className="font-bold text-slate-900 text-[14px] sm:text-base mt-0.5 leading-snug">{ev.title}</h4>
+                    <p className="text-slate-600 text-[13px] sm:text-sm mt-0.5 leading-snug line-clamp-2">{ev.subtitle}</p>
                   </div>
                 ))}
               </div>
@@ -1089,11 +1090,11 @@ export function ParentPortalView() {
             className="block p-4 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border border-emerald-200/80 rounded-2xl shadow-xs hover:shadow-sm transition-all text-xs overflow-x-hidden min-w-0"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm sm:text-base">
+              <div className="flex items-center gap-2 text-emerald-950 font-bold text-base sm:text-lg min-w-0">
                 <Activity className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span className="truncate">Sổ theo dõi thể trạng {latestHealth?.term ? `(${latestHealth.term})` : ''}</span>
               </div>
-              <span className="text-xs text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
+              <span className="text-xs sm:text-[13px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
                 Chi tiết <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -1116,14 +1117,14 @@ export function ParentPortalView() {
                 </div>
                 {healthDisplay && (
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
+                    className={`px-3 py-1 rounded-full text-xs sm:text-[13px] font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
                   >
                     {healthDisplay.text}
                   </span>
                 )}
               </div>
             ) : (
-              <p className="text-slate-500 text-xs italic bg-white/70 p-3 rounded-xl border border-dashed border-emerald-200/60 leading-relaxed">
+              <p className="text-slate-500 text-xs sm:text-[13px] italic bg-white/70 p-3 rounded-xl border border-dashed border-emerald-200/60 leading-relaxed">
                 Nhà trường đang cập nhật số liệu khám sức khỏe đợt này
               </p>
             )}
@@ -1133,10 +1134,10 @@ export function ParentPortalView() {
 
       {/* --- SECTION 3: SMART ABSENCE REQUEST SYSTEM (Postgres-backed) --- */}
       {activeNav === 'ABSENCE' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
           <div className="flex items-center justify-between bg-white border border-amber-900/10 p-4 rounded-2xl shadow-xs text-slate-800 overflow-x-hidden min-w-0 gap-3">
             <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">{t('parent.tab_absence')}</h3>
+              <h3 className="font-bold text-slate-900 text-base sm:text-lg truncate">{t('parent.tab_absence')}</h3>
               <p className="text-xs sm:text-[13px] text-slate-500 mt-0.5 truncate">
                 {t('common.child')}:{' '}
                 <strong className="text-teal-700">{selectedChild.full_name}</strong>
@@ -1145,7 +1146,7 @@ export function ParentPortalView() {
 
             <button
               onClick={() => setShowAbsenceModal(true)}
-              className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap"
+              className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[44px] rounded-xl shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               <span>{t('parent.btn_absence')}</span>
@@ -1170,22 +1171,22 @@ export function ParentPortalView() {
 
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {req.is_fee_credited ? (
-                        <span className="text-xs px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold">
+                        <span className="text-xs sm:text-[13px] px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold">
                           {t('parent.valid_credit_badge')}
                         </span>
                       ) : (
-                        <span className="text-xs px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold">
+                        <span className="text-xs sm:text-[13px] px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold">
                           {t('parent.late_credit_badge')}
                         </span>
                       )}
 
                       {req.status === 'APPROVED' && (
-                        <span className="text-xs px-2.5 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-full font-bold">
+                        <span className="text-xs sm:text-[13px] px-2.5 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-full font-bold">
                           Cô đã duyệt
                         </span>
                       )}
                       {req.status === 'REJECTED' && (
-                        <span className="text-xs px-2.5 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-full font-bold">
+                        <span className="text-xs sm:text-[13px] px-2.5 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-full font-bold">
                           Từ chối
                         </span>
                       )}
@@ -1204,22 +1205,22 @@ export function ParentPortalView() {
 
       {/* --- SECTION 4: FEE / ABSENCE RECONCILIATION --- */}
       {activeNav === 'RECONCILIATION' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
           <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-3.5 shadow-xs text-xs overflow-x-hidden min-w-0">
-            <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2">
+            <h3 className="font-bold text-teal-950 text-base sm:text-lg flex items-center gap-2">
               <FileText className="w-4 h-4 text-teal-600 shrink-0" />
               <span>Đối soát tiền ăn bán trú ({selectedChild.full_name})</span>
             </h3>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl">
-                <span className="text-xs text-emerald-800 font-semibold block">Nghỉ hợp lệ (&lt;08:30)</span>
-                <strong className="text-xl font-mono text-emerald-900 font-bold block mt-1">
+                <span className="text-xs sm:text-[13px] text-emerald-800 font-semibold block">Nghỉ hợp lệ (&lt;08:30)</span>
+                <strong className="text-xl sm:text-2xl font-mono text-emerald-900 font-bold block mt-1">
                   {childAbsences.filter((a) => a.is_fee_credited).length} đơn
                 </strong>
               </div>
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="text-xs text-slate-700 font-semibold block">Báo muộn (&ge;08:30)</span>
-                <strong className="text-xl font-mono text-slate-900 font-bold block mt-1">
+                <span className="text-xs sm:text-[13px] text-slate-700 font-semibold block">Báo muộn (&ge;08:30)</span>
+                <strong className="text-xl sm:text-2xl font-mono text-slate-900 font-bold block mt-1">
                   {childAbsences.filter((a) => !a.is_fee_credited).length} đơn
                 </strong>
               </div>
@@ -1233,15 +1234,15 @@ export function ParentPortalView() {
 
       {/* --- SECTION 5: AUTHORIZED PICKUPS SYSTEM --- */}
       {activeNav === 'PICKUPS' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
           <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-4 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2 flex-wrap">
               <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2 truncate">
+                <h3 className="font-bold text-teal-950 text-base sm:text-lg flex items-center gap-2 truncate">
                   <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>Người Đón Được Ủy Quyền</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                <p className="text-xs sm:text-[13px] text-slate-500 mt-0.5 truncate">
                   Xác thực danh tính người thân đón trẻ khi tan trường
                 </p>
               </div>
@@ -1249,7 +1250,7 @@ export function ParentPortalView() {
               <button
                 type="button"
                 onClick={handleOpenAddPickupModal}
-                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[44px] rounded-xl shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
                 <span>Thêm người đón</span>
@@ -1267,17 +1268,17 @@ export function ParentPortalView() {
                   <UserCheck className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5 max-w-sm mx-auto">
-                  <h4 className="font-bold text-slate-800 text-sm sm:text-base">
+                  <h4 className="font-bold text-slate-800 text-base sm:text-lg">
                     Chưa có người đón được ủy quyền
                   </h4>
-                  <p className="text-xs sm:text-[13px] text-slate-500 leading-relaxed">
+                  <p className="text-[13px] sm:text-sm text-slate-500 leading-relaxed">
                     Bố/mẹ có thể thêm người nhà (ông, bà, người đưa đón) để nhà trường đối chiếu khi trả trẻ.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleOpenAddPickupModal}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs cursor-pointer min-h-[40px]"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs cursor-pointer min-h-[44px]"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Thêm người đón ủy quyền</span>
@@ -1318,23 +1319,23 @@ export function ParentPortalView() {
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <span className="px-2.5 py-0.5 bg-white text-slate-800 font-bold text-xs rounded-full border border-slate-200">
+                            <span className="px-2.5 py-0.5 bg-white text-slate-800 font-bold text-xs sm:text-[13px] rounded-full border border-slate-200">
                               {pickup.relationship}
                             </span>
                             {isActive ? (
-                              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-300 flex items-center gap-1">
+                              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs sm:text-[13px] font-bold rounded-full border border-emerald-300 flex items-center gap-1">
                                 <Check className="w-3.5 h-3.5 text-emerald-700" /> Đang kích hoạt
                               </span>
                             ) : (
-                              <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-full border border-slate-300 flex items-center gap-1">
+                              <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs sm:text-[13px] font-bold rounded-full border border-slate-300 flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5 text-slate-500" /> Tạm ngưng đón
                               </span>
                             )}
                           </div>
-                          <h4 className="font-bold text-slate-900 text-sm sm:text-base truncate">{pickup.name}</h4>
+                          <h4 className="font-bold text-slate-900 text-base sm:text-lg truncate">{pickup.name}</h4>
                           <a
                             href={`tel:${pickup.phone}`}
-                            className="text-teal-700 hover:text-teal-900 font-mono text-xs sm:text-[13px] inline-flex items-center gap-1 hover:underline mt-0.5"
+                            className="text-teal-700 hover:text-teal-900 font-mono text-xs sm:text-[13px] inline-flex items-center gap-1 hover:underline mt-0.5 font-semibold"
                           >
                             <Phone className="w-3.5 h-3.5" />
                             <span>{pickup.phone}</span>
@@ -1346,7 +1347,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleTogglePickupActive(pickup)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition min-h-[36px] ${
+                          className={`px-3 py-1.5 rounded-xl text-xs sm:text-[13px] font-bold flex items-center gap-1 cursor-pointer transition min-h-[40px] ${
                             isActive
                               ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
                               : 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300'
@@ -1359,7 +1360,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleOpenEditPickupModal(pickup)}
-                          className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition"
+                          className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-xl cursor-pointer transition"
                           title="Sửa thông tin"
                         >
                           <Edit3 className="w-4 h-4" />
@@ -1368,7 +1369,7 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleParentDeletePickup(pickup.id, pickup.name)}
-                          className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition"
+                          className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer transition"
                           title="Xóa người đón"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1383,7 +1384,7 @@ export function ParentPortalView() {
         </div>
       )}
       {/* FOOTER HOTLINE — Sleek Floating Bar */}
-      <footer className="fixed bottom-0 max-w-md w-full bg-white/95 backdrop-blur-md border-t border-amber-900/10 p-2.5 z-30 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+      <footer className="fixed bottom-0 left-0 right-0 max-w-md mx-auto w-full bg-white/95 backdrop-blur-md border-t border-amber-900/10 p-2.5 z-30 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
         <a
           href="tel:0909123456"
           className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all text-xs"
@@ -1491,7 +1492,7 @@ export function ParentPortalView() {
 
             <form onSubmit={handleSavePickupSubmit} className="space-y-3.5 text-xs">
               <div>
-                <span className="text-[11px] text-slate-500 block">
+                <span className="text-xs sm:text-[13px] text-slate-500 block">
                   Bé được đón: <strong className="text-teal-700">{selectedChild?.full_name}</strong>
                 </span>
               </div>
@@ -1523,14 +1524,14 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="text-[11px] text-teal-700 hover:underline font-semibold cursor-pointer"
+                          className="text-xs text-teal-700 hover:underline font-semibold cursor-pointer"
                         >
                           Đổi ảnh khác
                         </button>
                         <button
                           type="button"
                           onClick={() => setPickupFormAvatar('')}
-                          className="text-[11px] text-rose-600 hover:underline cursor-pointer"
+                          className="text-xs text-rose-600 hover:underline cursor-pointer"
                         >
                           Xóa ảnh
                         </button>
@@ -1650,8 +1651,8 @@ export function ParentPortalView() {
                   <User className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm leading-tight">Hồ sơ & Tiện ích</h3>
-                  <p className="text-[11px] text-teal-100 font-medium">Cổng thông tin Phụ huynh</p>
+                  <h3 className="font-bold text-sm sm:text-base leading-tight">Hồ sơ & Tiện ích</h3>
+                  <p className="text-xs text-teal-100 font-medium">Cổng thông tin Phụ huynh</p>
                 </div>
               </div>
 
@@ -1681,14 +1682,14 @@ export function ParentPortalView() {
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-bold text-slate-900 text-sm truncate">{fullName || 'Phụ huynh học sinh'}</h4>
+                  <h4 className="font-bold text-slate-900 text-sm sm:text-base truncate">{fullName || 'Phụ huynh học sinh'}</h4>
                   <p className="text-xs text-teal-700 font-medium truncate">Tài khoản Phụ huynh</p>
                   {parentChildren.length > 0 && (
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       {parentChildren.map((child) => (
                         <span
                           key={child.id}
-                          className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-teal-200 text-teal-800"
+                          className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white border border-teal-200 text-teal-800"
                         >
                           Bé {child.full_name} ({child.class_name})
                         </span>
@@ -1700,34 +1701,34 @@ export function ParentPortalView() {
 
               {/* Role Switcher Section */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
                   Chuyển đổi vai trò & Cổng
                 </span>
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700">Vai trò hiện tại:</span>
+                  <span className="text-xs sm:text-[13px] font-semibold text-slate-700">Vai trò hiện tại:</span>
                   <RoleSwitcher currentPortal="PARENT" />
                 </div>
               </div>
 
               {/* Language Switcher Section */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
                   Ngôn ngữ hiển thị
                 </span>
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700">Ngôn ngữ:</span>
+                  <span className="text-xs sm:text-[13px] font-semibold text-slate-700">Ngôn ngữ:</span>
                   <LanguageSwitcher compact={false} />
                 </div>
               </div>
 
               {/* School Support Hotline */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
                   Liên hệ nhà trường
                 </span>
                 <a
                   href="tel:0909123456"
-                  className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 rounded-2xl flex items-center justify-between transition cursor-pointer text-xs"
+                  className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 rounded-2xl flex items-center justify-between transition cursor-pointer text-xs sm:text-[13px]"
                 >
                   <div className="flex items-center gap-2 text-amber-900 font-semibold">
                     <Phone className="w-4 h-4 text-amber-700" />
@@ -1745,7 +1746,7 @@ export function ParentPortalView() {
                     setIsSettingsOpen(false);
                     logout();
                   }}
-                  className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer min-h-[44px]"
                 >
                   <LogOut className="w-4 h-4 text-rose-600" />
                   <span>Đăng xuất khỏi hệ thống</span>
@@ -1753,7 +1754,7 @@ export function ParentPortalView() {
               </div>
 
               {/* System Branding Info */}
-              <div className="text-center pt-1 text-[11px] text-slate-400">
+              <div className="text-center pt-1 text-xs text-slate-400">
                 <span>Hệ thống Quản lý Mầm non Sương Mai • v2.0</span>
               </div>
             </div>

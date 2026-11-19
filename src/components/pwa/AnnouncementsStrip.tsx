@@ -14,7 +14,11 @@ import {
 } from 'lucide-react';
 import { MobilePortalRole, useActiveRole } from '@/components/auth/ActiveRoleContext';
 import { useRoleRealtimeSync } from '@/lib/hooks/useRoleRealtimeSync';
-import { playNotificationSound } from '@/lib/sound/notificationSound';
+import {
+  playNotificationSound,
+  getChimedAnnouncementIds,
+  recordChimedAnnouncementIds,
+} from '@/lib/sound/notificationSound';
 
 interface AnnouncementItem {
   id: string;
@@ -65,8 +69,9 @@ const formatDate = (dateStr?: string) => {
  * so Teacher and Parent reads/feeds stay completely isolated.
  */
 export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRole }) {
-  const { activeRole, serverSyncedRole, waitForRoleSync, pushStatus, enableNotifications } =
+  const { activeRole, serverSyncedRole, profileId, email, waitForRoleSync, pushStatus, enableNotifications } =
     useActiveRole();
+  const userIdentifier = profileId || email || 'default';
   const [expanded, setExpanded] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
@@ -92,7 +97,14 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
   // Realtime + Browser Notification API fallback when VAPID is absent
   useEffect(() => {
     announcements.forEach((a) => seenIdsRef.current.add(a.id));
-  }, [announcements]);
+    if (announcements.length > 0) {
+      recordChimedAnnouncementIds(
+        announcements.map((a) => a.id),
+        portalRole,
+        userIdentifier
+      );
+    }
+  }, [announcements, portalRole, userIdentifier]);
 
   useRoleRealtimeSync({
     channelName: `announcements-${portalRole}`,
@@ -111,7 +123,11 @@ export function AnnouncementsStrip({ portalRole }: { portalRole: MobilePortalRol
           if (!record) return;
           mutate();
 
-          playNotificationSound('/sounds/SM1.wav');
+          const chimed = getChimedAnnouncementIds(portalRole, userIdentifier);
+          if (!chimed.has(record.id)) {
+            recordChimedAnnouncementIds([record.id], portalRole, userIdentifier);
+            playNotificationSound('/sounds/SM1.wav');
+          }
 
           if (
             !seenIdsRef.current.has(record.id) &&
