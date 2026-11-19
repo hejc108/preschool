@@ -278,19 +278,19 @@ function AuthContent() {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-sky-200/50 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-72 h-72 bg-cyan-100/60 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-md w-full bg-white border border-slate-200/80 rounded-convent p-6 sm:p-8 shadow-xl relative z-10 text-slate-800">
+      <div className="max-w-md w-full bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-8 shadow-xl relative z-10 text-slate-800">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-sky-50 border border-sky-200 rounded-convent mb-4 text-sky-600 shadow-sm">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 border border-red-200 rounded-2xl mb-4 text-primary-700 shadow-sm">
             <Sparkles className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-sky-700 tracking-tight">{t('auth.title')}</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{t('auth.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">{t('auth.subtitle')}</p>
         </div>
 
         {/* Error Notification Alert */}
         {authError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-convent text-red-700 text-sm flex items-start gap-3 shadow-sm">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm flex items-start gap-3 shadow-sm">
             <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold text-red-800">Đăng nhập không thành công</p>
@@ -327,7 +327,7 @@ function AuthContent() {
         </button>
 
         {/* Instructional Note */}
-        <p className="text-[12px] text-slate-500 text-center mt-5 px-2 leading-relaxed">
+        <p className="text-xs sm:text-[13px] text-slate-500 text-center mt-5 px-2 leading-relaxed">
           Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
         </p>
       </div>
