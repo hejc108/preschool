@@ -8,6 +8,7 @@ import {
   getVapidPublicKey,
   hasVapidConfig,
   savePushSubscription,
+  readLocalPushSubscriptionsStore,
 } from '@/lib/notifications/pushPayload';
 
 export const dynamic = 'force-dynamic';
@@ -79,6 +80,7 @@ export async function GET(request: Request) {
         vapid_public_key: getVapidPublicKey(),
         notifications: mapped,
         unread_count: mapped.filter((n) => !n.is_read).length,
+        subscription_count: readLocalPushSubscriptionsStore().length,
       },
       { headers: NO_CACHE_HEADERS }
     );
@@ -102,13 +104,6 @@ export async function POST(request: Request) {
     ]);
     if ('response' in auth) return auth.response;
     const { ctx } = auth;
-
-    if (ctx.profileId.startsWith('bootstrap-')) {
-      return NextResponse.json(
-        { success: false, error: 'Tài khoản hệ thống không hỗ trợ đăng ký push.' },
-        { status: 400, headers: NO_CACHE_HEADERS }
-      );
-    }
 
     const body = await request.json().catch(() => ({}));
 
@@ -138,6 +133,7 @@ export async function POST(request: Request) {
           auth: directSub.keys.auth,
           activeRolePreference: ctx.activeRole,
           userAgent: request.headers.get('user-agent'),
+          platform: body.platform,
           ctx,
         });
 
@@ -150,6 +146,7 @@ export async function POST(request: Request) {
           {
             success: directRes.success,
             mode: 'direct_web_push',
+            total_registered: readLocalPushSubscriptionsStore().length,
             test_result: directRes,
             message: directRes.success
               ? 'Đã phát tín hiệu chuông trực tiếp tới thiết bị qua Web Push!'
@@ -164,7 +161,14 @@ export async function POST(request: Request) {
         payload: testPayload,
       });
       return NextResponse.json(
-        { success: true, test_result: pushRes, message: 'Đã phát tín hiệu chuông thử nghiệm tới thiết bị.' },
+        {
+          success: pushRes.subscriptionCount > 0,
+          total_registered: readLocalPushSubscriptionsStore().length,
+          test_result: pushRes,
+          message: pushRes.subscriptionCount > 0
+            ? 'Đã phát tín hiệu chuông thử nghiệm tới thiết bị.'
+            : 'Chưa có thiết bị nào đăng ký nhận chuông. Vui lòng bấm "Bật ngay" trên chuông thông báo của điện thoại để đăng ký thiết bị.',
+        },
         { headers: NO_CACHE_HEADERS }
       );
     }
@@ -180,6 +184,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const platform = body.platform || (request.headers.get('user-agent')?.includes('iPhone') ? 'ios' : 'android');
+
     const { data, error } = await savePushSubscription({
       userId: ctx.profileId,
       endpoint,
@@ -187,6 +193,7 @@ export async function POST(request: Request) {
       auth: authKey,
       activeRolePreference: ctx.activeRole,
       userAgent: request.headers.get('user-agent'),
+      platform,
       ctx,
     });
 
@@ -201,6 +208,7 @@ export async function POST(request: Request) {
       {
         success: true,
         subscription: data,
+        total_registered: readLocalPushSubscriptionsStore().length,
         vapid_enabled: hasVapidConfig(),
       },
       { headers: NO_CACHE_HEADERS }

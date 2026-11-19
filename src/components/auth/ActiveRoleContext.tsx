@@ -586,6 +586,11 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
 
         const jsonSub = subscription.toJSON();
         if (jsonSub.endpoint && jsonSub.keys?.p256dh && jsonSub.keys?.auth) {
+          const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+          const isIos = /iPhone|iPad|iPod/i.test(ua);
+          const isAndroid = /Android/i.test(ua);
+          const platform = isIos ? 'ios' : isAndroid ? 'android' : 'desktop';
+
           await fetch('/api/notifications', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -595,6 +600,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
                 p256dh: jsonSub.keys.p256dh,
                 auth: jsonSub.keys.auth,
               },
+              platform,
             }),
           });
         }
@@ -649,8 +655,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       !('Notification' in window) ||
       !('serviceWorker' in navigator) ||
       approvalStatus !== 'ACTIVE' ||
-      !profileId ||
-      profileId.startsWith('bootstrap-')
+      !profileId
     ) {
       return;
     }

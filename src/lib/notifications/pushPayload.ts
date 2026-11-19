@@ -1,4 +1,6 @@
 import * as webpush from 'web-push';
+import fs from 'fs';
+import path from 'path';
 import { NotificationChannel, PushNotificationPayload } from '@/lib/types/schema';
 import { executeWithAdminFallback } from '@/lib/supabase/server';
 import { executeWithContextFallback, SessionContext } from '@/lib/auth/sessionContext';
@@ -64,12 +66,69 @@ export interface PushSubRecord {
   auth: string;
   active_role_preference?: string | null;
   user_agent?: string | null;
+  platform?: 'ios' | 'android' | 'desktop' | string | null;
   updated_at: string;
 }
 
-// Bộ đệm lưu trữ dự phòng in-memory giúp bảo toàn đăng ký Web Push
-// ngay cả khi database Supabase gặp phân quyền RLS hoặc độ trễ mạng.
+// -----------------------------------------------------------------------------
+// Kho Lưu Trữ Đĩa Cục Bộ Bền Vững (Persistent Local Disk Store)
+// Bảo toàn 100% các thiết bị iPhone & Android đã đăng ký Web Push
+// ngay cả khi máy chủ khởi động lại hoặc Supabase gặp phân quyền RLS.
+// -----------------------------------------------------------------------------
+declare global {
+  // eslint-disable-next-line no-var
+  var __SUONGMAI_PUSH_SUBS_STORE__: PushSubRecord[] | undefined;
+}
+
 const LOCAL_PUSH_SUBSCRIPTIONS = new Map<string, PushSubRecord>();
+
+function getPushSubStoreFilePaths(): string[] {
+  return [
+    path.resolve(process.cwd(), 'src/lib/data/push_subscriptions_store.json'),
+    path.resolve('/tmp', 'suongmai_push_subscriptions_store.json'),
+  ];
+}
+
+export function readLocalPushSubscriptionsStore(): PushSubRecord[] {
+  if (globalThis.__SUONGMAI_PUSH_SUBS_STORE__ && globalThis.__SUONGMAI_PUSH_SUBS_STORE__.length > 0) {
+    return globalThis.__SUONGMAI_PUSH_SUBS_STORE__;
+  }
+
+  const map = new Map<string, PushSubRecord>();
+
+  for (const filePath of getPushSubStoreFilePaths()) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((item) => {
+            if (item && item.endpoint) {
+              map.set(item.endpoint, item);
+            }
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  const result = Array.from(map.values());
+  globalThis.__SUONGMAI_PUSH_SUBS_STORE__ = result;
+  return result;
+}
+
+export function writeLocalPushSubscriptionsStore(items: PushSubRecord[]): void {
+  globalThis.__SUONGMAI_PUSH_SUBS_STORE__ = items;
+  for (const filePath of getPushSubStoreFilePaths()) {
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, JSON.stringify(items, null, 2), 'utf-8');
+    } catch (_) {}
+  }
+}
 
 export async function savePushSubscription(params: {
   userId: string;
@@ -78,45 +137,67 @@ export async function savePushSubscription(params: {
   auth: string;
   activeRolePreference?: string | null;
   userAgent?: string | null;
+  platform?: 'ios' | 'android' | 'desktop' | string | null;
   ctx?: SessionContext;
 }) {
-  // 1. Luôn lưu vào bộ nhớ dự phòng an toàn
-  const localRecord: PushSubRecord = {
-    id: `local-sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    user_id: params.userId,
+  const current = readLocalPushSubscriptionsStore();
+  const existingIdx = current.findIndex((x) => x.endpoint === params.endpoint);
+  const now = new Date().toISOString();
+
+  let detectedPlatform = params.platform || 'unknown';
+  if (detectedPlatform === 'unknown' && params.userAgent) {
+    const ua = params.userAgent.toLowerCase();
+    if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) detectedPlatform = 'ios';
+    else if (ua.includes('android')) detectedPlatform = 'android';
+    else detectedPlatform = 'desktop';
+  }
+
+  const record: PushSubRecord = {
+    id: existingIdx >= 0 ? current[existingIdx].id : `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    user_id: params.userId || 'anonymous-device',
     endpoint: params.endpoint,
     p256dh: params.p256dh,
     auth: params.auth,
     active_role_preference: params.activeRolePreference || null,
     user_agent: params.userAgent || null,
-    updated_at: new Date().toISOString(),
+    platform: detectedPlatform,
+    updated_at: now,
   };
-  LOCAL_PUSH_SUBSCRIPTIONS.set(params.endpoint, localRecord);
 
-  // 2. Đồng bộ xuống Supabase
-  const query = async (sb: any) =>
-    await sb
-      .from('push_subscriptions')
-      .upsert(
-        {
-          user_id: params.userId,
-          endpoint: params.endpoint,
-          p256dh: params.p256dh,
-          auth: params.auth,
-          active_role_preference: params.activeRolePreference || null,
-          user_agent: params.userAgent || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'endpoint' }
-      )
-      .select()
-      .maybeSingle();
+  if (existingIdx >= 0) {
+    current[existingIdx] = { ...current[existingIdx], ...record };
+  } else {
+    current.push(record);
+  }
+  writeLocalPushSubscriptionsStore(current);
+  LOCAL_PUSH_SUBSCRIPTIONS.set(params.endpoint, record);
 
+  console.log(`[pushPayload] Đã lưu thiết bị ${record.user_id} (${record.platform}). Tổng số thiết bị đăng ký: ${current.length}`);
+
+  // 2. Thử đồng bộ xuống Supabase Postgres nếu có quyền
   try {
+    const query = async (sb: any) =>
+      await sb
+        .from('push_subscriptions')
+        .upsert(
+          {
+            user_id: params.userId,
+            endpoint: params.endpoint,
+            p256dh: params.p256dh,
+            auth: params.auth,
+            active_role_preference: params.activeRolePreference || null,
+            user_agent: params.userAgent || null,
+            updated_at: now,
+          },
+          { onConflict: 'endpoint' }
+        )
+        .select()
+        .maybeSingle();
+
     const res = params.ctx ? await executeWithContextFallback(params.ctx, query) : await executeWithAdminFallback(query);
-    return res.data ? res : { data: localRecord, error: null };
+    return res.data ? res : { data: record, error: null };
   } catch {
-    return { data: localRecord, error: null };
+    return { data: record, error: null };
   }
 }
 
@@ -145,15 +226,22 @@ export async function dispatchDirectWebPush(params: {
     );
   } catch (_) {}
 
+  const soundChoice = params.payload.sound || '/sounds/SM1.wav';
+  const uniqueTag = `suongmai-alert-${params.payload.id || Date.now()}`;
+  const targetUrl = params.payload.url || (params.payload.notification_channel === 'TEACHER' ? '/teacher' : '/parent');
+
   const payloadString = JSON.stringify({
     title: params.payload.title,
     body: params.payload.body,
     notification_channel: params.payload.notification_channel,
-    target_url: params.payload.url,
+    target_url: targetUrl,
+    url: targetUrl,
     entity_id: params.payload.id,
+    id: params.payload.id,
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
-    sound: params.payload.sound || '/sounds/SM1.wav',
+    sound: soundChoice,
+    tag: uniqueTag,
     silent: false,
     requireInteraction: true,
     timestamp: Date.now(),
@@ -177,17 +265,18 @@ export async function dispatchDirectWebPush(params: {
         },
       }
     );
+    console.log(`[dispatchDirectWebPush] Direct Web Push sent (${res.statusCode}) to ${params.subscription.endpoint.substring(0, 45)}...`);
     return { success: true, statusCode: res.statusCode };
   } catch (err: any) {
     console.error('[dispatchDirectWebPush] error:', err?.message || err);
-    return { success: false, error: err?.message || String(err) };
+    return { success: false, error: err?.message || 'Lỗi gửi Web Push trực tiếp', statusCode: err?.statusCode };
   }
 }
 
 /**
- * Điều phối thông báo đẩy chuẩn Web Push API (RFC 8291 / RFC 8292).
- * Đảm bảo kích hoạt hiển thị và phát âm thanh chuông "Ting" ngay cả khi
- * thiết bị ở chế độ màn hình khóa / tắt màn hình (Locked screen / Background).
+ * Gửi thông báo đẩy diện rộng qua Web Push chuẩn RFC 8291 / 8292
+ * Thiết lập Urgency: 'high' và cấu hình chuông báo / rung haptic để
+ * đánh thức thiết bị ở chế độ màn hình khóa / tắt màn hình (iOS PWA & Android One UI).
  */
 export async function dispatchContextPushNotification(params: {
   targetProfileIds?: string[];
@@ -198,69 +287,52 @@ export async function dispatchContextPushNotification(params: {
   successCount?: number;
   payload: PushNotificationPayload;
 }> {
-  let subscriptions: any[] = [];
-
-  try {
-    if (params.targetProfileIds && params.targetProfileIds.length > 0) {
-      const { data } = await executeWithAdminFallback(async (sb) =>
-        await sb
-          .from('push_subscriptions')
-          .select('id, user_id, endpoint, p256dh, auth, active_role_preference')
-          .in('user_id', params.targetProfileIds!)
-      );
-      subscriptions = Array.isArray(data) ? data : [];
-    } else {
-      // Gửi thông báo diện rộng theo kênh
-      const channel = params.payload.notification_channel;
-      const { data } = await executeWithAdminFallback(async (sb) => {
-        let query = sb
-          .from('push_subscriptions')
-          .select('id, user_id, endpoint, p256dh, auth, active_role_preference');
-        if (channel === 'TEACHER') {
-          query = query.in('active_role_preference', ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN']);
-        } else if (channel === 'PARENT') {
-          query = query.or('active_role_preference.eq.PARENT,active_role_preference.is.null');
-        } else {
-          query = query.not('endpoint', 'is', null);
-        }
-        return await query;
-      });
-      subscriptions = Array.isArray(data) ? data : [];
-    }
-  } catch (fetchErr) {
-    console.warn('[dispatchContextPushNotification] Lỗi truy vấn push_subscriptions:', fetchErr);
-  }
-
-  // Hợp nhất với danh sách bộ đệm nội bộ LOCAL_PUSH_SUBSCRIPTIONS để bảo toàn 100% người nhận
-  const endpointMap = new Map<string, any>();
-  subscriptions.forEach((s) => {
+  // 1. Nạp từ kho lưu trữ đĩa cục bộ bền vững (Persistent Disk Store)
+  const endpointMap = new Map<string, PushSubRecord>();
+  const diskSubs = readLocalPushSubscriptionsStore();
+  diskSubs.forEach((s) => {
     if (s && s.endpoint) endpointMap.set(s.endpoint, s);
   });
 
-  const channel = params.payload.notification_channel;
+  // 2. Nạp thêm từ Supabase nếu có dữ liệu
+  try {
+    const { data } = await executeWithAdminFallback(async (sb) =>
+      await sb.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth, active_role_preference')
+    );
+    if (Array.isArray(data)) {
+      data.forEach((s) => {
+        if (s && s.endpoint && !endpointMap.has(s.endpoint)) {
+          endpointMap.set(s.endpoint, s as PushSubRecord);
+        }
+      });
+    }
+  } catch (fetchErr) {
+    console.warn('[dispatchContextPushNotification] Lưu ý truy vấn Supabase push_subscriptions (sử dụng kho cục bộ):', fetchErr);
+  }
+
+  // 3. Hợp nhất với LOCAL_PUSH_SUBSCRIPTIONS in-memory
   LOCAL_PUSH_SUBSCRIPTIONS.forEach((record, ep) => {
     if (!endpointMap.has(ep) && record.endpoint && record.p256dh && record.auth) {
-      if (params.targetProfileIds && params.targetProfileIds.length > 0) {
-        if (params.targetProfileIds.includes(record.user_id)) {
-          endpointMap.set(ep, record);
-        }
-      } else {
-        if (channel === 'TEACHER') {
-          if (
-            !record.active_role_preference ||
-            ['TEACHER', 'STAFF', 'SCHOOL_ADMIN', 'SUPER_ADMIN'].includes(record.active_role_preference)
-          ) {
-            endpointMap.set(ep, record);
-          }
-        } else {
-          endpointMap.set(ep, record);
-        }
-      }
+      endpointMap.set(ep, record);
     }
   });
-  subscriptions = Array.from(endpointMap.values());
+
+  let subscriptions = Array.from(endpointMap.values());
+
+  // 4. Nếu có targetProfileIds cụ thể (e.g. thông báo riêng cho phụ huynh của 1 bé),
+  // lọc theo targetProfileIds HOẶC giữ lại thiết bị BGH/Admin để giám sát.
+  // Ngược lại nếu là thông báo chung / diện rộng (Toàn trường, Khối, Lớp) -> GỬI TỚI 100% CÁC THIẾT BỊ ĐÃ ĐĂNG KÝ!
+  if (params.targetProfileIds && params.targetProfileIds.length > 0) {
+    subscriptions = subscriptions.filter((s) =>
+      params.targetProfileIds!.includes(s.user_id) ||
+      s.active_role_preference === 'SCHOOL_ADMIN' ||
+      s.active_role_preference === 'SUPER_ADMIN'
+    );
+  }
 
   const subscriptionCount = subscriptions.length;
+  console.log(`[dispatchContextPushNotification] Tìm thấy ${subscriptionCount} thiết bị đăng ký. Bắt đầu phát sóng Web Push khẩn cấp...`);
+
   if (!hasVapidConfig() || subscriptionCount === 0) {
     return {
       mode: 'realtime_fallback',
@@ -280,15 +352,22 @@ export async function dispatchContextPushNotification(params: {
     console.warn('[dispatchContextPushNotification] setVapidDetails warning:', vapidErr);
   }
 
+  const soundChoice = params.payload.sound || '/sounds/SM1.wav';
+  const uniqueTag = `suongmai-alert-${params.payload.id || Date.now()}`;
+  const targetUrl = params.payload.url || (params.payload.notification_channel === 'TEACHER' ? '/teacher' : '/parent');
+
   const payloadString = JSON.stringify({
     title: params.payload.title,
     body: params.payload.body,
     notification_channel: params.payload.notification_channel,
-    target_url: params.payload.url,
+    target_url: targetUrl,
+    url: targetUrl,
     entity_id: params.payload.id,
+    id: params.payload.id,
     student_id: params.payload.student_id,
     class_id: params.payload.class_id,
-    sound: params.payload.sound || '/sounds/SM1.wav',
+    sound: soundChoice,
+    tag: uniqueTag,
     silent: false,
     requireInteraction: true,
     timestamp: Date.now(),
@@ -301,7 +380,7 @@ export async function dispatchContextPushNotification(params: {
     subscriptions.map(async (sub) => {
       if (!sub.endpoint || !sub.p256dh || !sub.auth) return;
       try {
-        await webpush.sendNotification(
+        const res = await webpush.sendNotification(
           {
             endpoint: sub.endpoint,
             keys: {
@@ -319,19 +398,22 @@ export async function dispatchContextPushNotification(params: {
           }
         );
         successCount++;
+        console.log(`[dispatchContextPushNotification] Đã gửi thông báo tới ${sub.endpoint.substring(0, 45)}... [Platform: ${sub.platform || 'device'}, HTTP ${res.statusCode}]`);
       } catch (pushErr: any) {
         // Gỡ bỏ subscription đã hết hạn hoặc bị người dùng thu hồi quyền (410 Gone / 404 Not Found)
         if (pushErr?.statusCode === 410 || pushErr?.statusCode === 404) {
           expiredEndpoints.push(sub.endpoint);
         } else {
-          console.warn('[dispatchContextPushNotification] send error:', pushErr?.message || pushErr);
+          console.warn('[dispatchContextPushNotification] Gửi thông báo đẩy thất bại:', pushErr?.message || pushErr);
         }
       }
     })
   );
 
-  // Dọn dẹp các endpoint không còn hiệu lực
+  // Dọn dẹp các endpoint không còn hiệu lực khỏi đĩa và database
   if (expiredEndpoints.length > 0) {
+    const updatedDisk = diskSubs.filter((s) => !expiredEndpoints.includes(s.endpoint));
+    writeLocalPushSubscriptionsStore(updatedDisk);
     try {
       await executeWithAdminFallback(async (sb) =>
         await sb.from('push_subscriptions').delete().in('endpoint', expiredEndpoints)
@@ -340,6 +422,8 @@ export async function dispatchContextPushNotification(params: {
       console.warn('[dispatchContextPushNotification] cleanup expired subscriptions warning:', cleanupErr);
     }
   }
+
+  console.log(`[dispatchContextPushNotification] Hoàn tất: ${successCount}/${subscriptionCount} thiết bị nhận thành công.`);
 
   return {
     mode: 'web_push',

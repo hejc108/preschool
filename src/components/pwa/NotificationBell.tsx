@@ -52,6 +52,17 @@ export interface NotificationItem {
   };
 }
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export interface NotificationBellProps {
   portalRole: MobilePortalRole;
   className?: string;
@@ -101,36 +112,66 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
   const handleTestPush = async (delaySeconds = 3) => {
     try {
       setIsTestingPush(true);
-      setTestPushMessage(`Chuông sẽ reo sau ${delaySeconds}s. Hãy khóa màn hình ngay!`);
+      setTestPushMessage(`Đang chuẩn bị chuông...`);
       unlockAudioContext();
+
+      // 1. Kích hoạt và cấp quyền Web Push nếu chưa có
+      await enableNotifications().catch(() => {});
 
       let directSub = null;
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
         try {
           const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
+          let sub = await reg.pushManager.getSubscription();
+          if (!sub) {
+            const metaRes = await fetch('/api/notifications', { cache: 'no-store' }).catch(() => null);
+            const metaJson = metaRes && metaRes.ok ? await metaRes.json().catch(() => ({})) : {};
+            if (metaJson?.vapid_public_key) {
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(metaJson.vapid_public_key) as BufferSource,
+              });
+            }
+          }
           if (sub) {
             directSub = sub.toJSON();
           }
-        } catch (_) {}
+        } catch (subErr) {
+          console.warn('[NotificationBell] getSubscription notice:', subErr);
+        }
       }
 
-      await fetch('/api/notifications', {
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+      const isIos = /iPhone|iPad|iPod/i.test(ua);
+      const isAndroid = /Android/i.test(ua);
+      const platform = isIos ? 'ios' : isAndroid ? 'android' : 'desktop';
+
+      setTestPushMessage(`Chuông sẽ reo sau ${delaySeconds}s. Hãy khóa màn hình ngay!`);
+
+      const res = await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'test',
           delay_ms: delaySeconds * 1000,
           subscription: directSub,
+          platform,
         }),
       });
+
+      const resJson = await res.json().catch(() => ({}));
+      if (resJson?.success) {
+        setTestPushMessage(`Đã gửi! Khóa màn hình để nghe chuông (${delaySeconds}s)...`);
+      } else {
+        setTestPushMessage(resJson?.error || 'Chưa gửi được chuông, thử lại');
+      }
     } catch (_) {
       setTestPushMessage('Lỗi kết nối kiểm tra chuông');
     } finally {
       setTimeout(() => {
         setIsTestingPush(false);
         setTestPushMessage('');
-      }, 5000);
+      }, 7000);
     }
   };
 
@@ -465,6 +506,15 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
               </button>
             </div>
           </div>
+
+          {/* HƯỚNG DẪN DÀNH CHO IPHONE NẾU CHƯA THÊM VÀO MÀN HÌNH CHÍNH */}
+          {typeof window !== 'undefined' &&
+            /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
+            !(('standalone' in window.navigator && (window.navigator as any).standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) && (
+              <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 text-[11px] text-blue-900 leading-tight">
+                <span className="font-bold">📱 Lưu ý iPhone:</span> Để nhận chuông khi khóa màn hình, bấm nút <strong>Chia sẻ</strong> (biểu tượng <span className="inline-block border border-blue-300 rounded px-1">↑</span>) &rarr; chọn <strong>&quot;Thêm vào MH chính&quot;</strong>.
+              </div>
+          )}
 
           {/* BANNER KÍCH HOẠT CHUÔNG BÁO MÀN HÌNH KHÓA */}
           {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
