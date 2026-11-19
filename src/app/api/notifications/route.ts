@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isAuthOrRlsError, NO_CACHE_HEADERS } from '@/lib/supabase/server';
-import { executeWithContextFallback, requireActiveRole } from '@/lib/auth/sessionContext';
+import { executeWithContextFallback, requireActiveRole, SessionContext } from '@/lib/auth/sessionContext';
+import { UserRole } from '@/lib/types/schema';
 import {
   buildPushPayload,
   dispatchContextPushNotification,
@@ -100,15 +101,27 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireActiveRole(request, [
-      'PARENT',
-      'TEACHER',
-      'STAFF',
-      'SCHOOL_ADMIN',
-      'SUPER_ADMIN',
-    ]);
-    if ('response' in auth) return auth.response;
-    const { ctx } = auth;
+    // 1. Nhận diện phiên người dùng nếu có (Không chặn thiết bị PWA chưa đăng nhập hoặc đang chờ duyệt)
+    let profileId = 'device-pwa';
+    let activeRole: UserRole = 'PARENT';
+    let authCtx: SessionContext | undefined = undefined;
+
+    try {
+      const auth = await requireActiveRole(request, [
+        'PARENT',
+        'TEACHER',
+        'STAFF',
+        'SCHOOL_ADMIN',
+        'SUPER_ADMIN',
+      ]);
+      if (!('response' in auth)) {
+        authCtx = auth.ctx;
+        profileId = auth.ctx.profileId;
+        activeRole = auth.ctx.activeRole;
+      }
+    } catch {
+      // Cho phép thiết bị PWA đăng ký nhận chuông trước khi đăng nhập
+    }
 
     const body = await request.json().catch(() => ({}));
 
@@ -123,8 +136,8 @@ export async function POST(request: Request) {
       const testPayload = buildPushPayload({
         title: body.title || '🔔 Chuông báo Mầm Non Sương Mai',
         body: body.body || 'Âm thanh thông báo chuẩn Sương Mai đã sẵn sàng trên màn hình khóa!',
-        notification_channel: ctx.activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
-        url: ctx.activeRole === 'TEACHER' ? '/teacher' : '/parent',
+        notification_channel: activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
+        url: activeRole === 'TEACHER' ? '/teacher' : '/parent',
         sound: soundChoice,
       });
 
@@ -132,14 +145,14 @@ export async function POST(request: Request) {
       const directSub = body.subscription;
       if (directSub?.endpoint && directSub?.keys?.p256dh && directSub?.keys?.auth) {
         await savePushSubscription({
-          userId: ctx.profileId,
+          userId: profileId,
           endpoint: directSub.endpoint,
           p256dh: directSub.keys.p256dh,
           auth: directSub.keys.auth,
-          activeRolePreference: ctx.activeRole,
+          activeRolePreference: activeRole,
           userAgent: request.headers.get('user-agent'),
           platform: body.platform,
-          ctx,
+          ctx: authCtx,
         });
 
         const directRes = await dispatchDirectWebPush({
@@ -162,7 +175,7 @@ export async function POST(request: Request) {
       }
 
       const pushRes = await dispatchContextPushNotification({
-        targetProfileIds: [ctx.profileId],
+        targetProfileIds: profileId !== 'device-pwa' ? [profileId] : undefined,
         payload: testPayload,
       });
       return NextResponse.json(
@@ -192,14 +205,14 @@ export async function POST(request: Request) {
     const platform = body.platform || (request.headers.get('user-agent')?.includes('iPhone') ? 'ios' : 'android');
 
     const { data, error } = await savePushSubscription({
-      userId: ctx.profileId,
+      userId: profileId,
       endpoint,
       p256dh,
       auth: authKey,
-      activeRolePreference: ctx.activeRole,
+      activeRolePreference: activeRole,
       userAgent: request.headers.get('user-agent'),
       platform,
-      ctx,
+      ctx: authCtx,
     });
 
     if (error) {

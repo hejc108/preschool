@@ -653,9 +653,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     if (
       typeof window === 'undefined' ||
       !('Notification' in window) ||
-      !('serviceWorker' in navigator) ||
-      approvalStatus !== 'ACTIVE' ||
-      !profileId
+      !('serviceWorker' in navigator)
     ) {
       return;
     }
@@ -663,7 +661,7 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
     if (Notification.permission === 'granted') {
       enableNotifications().catch(() => {});
     }
-  }, [approvalStatus, profileId, enableNotifications]);
+  }, [enableNotifications]);
 
   const value = useMemo<ActiveRoleContextValue>(
     () => ({

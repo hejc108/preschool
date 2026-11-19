@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
   Bell,
+  BellRing,
   Check,
   CheckCheck,
   ChevronRight,
@@ -507,15 +508,6 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
             </div>
           </div>
 
-          {/* HƯỚNG DẪN DÀNH CHO IPHONE NẾU CHƯA THÊM VÀO MÀN HÌNH CHÍNH */}
-          {typeof window !== 'undefined' &&
-            /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
-            !(('standalone' in window.navigator && (window.navigator as any).standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) && (
-              <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 text-[11px] text-blue-900 leading-tight">
-                <span className="font-bold">📱 Lưu ý iPhone:</span> Để nhận chuông khi khóa màn hình, bấm nút <strong>Chia sẻ</strong> (biểu tượng <span className="inline-block border border-blue-300 rounded px-1">↑</span>) &rarr; chọn <strong>&quot;Thêm vào MH chính&quot;</strong>.
-              </div>
-          )}
-
           {/* BANNER KÍCH HOẠT CHUÔNG BÁO MÀN HÌNH KHÓA */}
           {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
             <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 flex items-center justify-between gap-2 shrink-0">
@@ -628,12 +620,12 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
                 type="button"
                 onClick={() => handleTestPush(3)}
                 disabled={isTestingPush}
-                className="w-full py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer disabled:opacity-60"
+                className="w-full py-2 px-3 bg-red-50 hover:bg-red-100 active:scale-[0.99] text-[#D32F2F] border border-red-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
                 title="Bấm nút này rồi khóa màn hình điện thoại trong 3 giây để kiểm tra chuông ting"
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <BellRing className="w-3.5 h-3.5 text-red-600 shrink-0" />
                 <span className="truncate">
-                  {testPushMessage || (isTestingPush ? 'Đang gửi...' : '🔔 Thử chuông khóa màn hình (sau 3s)')}
+                  {testPushMessage || (isTestingPush ? 'Đang gửi tín hiệu...' : 'Kiểm tra chuông khóa màn hình (sau 3s)')}
                 </span>
               </button>
             )}
