@@ -89,34 +89,34 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
 
   if (isLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans" />
+      <div className="min-h-dvh bg-slate-50 max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans w-full" />
     );
   }
 
   if (!isAuthenticated) {
     const isTeacherLogin = initialPortal === 'TEACHER';
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-surface-base to-slate-100 text-slate-800 flex flex-col justify-center items-center p-4 font-sans">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl text-center">
-          <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-primary-700 via-secondary-500 to-primary-600 mx-auto mb-4 shadow-lg">
+      <div className="min-h-dvh w-full max-w-full bg-gradient-to-b from-slate-50 via-surface-base to-slate-100 text-slate-800 flex flex-col justify-center items-center p-4 font-sans overflow-x-hidden">
+        <div className="w-full max-w-sm sm:max-w-md bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl text-center">
+          <div className="w-20 h-20 rounded-2xl p-1 bg-gradient-to-tr from-primary-700 via-secondary-500 to-primary-600 mx-auto mb-4 shadow-md flex items-center justify-center">
             <img
               src="/images/logo.png"
               alt="Mầm Non Sương Mai Logo"
-              className="w-full h-full object-cover rounded-full bg-white"
+              className="w-full h-full object-contain rounded-xl bg-white p-1"
             />
           </div>
 
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             {isTeacherLogin ? 'Cổng Tác Nghiệp Giáo Viên' : 'Sổ Liên Lạc Điện Tử'}
           </h1>
-          <p className="text-primary-700 font-bold text-xs mt-1 mb-6">
+          <p className="text-primary-700 font-bold text-sm mt-1 mb-6">
             Trường Mầm Non Sương Mai
           </p>
 
           <button
             onClick={handleInPlaceGoogleLogin}
             disabled={isLoggingIn}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:border-slate-500 text-slate-800 font-bold py-3.5 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all disabled:opacity-50 cursor-pointer text-sm mb-4"
+            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[48px] mb-4"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
@@ -139,7 +139,7 @@ export function DualRoleShell({ initialPortal }: { initialPortal: MobilePortalRo
             <span>{isLoggingIn ? 'Đang kết nối Google...' : 'Đăng nhập bằng Google'}</span>
           </button>
 
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs sm:text-[13px] text-slate-500 leading-relaxed">
             {isTeacherLogin
               ? 'Dành cho Giáo viên trường Mầm Non Sương Mai.'
               : 'Dành cho Phụ huynh học sinh trường Mầm Non Sương Mai.'}

@@ -970,7 +970,7 @@ export function TeacherPortalView() {
   // API / Auth / RLS error state (distinct from genuinely having 0 assigned classes!)
   if (hasFatalClassLoadError) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+      <div className="min-h-dvh bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
         {renderCalmHeaderBar()}
         <div className="flex-1 flex flex-col justify-center items-center p-4">
           <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-lg">
@@ -1007,7 +1007,7 @@ export function TeacherPortalView() {
   // Unassigned Teacher Empty State (strictly rendered ONLY when HTTP 200 success: true returned 0 classes)
   if (isAuthoritativeUnassigned) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+      <div className="min-h-dvh bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
         {renderCalmHeaderBar()}
 
         <div className="flex-1 flex flex-col justify-center items-center p-4">
@@ -1047,7 +1047,7 @@ export function TeacherPortalView() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-20">
+    <div className="min-h-dvh bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
       {/* Mobile Top Header — Calm UI Hướng A: Warm Brand Red + Frosted Glass Pill Toggle, Zero /admin links, Zero overflow */}
       <header className="px-2.5 sm:px-3 py-2 bg-primary-700 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">

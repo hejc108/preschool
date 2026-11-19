@@ -53,7 +53,7 @@ export function RoleSwitcher({
                 void switchRole(tab.role, { syncUrl: true });
               }
             }}
-            className={`px-2 sm:px-2.5 py-1.5 rounded-full text-xs font-bold leading-none whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1 cursor-pointer min-h-[38px] sm:min-h-[40px] disabled:opacity-60 ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold leading-none whitespace-nowrap shrink-0 transition-all duration-150 inline-flex items-center gap-1 cursor-pointer min-h-[40px] disabled:opacity-60 ${
               isActive
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-white/80 hover:text-white hover:bg-white/10 font-medium'

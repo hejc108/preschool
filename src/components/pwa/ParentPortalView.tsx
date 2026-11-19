@@ -726,7 +726,7 @@ export function ParentPortalView() {
   // Authoritative Unlinked Parent Empty State (only when session settled with 0 linked students)
   if (!isLoadingSession && (!selectedChild || parentChildren.length === 0)) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans">
+      <div className="min-h-dvh bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
         <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 shadow-md overflow-hidden">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
             {avatarUrl ? (
@@ -790,7 +790,7 @@ export function ParentPortalView() {
   // Fallback shell only on uncached cold hydration before selectedChild arrives (no blocking message screen)
   if (!selectedChild) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24">
+      <div className="min-h-dvh bg-slate-50 text-slate-800 flex flex-col max-w-md mx-auto border-x border-slate-200 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
         <header className="px-2.5 sm:px-3 py-2 bg-sky-600 text-white flex items-center justify-between gap-1.5 sm:gap-2 sticky top-0 z-20 shadow-md overflow-hidden">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white shrink-0">
@@ -820,7 +820,7 @@ export function ParentPortalView() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
+    <div className="min-h-dvh bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24 overflow-x-hidden overflow-x-clip min-w-0 max-w-full sm:max-w-md w-full">
       {/* Mobile Top Header — Calm & Warm Child-Friendly Teal */}
       <header className="px-3.5 py-2.5 bg-teal-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-xs border-b border-teal-800/20 overflow-x-hidden min-w-0">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">

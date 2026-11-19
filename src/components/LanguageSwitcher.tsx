@@ -39,7 +39,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
     <div className="inline-flex items-center bg-slate-100 p-1 rounded-pill border border-slate-200 text-xs font-bold shadow-sm shrink-0">
       <button
         onClick={() => setLanguage('vi')}
-        className={`px-2.5 py-1 rounded-pill transition-all flex items-center gap-1 ${
+        className={`px-3 py-1.5 rounded-pill transition-all flex items-center gap-1 cursor-pointer ${
           language === 'vi'
             ? 'bg-primary-700 text-white shadow-sm font-extrabold'
             : 'text-slate-600 hover:text-primary-800'
@@ -50,7 +50,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
       </button>
       <button
         onClick={() => setLanguage('en')}
-        className={`px-2.5 py-1 rounded-pill transition-all flex items-center gap-1 ${
+        className={`px-3 py-1.5 rounded-pill transition-all flex items-center gap-1 cursor-pointer ${
           language === 'en'
             ? 'bg-primary-700 text-white shadow-sm font-extrabold'
             : 'text-slate-600 hover:text-primary-800'

@@ -268,23 +268,23 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-rose-50/20 to-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
+    <div className="min-h-dvh w-full max-w-full bg-gradient-to-b from-slate-50 via-rose-50/20 to-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-x-hidden font-sans">
       {/* Soft Pastel Brand Background Glows */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-100/40 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-72 h-72 bg-amber-100/50 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md mx-auto flex flex-col items-center relative z-10">
+      <div className="w-full max-w-sm sm:max-w-md mx-auto flex flex-col items-center relative z-10">
         {/* Top Header Bar with Contextual Language Switcher */}
         <div className="w-full flex items-center justify-between px-1 mb-3 z-20">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-primary-600 animate-pulse" />
-            <span className="text-xs font-semibold text-slate-500 tracking-wide uppercase">Cổng Trực Tuyến</span>
+            <span className="text-xs font-bold text-slate-500 tracking-wide uppercase">Cổng Trực Tuyến</span>
           </div>
           <LanguageSwitcher />
         </div>
 
-        {/* Main Login Card */}
-        <div className="w-full bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-xl text-slate-800 backdrop-blur-sm">
+        {/* Main Login Card: w-full max-w-sm sm:max-w-md rounded-2xl p-6 sm:p-8 */}
+        <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo */}
           <div className="text-center mb-6 sm:mb-8">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-50 via-white to-amber-50 border border-red-200/80 rounded-2xl mb-4 text-primary-700 shadow-sm p-2 relative">
@@ -301,7 +301,7 @@ function AuthContent() {
               <Sparkles className="auth-fallback-icon w-9 h-9 text-primary-700 hidden" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('auth.title')}</h1>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1 font-medium">{t('auth.subtitle')}</p>
+            <p className="text-slate-500 text-sm mt-1 font-medium">{t('auth.subtitle')}</p>
           </div>
 
           {/* Error Notification Alert */}
@@ -315,11 +315,11 @@ function AuthContent() {
             </div>
           )}
 
-          {/* Standard Google OAuth Button */}
+          {/* Standard Google OAuth Button: min-h-[48px] text-sm sm:text-base */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[50px]"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[48px]"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
@@ -342,7 +342,7 @@ function AuthContent() {
             <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
           </button>
 
-          {/* Instructional Note */}
+          {/* Instructional Note: >= 12px */}
           <p className="text-xs sm:text-[13px] text-slate-500 text-center mt-5 px-1 leading-relaxed">
             Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
           </p>

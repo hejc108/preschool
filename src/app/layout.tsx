@@ -51,7 +51,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased bg-surface-base text-slate-800 min-h-screen font-sans">
+      <body className="antialiased bg-surface-base text-slate-800 min-h-dvh w-full max-w-full overflow-x-hidden font-sans">
         <LanguageProvider>
           <ActiveRoleProvider>
             {children}
