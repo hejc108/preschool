@@ -13,6 +13,10 @@ import {
   CalendarDays,
   RefreshCw,
   X,
+  Camera,
+  Image as ImageIcon,
+  UploadCloud,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -46,6 +50,17 @@ function AdminMenuContent() {
   const [saving, setSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // State quản lý upload & sửa ảnh thực tế món ăn
+  const [editingImageMeal, setEditingImageMeal] = useState<{
+    weekNumber: number;
+    dayOfWeek: DayOfWeek;
+    mealType: MealCategory;
+    dishName: string;
+    imageUrl?: string | null;
+  } | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Sync modal state if query param changes (e.g. forward/back navigation or redirected from /admin/menu/settings)
   useEffect(() => {
@@ -164,6 +179,89 @@ function AdminMenuContent() {
         return item;
       });
     });
+  };
+
+  // Cập nhật ảnh món ăn
+  const handleDishImageChange = (
+    weekNum: number,
+    day: DayOfWeek,
+    mealType: MealCategory,
+    newImageUrl: string | null
+  ) => {
+    setMenuList((prev) => {
+      const exists = prev.some(
+        (item) =>
+          item.week_number === weekNum &&
+          item.day_of_week === day &&
+          item.meal_type === mealType
+      );
+
+      if (!exists) {
+        return [
+          ...prev,
+          {
+            id: `m-w${weekNum}-${day.toLowerCase()}-${mealType.toLowerCase()}`,
+            week_number: weekNum,
+            day_of_week: day,
+            meal_type: mealType,
+            dish_name: '',
+            allergens: [],
+            image_url: newImageUrl,
+          },
+        ];
+      }
+
+      return prev.map((item) => {
+        if (
+          item.week_number === weekNum &&
+          item.day_of_week === day &&
+          item.meal_type === mealType
+        ) {
+          return { ...item, image_url: newImageUrl };
+        }
+        return item;
+      });
+    });
+  };
+
+  // Tải ảnh thực tế món ăn lên máy chủ
+  const handleUploadMealImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingImageMeal) return;
+
+    setIsUploadingImage(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/menu/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success || !json.url) {
+        throw new Error(json.error || 'Không thể tải ảnh món ăn lên máy chủ.');
+      }
+
+      handleDishImageChange(
+        editingImageMeal.weekNumber,
+        editingImageMeal.dayOfWeek,
+        editingImageMeal.mealType,
+        json.url
+      );
+
+      setEditingImageMeal((prev) => (prev ? { ...prev, imageUrl: json.url } : null));
+    } catch (err: any) {
+      console.error('Lỗi tải ảnh món ăn:', err);
+      setUploadError(err?.message || 'Lỗi kết nối khi tải ảnh lên.');
+    } finally {
+      setIsUploadingImage(false);
+      // Reset input value
+      e.target.value = '';
+    }
   };
 
   // Lưu thực đơn
@@ -388,20 +486,67 @@ function AdminMenuContent() {
                             key={d.key}
                             className="p-2 border-r border-slate-200 min-w-[190px] sm:min-w-[200px]"
                           >
-                            <textarea
-                              rows={2}
-                              value={currentDish}
-                              onChange={(e) =>
-                                handleDishChange(
-                                  selectedWeek,
-                                  d.key,
-                                  cat.key,
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Nhập tên món ăn..."
-                              className="w-full min-w-[180px] sm:min-w-[190px] resize-none bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors leading-snug"
-                            />
+                            <div className="space-y-1.5">
+                              <textarea
+                                rows={2}
+                                value={currentDish}
+                                onChange={(e) =>
+                                  handleDishChange(
+                                    selectedWeek,
+                                    d.key,
+                                    cat.key,
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="Nhập tên món ăn..."
+                                className="w-full min-w-[180px] sm:min-w-[190px] resize-none bg-slate-50 border border-slate-200 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 rounded-lg p-2 font-medium text-slate-900 text-xs focus:bg-white focus:outline-none transition-colors leading-snug"
+                              />
+
+                              {/* Media management trigger for school actual meal photo */}
+                              <div className="flex items-center justify-between gap-1 pt-0.5">
+                                {meal?.image_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingImageMeal({
+                                        weekNumber: selectedWeek,
+                                        dayOfWeek: d.key,
+                                        mealType: cat.key,
+                                        dishName: currentDish,
+                                        imageUrl: meal.image_url,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-semibold transition cursor-pointer"
+                                    title="Bấm để xem hoặc đổi ảnh thực tế"
+                                  >
+                                    <img
+                                      src={meal.image_url}
+                                      alt={currentDish}
+                                      className="w-4 h-4 rounded object-cover border border-emerald-400 shrink-0"
+                                    />
+                                    <span className="truncate max-w-[110px]">Có ảnh thực tế</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingImageMeal({
+                                        weekNumber: selectedWeek,
+                                        dayOfWeek: d.key,
+                                        mealType: cat.key,
+                                        dishName: currentDish,
+                                        imageUrl: null,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-[11px] font-medium transition cursor-pointer"
+                                    title="Thêm ảnh thực tế món ăn"
+                                  >
+                                    <Camera className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>Thêm ảnh</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </td>
                         );
                       })}
@@ -460,6 +605,167 @@ function AdminMenuContent() {
                   handleCloseCycleModal();
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Upload & Cập nhật ảnh thực tế món ăn */}
+      {editingImageMeal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn"
+          onClick={() => setEditingImageMeal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md flex flex-col overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight">
+                    Ảnh thực tế món ăn
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Tuần {editingImageMeal.weekNumber} •{' '}
+                    {daysList.find((d) => d.key === editingImageMeal.dayOfWeek)?.label} •{' '}
+                    {mealCategories.find((c) => c.key === editingImageMeal.mealType)?.label}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditingImageMeal(null)}
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 text-xs sm:text-sm text-slate-800">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span className="text-xs text-slate-500 font-semibold uppercase">Món ăn:</span>
+                <p className="font-bold text-slate-900 text-sm">
+                  {editingImageMeal.dishName || '(Chưa nhập tên món ăn)'}
+                </p>
+              </div>
+
+              {/* Preview image */}
+              <div className="text-center space-y-2">
+                <span className="text-xs text-slate-500 font-semibold block">Hình ảnh hiển thị:</span>
+                <div className="w-36 h-36 mx-auto rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 flex items-center justify-center shadow-inner relative">
+                  {editingImageMeal.imageUrl ? (
+                    <img
+                      src={editingImageMeal.imageUrl}
+                      alt={editingImageMeal.dishName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <img
+                      src={`/images/meals/${editingImageMeal.mealType.toLowerCase().replace(/_/g, '-')}.svg`}
+                      alt="Ảnh mẫu"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 italic">
+                  {editingImageMeal.imageUrl ? '✓ Đang dùng ảnh thực tế từ nhà trường' : 'Đang dùng ảnh minh họa mặc định'}
+                </p>
+              </div>
+
+              {/* Upload error message */}
+              {uploadError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              {/* Upload trigger */}
+              <div className="space-y-2 pt-1">
+                <label className="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs">
+                  {isUploadingImage ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-4 h-4 shrink-0" />
+                      <span>Tải ảnh từ máy tính (Tối đa 8MB)</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadMealImage}
+                    disabled={isUploadingImage}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Direct URL input */}
+                <div className="pt-2">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    Hoặc dán trực tiếp liên kết ảnh (URL):
+                  </label>
+                  <input
+                    type="url"
+                    value={editingImageMeal.imageUrl || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.trim() || null;
+                      handleDishImageChange(
+                        editingImageMeal.weekNumber,
+                        editingImageMeal.dayOfWeek,
+                        editingImageMeal.mealType,
+                        val
+                      );
+                      setEditingImageMeal((prev) => (prev ? { ...prev, imageUrl: val } : null));
+                    }}
+                    placeholder="https://.../mon-an.jpg"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-primary-500 rounded-xl text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Delete / Clear button */}
+              {editingImageMeal.imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDishImageChange(
+                      editingImageMeal.weekNumber,
+                      editingImageMeal.dayOfWeek,
+                      editingImageMeal.mealType,
+                      null
+                    );
+                    setEditingImageMeal((prev) => (prev ? { ...prev, imageUrl: null } : null));
+                  }}
+                  className="w-full py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa ảnh thực tế (Dùng lại ảnh minh họa)</span>
+                </button>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setEditingImageMeal(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm rounded-xl transition cursor-pointer"
+              >
+                Xong
+              </button>
             </div>
           </div>
         </div>

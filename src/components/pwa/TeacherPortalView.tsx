@@ -1253,11 +1253,12 @@ export function TeacherPortalView() {
             </button>
           </div>
 
-          {/* Thực đơn hôm nay cho Giáo viên */}
+          {/* Thực đơn hôm nay cho Giáo viên (Thu gọn mặc định để ưu tiên diện tích cho danh sách điểm danh) */}
           <MenuTodayCard
             menuPayload={menuPayload}
             fullViewHref="/teacher/menu"
             collapsible
+            defaultCollapsed={true}
           />
 
           {/* Class Absence Notices from Postgres (/api/absences) — NEVER disabled for Teacher's own child */}

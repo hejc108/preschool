@@ -262,6 +262,8 @@ export interface WeeklyMenu {
   meal_type: MealCategory;
   dish_name: string;
   allergens?: string[]; // e.g. ['Sữa bò', 'Hải sản']
+  image_url?: string | null; // Đường dẫn ảnh thực tế món ăn từ storage/DB
+  custom_image_url?: string | null; // Override linh hoạt cho giáo viên/bếp
   created_at?: string;
 }
 

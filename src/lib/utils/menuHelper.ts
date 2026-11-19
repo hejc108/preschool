@@ -349,8 +349,8 @@ export function resolveMenuCycleContext(params?: {
   const shortDisplayLabel = `Tuần ${weekOfMonth} (Tháng ${effectiveParts.month})`;
   const todayCardTitle =
     weekOfMonth === 5
-      ? `Thực đơn hôm nay • ${weekdayVi}, ${effectiveDateShort} • Tuần 5 (Áp dụng theo Thực đơn Tuần ${menuWeekNumber})`
-      : `Thực đơn hôm nay • ${shortDisplayLabel}`;
+      ? `Thực đơn hôm nay • Tuần 5 (Áp dụng theo Thực đơn Tuần ${menuWeekNumber})`
+      : `Thực đơn hôm nay`;
 
   return {
     target_date: targetParts.dateString,

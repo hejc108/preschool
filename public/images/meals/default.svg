@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bgGradDef" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="url(#bgGradDef)"/>
+  <!-- Cloche / Plate Dome -->
+  <g transform="translate(15, 18)">
+    <ellipse cx="45" cy="74" rx="38" ry="8" fill="#94A3B8" opacity="0.3"/>
+    <ellipse cx="45" cy="70" rx="40" ry="7" fill="#CBD5E1"/>
+    <!-- Dome -->
+    <path d="M12 68 Q12 28 45 28 Q78 28 78 68 Z" fill="#E2E8F0" stroke="#94A3B8" stroke-width="2"/>
+    <!-- Knob -->
+    <circle cx="45" cy="24" r="6" fill="#94A3B8"/>
+    <!-- Highlight -->
+    <path d="M26 62 Q26 40 40 34" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <!-- Sparkles -->
+    <path d="M72 16 L74 12 L78 10 L74 8 L72 4 L70 8 L66 10 L70 12 Z" fill="#F59E0B"/>
+  </g>
+</svg>

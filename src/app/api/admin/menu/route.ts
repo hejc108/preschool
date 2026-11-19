@@ -184,6 +184,8 @@ export async function GET(request: Request) {
           meal_type: row.meal_type,
           dish_name: row.dish_name,
           allergens: row.allergens || [],
+          image_url: row.image_url || null,
+          custom_image_url: row.custom_image_url || null,
           created_at: row.created_at,
         }));
         globalThis.__SUONGMAI_WEEKLY_MENU__ = menu;
@@ -259,6 +261,8 @@ export async function POST(request: Request) {
       meal_type: m.meal_type,
       dish_name: String(m.dish_name || '').trim(),
       allergens: Array.isArray(m.allergens) ? m.allergens : [],
+      image_url: m.image_url ? String(m.image_url).trim() : null,
+      custom_image_url: m.custom_image_url ? String(m.custom_image_url).trim() : null,
     }));
 
     // Update in-memory cache
@@ -276,6 +280,7 @@ export async function POST(request: Request) {
         meal_type: m.meal_type,
         dish_name: m.dish_name,
         allergens: m.allergens || [],
+        image_url: m.image_url || m.custom_image_url || null,
         updated_at: new Date().toISOString(),
       }));
 

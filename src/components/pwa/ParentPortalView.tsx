@@ -820,19 +820,19 @@ export function ParentPortalView() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24">
+    <div className="min-h-screen bg-[#FFFDF9] text-slate-800 flex flex-col max-w-md mx-auto border-x border-amber-900/10 shadow-2xl font-sans relative pb-24 overflow-x-hidden min-w-0 w-full">
       {/* Mobile Top Header — Calm & Warm Child-Friendly Teal */}
-      <header className="px-3.5 py-2.5 bg-teal-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-xs border-b border-teal-800/20">
+      <header className="px-3.5 py-2.5 bg-teal-700 text-white flex items-center justify-between sticky top-0 z-20 shadow-xs border-b border-teal-800/20 overflow-x-hidden min-w-0">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div className="relative shrink-0">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt={fullName || 'Phụ huynh'}
-                className="w-8 h-8 rounded-full object-cover border-2 border-white/60 shadow-2xs"
+                className="w-9 h-9 rounded-full object-cover border-2 border-white/60 shadow-2xs"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-teal-600 border border-teal-400 flex items-center justify-center font-bold text-xs text-white shadow-2xs">
+              <div className="w-9 h-9 rounded-full bg-teal-600 border border-teal-400 flex items-center justify-center font-bold text-xs text-white shadow-2xs">
                 {selectedChild?.avatar_initials || 'SM'}
               </div>
             )}
@@ -840,14 +840,14 @@ export function ParentPortalView() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-white text-xs sm:text-sm leading-tight truncate">
+            <h1 className="font-bold text-white text-sm sm:text-base leading-tight truncate">
               {selectedChild
                 ? `Chào ba/mẹ bé ${selectedChild.full_name}`
                 : fullName
                 ? `Chào ${fullName}`
                 : t('parent.app_title')}
             </h1>
-            <p className="text-[11px] text-teal-100 font-medium leading-tight truncate">
+            <p className="text-xs text-teal-100 font-medium leading-tight truncate mt-0.5">
               {t('common.school_name')}
             </p>
           </div>
@@ -858,7 +858,7 @@ export function ParentPortalView() {
           <button
             type="button"
             onClick={() => setIsSettingsOpen(true)}
-            className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition cursor-pointer shadow-2xs"
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition cursor-pointer shadow-2xs"
             title="Cài đặt & Hồ sơ"
             aria-label="Mở cài đặt & hồ sơ"
           >
@@ -869,8 +869,8 @@ export function ParentPortalView() {
 
       {/* Multi-child selector bar */}
       {parentChildren.length >= 2 && selectedChild && (
-        <div className="p-3 bg-white/90 border-b border-amber-900/5">
-          <div className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 px-1">
+        <div className="p-3 bg-white/90 border-b border-amber-900/5 overflow-x-hidden min-w-0">
+          <div className="text-xs uppercase font-bold text-slate-500 mb-1.5 px-1 tracking-wider">
             {t('parent.select_child')}
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -880,22 +880,22 @@ export function ParentPortalView() {
                 <button
                   key={child.id}
                   onClick={() => setSelectedChildId(child.id)}
-                  className={`p-2.5 rounded-2xl border transition-all text-left flex items-center gap-2.5 cursor-pointer ${
+                  className={`p-2.5 rounded-2xl border transition-all text-left flex items-center gap-2.5 cursor-pointer min-w-0 ${
                     isSelected
                       ? 'bg-teal-50/80 border-teal-400 text-slate-900 shadow-xs font-bold'
-                      : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
+                      : 'bg-white border-slate-200 text-slate-600 hover:text-slate-800'
                   }`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                       isSelected ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-700'
                     }`}
                   >
                     {child.avatar_initials}
                   </div>
-                  <div className="min-w-0">
-                    <h4 className="text-xs truncate font-bold">{child.full_name}</h4>
-                    <span className="text-[10px] text-slate-400 block font-mono">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm truncate font-bold">{child.full_name}</h4>
+                    <span className="text-xs text-slate-500 block font-mono">
                       {child.class_name}
                     </span>
                   </div>
@@ -908,150 +908,148 @@ export function ParentPortalView() {
 
       {/* Child Status Hero Card */}
       {selectedChild && (
-        <div className="mx-3.5 mt-3.5 p-4 rounded-2xl bg-gradient-to-br from-teal-50/80 via-white to-amber-50/40 border border-teal-100/80 shadow-[0_4px_20px_rgba(13,148,136,0.06)] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+        <div className="mx-3.5 mt-3.5 p-4 rounded-2xl bg-gradient-to-br from-teal-50/80 via-white to-amber-50/40 border border-teal-100/80 shadow-[0_4px_20px_rgba(13,148,136,0.06)] flex items-center justify-between gap-3 overflow-x-hidden min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center font-bold text-base shadow-xs shrink-0">
               {selectedChild.avatar_initials}
             </div>
 
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+            <div className="min-w-0 space-y-1.5 flex-1">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
                   {selectedChild.full_name}
                 </h2>
-                <span className="text-[10px] px-2 py-0.5 bg-teal-100/80 text-teal-800 rounded-full font-semibold shrink-0">
+                <span className="text-xs px-2.5 py-0.5 bg-teal-100/90 text-teal-800 rounded-full font-bold shrink-0">
                   {selectedChild.class_name}
                 </span>
               </div>
 
-              {selectedChild.attendance_status === 'PRESENT' ||
-              selectedChild.attendance_status === 'PRESENT_LATE' ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">
-                    {selectedChild.checked_out_time
-                      ? `Đã đón lúc ${selectedChild.checked_out_time}`
-                      : `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`}
+              <div className="min-w-0">
+                {selectedChild.attendance_status === 'PRESENT' ||
+                selectedChild.attendance_status === 'PRESENT_LATE' ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-full max-w-full">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="truncate">
+                      {selectedChild.checked_out_time
+                        ? `Đã đón lúc ${selectedChild.checked_out_time}`
+                        : `${t('parent.checked_in_msg')} ${selectedChild.checked_in_time}`}
+                    </span>
                   </span>
-                </span>
-              ) : selectedChild.attendance_status === 'ABSENT_EXCUSED' ||
-                selectedChild.attendance_status === 'ABSENT_UNEXCUSED' ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full">
-                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                  <span>Nghỉ học hôm nay</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-                  <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Chưa điểm danh hôm nay</span>
-                </span>
-              )}
+                ) : selectedChild.attendance_status === 'ABSENT_EXCUSED' ||
+                  selectedChild.attendance_status === 'ABSENT_UNEXCUSED' ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200/90 px-2.5 py-1 rounded-full">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span>Nghỉ học hôm nay</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200/90 px-2.5 py-1 rounded-full">
+                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Chưa điểm danh hôm nay</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => setShowAbsenceModal(true)}
-            className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs shrink-0 cursor-pointer transition"
+            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs shrink-0 cursor-pointer transition whitespace-nowrap"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">{t('parent.btn_absence')}</span>
-            <span className="xs:hidden">Nghỉ phép</span>
+            <Plus className="w-4 h-4" />
+            <span>Nghỉ phép</span>
           </button>
         </div>
       )}
 
-      {/* Modern 4-Item Sub-Navigation Rounded Pill Tabs */}
-      <div className="mx-3.5 mt-3 p-1 bg-slate-200/70 rounded-2xl grid grid-cols-4 gap-1 text-[11px] font-semibold">
+      {/* Modern 4-Item Sub-Navigation Rounded Pill Tabs — Shortened Labels & 44px Touch Targets */}
+      <div className="mx-3.5 mt-3 p-1.5 bg-slate-200/80 rounded-2xl grid grid-cols-4 gap-1 text-[13px] font-semibold overflow-x-hidden min-w-0">
         <button
           type="button"
           onClick={() => setActiveNav('TIMELINE')}
-          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+          className={`min-h-[44px] py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
             activeNav === 'TIMELINE'
               ? 'bg-white text-teal-700 font-bold shadow-xs'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+              : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" />
-          <span>{t('parent.tab_timeline')}</span>
+          <Clock className="w-4 h-4 shrink-0" />
+          <span className="truncate">Nhật ký</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveNav('ABSENCE')}
-          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+          className={`min-h-[44px] py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
             activeNav === 'ABSENCE'
               ? 'bg-white text-teal-700 font-bold shadow-xs'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+              : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5" />
-          <span>{t('parent.tab_absence')}</span>
+          <Calendar className="w-4 h-4 shrink-0" />
+          <span className="truncate">Nghỉ phép</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveNav('RECONCILIATION')}
-          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+          className={`min-h-[44px] py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
             activeNav === 'RECONCILIATION'
               ? 'bg-white text-teal-700 font-bold shadow-xs'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+              : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
           }`}
         >
-          <FileText className="w-3.5 h-3.5" />
-          <span>{t('parent.tab_statement')}</span>
+          <FileText className="w-4 h-4 shrink-0" />
+          <span className="truncate">Xuất ăn</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveNav('PICKUPS')}
-          className={`py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+          className={`min-h-[44px] py-2 px-1 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
             activeNav === 'PICKUPS'
               ? 'bg-white text-teal-700 font-bold shadow-xs'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+              : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
           }`}
         >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>Người đón</span>
+          <UserCheck className="w-4 h-4 shrink-0" />
+          <span className="truncate">Người đón</span>
         </button>
       </div>
 
       {/* Role-scoped Announcements Strip */}
-      <div className="px-3.5 pt-3">
+      <div className="px-3.5 pt-3 overflow-x-hidden min-w-0">
         <AnnouncementsStrip portalRole="PARENT" />
       </div>
 
       {/* --- SECTION 2: CARE TIMELINE FEED & WIDGETS --- */}
       {activeNav === 'TIMELINE' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
-          <div className="bg-white border border-amber-100/80 rounded-2xl p-4 space-y-3.5 shadow-xs text-slate-800">
-            <div className="flex items-center justify-between border-b border-amber-100/60 pb-2.5">
-              <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
-                <Clock className="w-4 h-4 text-teal-600" />
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+          <div className="bg-white border border-amber-100/90 rounded-2xl p-4 space-y-3.5 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
+            <div className="flex items-center justify-between border-b border-amber-100/60 pb-3">
+              <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-600 shrink-0" />
                 <span>{t('parent.timeline_title')}</span>
               </h3>
             </div>
 
+            {/* Seamless Timeline: Automatically collapse / hide empty intervals */}
             {selectedChildTimelineEvents.length === 0 ? (
-              <div className="py-3 px-3.5 bg-gradient-to-r from-teal-50/40 via-white to-amber-50/30 border border-teal-100/60 rounded-2xl flex items-center gap-3 text-slate-800">
-                <div className="w-8 h-8 rounded-xl bg-teal-100/80 text-teal-700 flex items-center justify-center shrink-0">
-                  <Sparkles className="w-4 h-4 text-teal-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 leading-tight">
-                    Chưa có hoạt động mới trong ngày
-                  </p>
-                  <p className="text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
-                    Các mốc điểm danh, ăn uống sẽ cập nhật khi cô ghi nhận tại lớp.
+              <div className="py-2.5 px-3 bg-teal-50/50 border border-teal-100/80 rounded-xl flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                  <p className="text-xs font-semibold text-slate-700 truncate">
+                    Chưa có hoạt động mới ghi nhận hôm nay
                   </p>
                 </div>
+                <span className="text-xs text-teal-700 font-bold shrink-0">Tự động cập nhật</span>
               </div>
             ) : (
               <div className="space-y-4 relative pl-5 border-l-2 border-teal-200 text-xs">
                 {selectedChildTimelineEvents.map((ev) => (
-                  <div key={ev.id} className="relative">
+                  <div key={ev.id} className="relative min-w-0">
                     <div
-                      className={`absolute -left-[25px] top-0 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center ${
+                      className={`absolute -left-[25px] top-0.5 w-3.5 h-3.5 rounded-full border-2 border-white flex items-center justify-center ${
                         ev.type === 'CHECKIN' || ev.type === 'CHECKOUT'
                           ? 'bg-emerald-600'
                           : ev.type === 'MEDICATION'
@@ -1067,11 +1065,11 @@ export function ParentPortalView() {
                         <Heart className="w-2 h-2 text-white fill-white" />
                       ) : null}
                     </div>
-                    <span className="font-mono text-[10px] text-slate-400 font-bold block">
+                    <span className="font-mono text-xs text-slate-400 font-bold block">
                       {ev.time}
                     </span>
-                    <h4 className="font-bold text-slate-900 text-sm mt-0.5">{ev.title}</h4>
-                    <p className="text-slate-600 mt-0.5">{ev.subtitle}</p>
+                    <h4 className="font-bold text-slate-900 text-sm mt-0.5 leading-snug">{ev.title}</h4>
+                    <p className="text-slate-600 text-[13px] mt-0.5 leading-snug line-clamp-2">{ev.subtitle}</p>
                   </div>
                 ))}
               </div>
@@ -1088,28 +1086,28 @@ export function ParentPortalView() {
           {/* Growth Tracker */}
           <Link
             href={`/parent/health${selectedChild ? `?student_id=${selectedChild.id}` : ''}`}
-            className="block p-4 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border border-emerald-200/80 rounded-2xl shadow-xs hover:shadow-sm transition-all text-xs"
+            className="block p-4 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/40 border border-emerald-200/80 rounded-2xl shadow-xs hover:shadow-sm transition-all text-xs overflow-x-hidden min-w-0"
           >
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2 text-emerald-950 font-bold">
-                <Activity className="w-4 h-4 text-emerald-600" />
-                <span>Sổ theo dõi thể trạng {latestHealth?.term ? `(${latestHealth.term})` : ''}</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm sm:text-base">
+                <Activity className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="truncate">Sổ theo dõi thể trạng {latestHealth?.term ? `(${latestHealth.term})` : ''}</span>
               </div>
-              <span className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold flex items-center gap-1">
-                Xem chi tiết <ArrowRight className="w-3 h-3" />
+              <span className="text-xs text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 shrink-0 whitespace-nowrap">
+                Chi tiết <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
             {latestHealth &&
             (latestHealth.weight_kg !== null || latestHealth.height_cm !== null) ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-slate-700">
-                <div className="flex items-center flex-wrap gap-2 text-slate-900 font-mono text-xs sm:text-sm font-bold">
-                  <span className="bg-white/95 px-2.5 py-1 rounded-xl border border-emerald-200/80 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-slate-700 min-w-0">
+                <div className="flex items-center flex-wrap gap-2 text-slate-900 font-mono text-xs sm:text-sm font-bold min-w-0">
+                  <span className="bg-white/95 px-3 py-1.5 rounded-xl border border-emerald-200/80 shadow-2xs whitespace-nowrap">
                     📏{' '}
                     {latestHealth.height_cm !== null && latestHealth.height_cm !== undefined
                       ? `${latestHealth.height_cm} cm`
                       : '--'}
                   </span>
-                  <span className="bg-white/95 px-2.5 py-1 rounded-xl border border-teal-200/80 shadow-2xs">
+                  <span className="bg-white/95 px-3 py-1.5 rounded-xl border border-teal-200/80 shadow-2xs whitespace-nowrap">
                     ⚖️{' '}
                     {latestHealth.weight_kg !== null && latestHealth.weight_kg !== undefined
                       ? `${latestHealth.weight_kg} kg`
@@ -1118,14 +1116,14 @@ export function ParentPortalView() {
                 </div>
                 {healthDisplay && (
                   <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
+                    className={`px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap self-start sm:self-auto ${healthDisplay.bgClass} ${healthDisplay.textClass}`}
                   >
                     {healthDisplay.text}
                   </span>
                 )}
               </div>
             ) : (
-              <p className="text-slate-500 text-[11px] italic bg-white/70 p-2.5 rounded-xl border border-dashed border-emerald-200/60">
+              <p className="text-slate-500 text-xs italic bg-white/70 p-3 rounded-xl border border-dashed border-emerald-200/60 leading-relaxed">
                 Nhà trường đang cập nhật số liệu khám sức khỏe đợt này
               </p>
             )}
@@ -1135,11 +1133,11 @@ export function ParentPortalView() {
 
       {/* --- SECTION 3: SMART ABSENCE REQUEST SYSTEM (Postgres-backed) --- */}
       {activeNav === 'ABSENCE' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between bg-white border border-amber-900/10 p-3.5 rounded-2xl shadow-xs text-slate-800">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">{t('parent.tab_absence')}</h3>
-              <p className="text-xs text-slate-500">
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+          <div className="flex items-center justify-between bg-white border border-amber-900/10 p-4 rounded-2xl shadow-xs text-slate-800 overflow-x-hidden min-w-0 gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">{t('parent.tab_absence')}</h3>
+              <p className="text-xs sm:text-[13px] text-slate-500 mt-0.5 truncate">
                 {t('common.child')}:{' '}
                 <strong className="text-teal-700">{selectedChild.full_name}</strong>
               </p>
@@ -1147,54 +1145,54 @@ export function ParentPortalView() {
 
             <button
               onClick={() => setShowAbsenceModal(true)}
-              className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               <span>{t('parent.btn_absence')}</span>
             </button>
           </div>
 
           <div className="space-y-3">
             {childAbsences.length === 0 ? (
-              <div className="p-6 bg-white border border-dashed border-amber-200/80 rounded-2xl text-center text-xs text-slate-400">
-                Chưa có đơn xin nghỉ nào được tạo.
+              <div className="p-6 bg-white border border-dashed border-amber-200/80 rounded-2xl text-center text-xs sm:text-sm text-slate-500">
+                Chưa có đơn xin nghỉ nào được tạo cho bé.
               </div>
             ) : (
               childAbsences.map((req) => (
                 <div
                   key={req.id}
-                  className="p-4 bg-white border border-amber-900/10 rounded-2xl space-y-2.5 shadow-xs text-slate-800"
+                  className="p-4 bg-white border border-amber-900/10 rounded-2xl space-y-2.5 shadow-xs text-slate-800 overflow-x-hidden min-w-0"
                 >
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-slate-900 font-mono">
+                  <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 font-mono">
                       📅 {req.start_date} {req.start_date !== req.end_date && `➔ ${req.end_date}`}
                     </span>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {req.is_fee_credited ? (
-                        <span className="text-[11px] px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-bold">
+                        <span className="text-xs px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold">
                           {t('parent.valid_credit_badge')}
                         </span>
                       ) : (
-                        <span className="text-[11px] px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold">
+                        <span className="text-xs px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold">
                           {t('parent.late_credit_badge')}
                         </span>
                       )}
 
                       {req.status === 'APPROVED' && (
-                        <span className="text-[11px] px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full font-bold">
+                        <span className="text-xs px-2.5 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-full font-bold">
                           Cô đã duyệt
                         </span>
                       )}
                       {req.status === 'REJECTED' && (
-                        <span className="text-[11px] px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full font-bold">
+                        <span className="text-xs px-2.5 py-0.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-full font-bold">
                           Từ chối
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-700">
+                  <p className="text-[13px] sm:text-sm text-slate-700 leading-relaxed">
                     <strong className="text-slate-900">{req.reason}</strong>
                   </p>
                 </div>
@@ -1206,28 +1204,28 @@ export function ParentPortalView() {
 
       {/* --- SECTION 4: FEE / ABSENCE RECONCILIATION --- */}
       {activeNav === 'RECONCILIATION' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
-          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-3 shadow-xs text-xs">
-            <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4 text-teal-600" />
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-3.5 shadow-xs text-xs overflow-x-hidden min-w-0">
+            <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2">
+              <FileText className="w-4 h-4 text-teal-600 shrink-0" />
               <span>Đối soát tiền ăn bán trú ({selectedChild.full_name})</span>
             </h3>
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-xl">
-                <span className="text-[11px] text-emerald-700 block">Nghỉ hợp lệ (&lt;08:30)</span>
-                <strong className="text-lg font-mono text-emerald-800">
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl">
+                <span className="text-xs text-emerald-800 font-semibold block">Nghỉ hợp lệ (&lt;08:30)</span>
+                <strong className="text-xl font-mono text-emerald-900 font-bold block mt-1">
                   {childAbsences.filter((a) => a.is_fee_credited).length} đơn
                 </strong>
               </div>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="text-[11px] text-slate-600 block">Báo muộn (&ge;08:30)</span>
-                <strong className="text-lg font-mono text-slate-800">
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-xs text-slate-700 font-semibold block">Báo muộn (&ge;08:30)</span>
+                <strong className="text-xl font-mono text-slate-900 font-bold block mt-1">
                   {childAbsences.filter((a) => !a.is_fee_credited).length} đơn
                 </strong>
               </div>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Các ngày nghỉ báo trước 08:30 sáng được hoàn tiền ăn bán trú vào kỳ đối soát cuối tháng.
+            <p className="text-xs sm:text-[13px] text-slate-600 leading-relaxed">
+              Các ngày nghỉ báo trước 08:30 sáng được hoàn tiền ăn bán trú vào kỳ đối soát cuối tháng của nhà trường.
             </p>
           </div>
         </div>
@@ -1235,15 +1233,15 @@ export function ParentPortalView() {
 
       {/* --- SECTION 5: AUTHORIZED PICKUPS SYSTEM --- */}
       {activeNav === 'PICKUPS' && selectedChild && (
-        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto">
-          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-4 shadow-xs text-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-bold text-teal-950 text-sm flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Danh Sách Người Đón Được Ủy Quyền</span>
+        <div className="p-3.5 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+          <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-4 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-teal-950 text-sm sm:text-base flex items-center gap-2 truncate">
+                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Người Đón Được Ủy Quyền</span>
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
                   Xác thực danh tính người thân đón trẻ khi tan trường
                 </p>
               </div>
@@ -1251,17 +1249,17 @@ export function ParentPortalView() {
               <button
                 type="button"
                 onClick={handleOpenAddPickupModal}
-                className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs shrink-0 cursor-pointer"
+                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs sm:text-sm font-bold px-3.5 py-2.5 min-h-[40px] rounded-xl shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 <span>Thêm người đón</span>
               </button>
             </div>
 
             {isLoadingPickups && childPickups.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 space-y-2">
+              <div className="py-12 text-center text-slate-500 space-y-2">
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto text-teal-600" />
-                <p className="text-xs">Đang tải danh sách người đón...</p>
+                <p className="text-xs sm:text-sm">Đang tải danh sách người đón...</p>
               </div>
             ) : childPickups.length === 0 ? (
               <div className="py-10 px-4 text-center bg-teal-50/20 border border-dashed border-teal-200/80 rounded-2xl space-y-3.5">
@@ -1269,19 +1267,19 @@ export function ParentPortalView() {
                   <UserCheck className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5 max-w-sm mx-auto">
-                  <h4 className="font-bold text-slate-800 text-sm">
+                  <h4 className="font-bold text-slate-800 text-sm sm:text-base">
                     Chưa có người đón được ủy quyền
                   </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
+                  <p className="text-xs sm:text-[13px] text-slate-500 leading-relaxed">
                     Bố/mẹ có thể thêm người nhà (ông, bà, người đưa đón) để nhà trường đối chiếu khi trả trẻ.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleOpenAddPickupModal}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs cursor-pointer min-h-[40px]"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   <span>Thêm người đón ủy quyền</span>
                 </button>
               </div>
@@ -1292,13 +1290,13 @@ export function ParentPortalView() {
                   return (
                     <div
                       key={pickup.id}
-                      className={`p-3.5 border rounded-2xl flex items-center justify-between gap-3 text-xs transition-all ${
+                      className={`p-3.5 border rounded-2xl flex items-center justify-between gap-3 text-xs transition-all overflow-x-hidden min-w-0 ${
                         isActive
                           ? 'bg-emerald-50/20 border-emerald-200'
                           : 'bg-slate-50/70 border-slate-200 opacity-75'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {pickup.avatar_url ? (
                           <img
                             src={pickup.avatar_url}
@@ -1318,50 +1316,51 @@ export function ParentPortalView() {
                             {pickup.name?.charAt(0) || 'U'}
                           </div>
                         )}
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <span className="px-2 py-0.5 bg-white text-slate-800 font-bold text-[10px] rounded-full border border-slate-200">
+                            <span className="px-2.5 py-0.5 bg-white text-slate-800 font-bold text-xs rounded-full border border-slate-200">
                               {pickup.relationship}
                             </span>
                             {isActive ? (
-                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-300 flex items-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-700" /> Đang kích hoạt
+                              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-300 flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5 text-emerald-700" /> Đang kích hoạt
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-full border border-slate-300 flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-slate-500" /> Tạm ngưng đón
+                              <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-full border border-slate-300 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-slate-500" /> Tạm ngưng đón
                               </span>
                             )}
                           </div>
-                          <h4 className="font-bold text-slate-900 text-sm truncate">{pickup.name}</h4>
+                          <h4 className="font-bold text-slate-900 text-sm sm:text-base truncate">{pickup.name}</h4>
                           <a
                             href={`tel:${pickup.phone}`}
-                            className="text-teal-700 hover:text-teal-900 font-mono text-[11px] inline-flex items-center gap-1 hover:underline"
+                            className="text-teal-700 hover:text-teal-900 font-mono text-xs sm:text-[13px] inline-flex items-center gap-1 hover:underline mt-0.5"
                           >
-                            <Phone className="w-3 h-3" />
+                            <Phone className="w-3.5 h-3.5" />
                             <span>{pickup.phone}</span>
                           </a>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleTogglePickupActive(pickup)}
-                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition min-h-[36px] ${
                             isActive
                               ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
                               : 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300'
                           }`}
                         >
-                          <Power className="w-3 h-3" />
+                          <Power className="w-3.5 h-3.5" />
                           <span>{isActive ? 'Bật' : 'Tắt'}</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleOpenEditPickupModal(pickup)}
-                          className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer"
+                          className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition"
+                          title="Sửa thông tin"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
@@ -1369,7 +1368,8 @@ export function ParentPortalView() {
                         <button
                           type="button"
                           onClick={() => handleParentDeletePickup(pickup.id, pickup.name)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                          className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition"
+                          title="Xóa người đón"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

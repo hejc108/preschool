@@ -467,7 +467,22 @@ export function MonthlyMenuView({ role, backHref }: MonthlyMenuViewProps) {
                   )}
                 </div>
 
-                <h3 className="text-sm font-bold text-slate-900">{dishName}</h3>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-200/80 bg-slate-100 shadow-2xs">
+                    <img
+                      src={meal?.custom_image_url || meal?.image_url || `/images/meals/${cat.key.toLowerCase().replace(/_/g, '-')}.svg`}
+                      alt={dishName}
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `/images/meals/${cat.key.toLowerCase().replace(/_/g, '-')}.svg`;
+                      }}
+                      className="w-12 h-12 rounded-xl object-cover shrink-0"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{dishName}</h3>
+                  </div>
+                </div>
 
                 {allergenCheck.hasAllergen && (
                   <p className="text-[11px] text-rose-700 italic border-t border-rose-100 pt-1.5">

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="bgGradLs" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#CCFBF1"/>
+      <stop offset="100%" stop-color="#99F6E4"/>
+    </linearGradient>
+    <linearGradient id="soupGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#14B8A6"/>
+      <stop offset="100%" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="url(#bgGradLs)"/>
+  <!-- Steam -->
+  <path d="M52 32 Q56 24 52 16" stroke="#0D9488" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <path d="M64 30 Q68 22 64 14" stroke="#0D9488" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <!-- Soup Bowl Outer Shadow -->
+  <ellipse cx="60" cy="94" rx="28" ry="6" fill="#0F766E" opacity="0.2"/>
+  <!-- Bowl Base -->
+  <path d="M22 54 Q22 92 60 92 Q98 92 98 54 Z" fill="url(#soupGrad)"/>
+  <ellipse cx="60" cy="92" rx="20" ry="4" fill="#115E59"/>
+  <!-- Bowl Rim -->
+  <ellipse cx="60" cy="54" rx="38" ry="12" fill="#5EEAD4"/>
+  <!-- Broth Surface -->
+  <ellipse cx="60" cy="54" rx="34" ry="10" fill="#F0FDFA"/>
+  <!-- Floating Veggies (Pumpkin/Carrot/Herbs) -->
+  <ellipse cx="50" cy="53" rx="7" ry="4" fill="#F97316"/>
+  <ellipse cx="70" cy="54" rx="6" ry="3.5" fill="#22C55E"/>
+  <circle cx="58" cy="57" r="3" fill="#EAB308"/>
+  <circle cx="63" cy="52" r="2" fill="#15803D"/>
+  <circle cx="44" cy="56" r="1.5" fill="#15803D"/>
+  <!-- Ladle -->
+  <path d="M78 40 L94 22" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="76" cy="42" rx="6" ry="4" fill="#CBD5E1" transform="rotate(-30 76 42)"/>
+</svg>
