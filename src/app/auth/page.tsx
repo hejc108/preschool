@@ -268,22 +268,22 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-dvh w-full max-w-full bg-gradient-to-b from-rose-50/60 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center px-4 py-5 sm:py-8 sm:px-6 relative overflow-x-hidden font-sans">
-      {/* 1. Header Bar: Brand Badge & Language Switcher */}
-      <header className="w-full max-w-md sm:max-w-lg mx-auto flex items-center justify-between px-1 pt-1 pb-3 z-20 shrink-0">
-        <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
-          <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
-          <span className="text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider uppercase">Cổng Trực Tuyến</span>
+    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/40 via-slate-50 to-amber-50/30 text-slate-800 flex flex-col justify-center items-center py-6 px-4 sm:px-6 relative overflow-x-hidden font-sans">
+      <div className="w-full max-w-md mx-auto flex flex-col items-center relative z-10">
+        {/* Top Header Row: Cổng Trực Tuyến & VI | EN aligned cleanly on the same row */}
+        <div className="w-full flex items-center justify-between px-1 mb-3 z-20">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
+            <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Cổng Trực Tuyến</span>
+          </div>
+          <LanguageSwitcher />
         </div>
-        <LanguageSwitcher />
-      </header>
 
-      {/* 2. Main Login Card: Prominent, spacious, high-contrast, comfortable touch */}
-      <main className="w-full max-w-md sm:max-w-lg mx-auto my-auto py-2 z-10 flex flex-col items-center">
-        <div className="w-full bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-10 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
+        {/* Main Login Card: w-full max-w-md rounded-2xl p-6 sm:p-8 */}
+        <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo & Title */}
           <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-red-50 via-white to-amber-50 border-2 border-amber-200/90 rounded-3xl mb-4 sm:mb-5 text-primary-700 shadow-md p-3 relative mx-auto transition-transform hover:scale-105">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-50 via-white to-amber-50 border border-red-200/80 rounded-2xl mb-4 text-primary-700 shadow-sm p-2 relative mx-auto">
               <img
                 src="/images/logo.png"
                 alt="Logo Mầm Non Sương Mai"
@@ -294,13 +294,13 @@ function AuthContent() {
                   if (fallback) (fallback as HTMLElement).classList.remove('hidden');
                 }}
               />
-              <Sparkles className="auth-fallback-icon w-12 h-12 text-primary-700 hidden" />
+              <Sparkles className="auth-fallback-icon w-9 h-9 text-primary-700 hidden" />
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-snug">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
               {t('auth.title')}
             </h1>
-            <p className="text-slate-600 text-sm sm:text-base mt-1.5 sm:mt-2 font-medium">
+            <p className="text-slate-500 text-sm mt-1 font-medium">
               {t('auth.subtitle')}
             </p>
           </div>
@@ -316,13 +316,13 @@ function AuthContent() {
             </div>
           )}
 
-          {/* Big Google OAuth Button: min-h-[56px] text-base sm:text-lg font-bold */}
+          {/* Standard Google OAuth Button: min-h-[48px] text-sm sm:text-base */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3.5 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-300 hover:border-slate-400 text-slate-800 font-bold py-4 px-6 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-50 cursor-pointer text-base sm:text-lg min-h-[56px] sm:min-h-[60px]"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[48px]"
           >
-            <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -343,19 +343,17 @@ function AuthContent() {
             <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
           </button>
 
-          {/* Pedagogical Instructional Box: Clear, readable >= 13px */}
-          <div className="mt-6 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl text-center">
-            <p className="text-xs sm:text-[13px] text-slate-600 leading-relaxed font-medium">
-              Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
-            </p>
-          </div>
+          {/* Helper Note: text-xs */}
+          <p className="text-xs text-slate-500 text-center mt-5 px-1 leading-relaxed">
+            Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
+          </p>
         </div>
-      </main>
 
-      {/* 3. Footer */}
-      <footer className="w-full text-center text-xs text-slate-400 py-2 sm:py-3 z-10 shrink-0">
-        © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
-      </footer>
+        {/* Footer: text-xs */}
+        <footer className="mt-6 text-center text-xs text-slate-400">
+          © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
+        </footer>
+      </div>
     </div>
   );
 }
