@@ -268,22 +268,18 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-dvh w-full max-w-full bg-gradient-to-b from-slate-50 via-rose-50/20 to-slate-50 text-slate-800 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-x-hidden font-sans">
-      {/* Soft Pastel Brand Background Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-100/40 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-72 h-72 bg-amber-100/50 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="w-full max-w-sm sm:max-w-md mx-auto flex flex-col items-center relative z-10">
+    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/40 via-slate-50 to-amber-50/30 text-slate-800 flex flex-col justify-center items-center px-4 py-8 sm:px-6 relative overflow-x-hidden font-sans">
+      <div className="w-full max-w-[420px] mx-auto flex flex-col items-center relative z-10">
         {/* Top Header Bar with Contextual Language Switcher */}
         <div className="w-full flex items-center justify-between px-1 mb-3 z-20">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary-600 animate-pulse" />
-            <span className="text-xs font-bold text-slate-500 tracking-wide uppercase">Cổng Trực Tuyến</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
+            <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Cổng Trực Tuyến</span>
           </div>
           <LanguageSwitcher />
         </div>
 
-        {/* Main Login Card: w-full max-w-sm sm:max-w-md rounded-2xl p-6 sm:p-8 */}
+        {/* Main Login Card: w-full max-w-[420px] rounded-2xl p-6 sm:p-8 */}
         <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo */}
           <div className="text-center mb-6 sm:mb-8">
@@ -315,11 +311,11 @@ function AuthContent() {
             </div>
           )}
 
-          {/* Standard Google OAuth Button: min-h-[48px] text-sm sm:text-base */}
+          {/* Standard Google OAuth Button: min-h-[50px] sm:min-h-[52px] text-sm sm:text-base */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[48px]"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[50px] sm:min-h-[52px]"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
