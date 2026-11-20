@@ -1,4 +1,28 @@
 {
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "nonsuongmai.edu.vn"
+        }
+      ],
+      "destination": "https://www.mamnonsuongmai.edu.vn/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.nonsuongmai.edu.vn"
+        }
+      ],
+      "destination": "https://www.mamnonsuongmai.edu.vn/:path*",
+      "permanent": true
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron/keep-alive",

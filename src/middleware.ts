@@ -151,6 +151,15 @@ async function fetchLiveAuthState(
 }
 
 export async function middleware(request: NextRequest) {
+  const host = (request.headers.get('host') || '').toLowerCase();
+  if (host === 'nonsuongmai.edu.vn' || host === 'www.nonsuongmai.edu.vn') {
+    const url = request.nextUrl.clone();
+    url.hostname = 'www.mamnonsuongmai.edu.vn';
+    url.protocol = 'https:';
+    url.port = '';
+    return NextResponse.redirect(url, 308);
+  }
+
   const { pathname } = request.nextUrl;
 
   if (pathname === '/admin/login') {

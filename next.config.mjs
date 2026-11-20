@@ -9,6 +9,32 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'nonsuongmai.edu.vn',
+          },
+        ],
+        destination: 'https://www.mamnonsuongmai.edu.vn/:path*',
+        permanent: true,
+      },
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'www.nonsuongmai.edu.vn',
+          },
+        ],
+        destination: 'https://www.mamnonsuongmai.edu.vn/:path*',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
