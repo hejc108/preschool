@@ -20,7 +20,7 @@ export function AuthClient() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v25' && key !== 'suongmai-data-v1') {
+            if (key !== 'suongmai-pwa-v26' && key !== 'suongmai-data-v1') {
               caches.delete(key);
             }
           });
@@ -288,19 +288,69 @@ export function AuthClient() {
   };
 
   return (
-    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/50 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center py-3 px-3 sm:py-8 sm:px-6 relative overflow-x-hidden font-sans">
-      {/* 1. Header Row: Anchored at top of mobile screen with max-w-md */}
-      <header className="w-full max-w-md mx-auto flex items-center justify-between px-1 pt-1 pb-2 z-20 shrink-0">
-        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
-          <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
-          <span className="text-xs font-bold text-slate-700 tracking-wider uppercase">Cổng Trực Tuyến</span>
+    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/50 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center py-3 px-3 sm:py-6 sm:px-8 relative overflow-x-hidden font-sans">
+      {/* 1. Header Row: Stretches across naturally on all screen sizes */}
+      <header className="w-full max-w-6xl mx-auto flex items-center justify-between px-2 sm:px-4 pt-1 pb-2 z-20 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
+            <span className="text-xs font-bold text-slate-700 tracking-wider uppercase">Cổng Trực Tuyến</span>
+          </div>
+          <span className="hidden sm:inline-block text-xs font-semibold text-slate-500">
+            Trường Mầm Non Sương Mai
+          </span>
         </div>
         <LanguageSwitcher />
       </header>
 
-      {/* 2. Main Login Card: Generous spacing, prominent typography, comfortable touch targets */}
-      <main className="w-full max-w-md mx-auto my-auto py-2 z-10 flex flex-col items-center">
-        <div className="w-full bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
+      {/* 2. Main Content Area: Rich 2-column layout on Desktop, comfortable full-width card on Mobile */}
+      <main className="w-full max-w-5xl mx-auto my-auto px-2 sm:px-4 py-4 sm:py-6 z-10 flex flex-col md:flex-row items-center justify-center gap-8 lg:gap-16">
+        {/* Left Side: Desktop Welcome & Feature Highlights (Hidden on Mobile) */}
+        <div className="hidden md:flex flex-col flex-1 max-w-lg space-y-6 text-left">
+          <div className="inline-flex items-center gap-2.5 bg-red-50 border border-red-200/80 px-3.5 py-1.5 rounded-full text-xs font-bold text-primary-700 w-fit shadow-xs">
+            <span>✨</span>
+            <span>Hệ Thống Sổ Liên Lạc Điện Tử & Tác Nghiệp</span>
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+              Trường Mầm Non <br />
+              <span className="text-primary-700">Sương Mai</span>
+            </h2>
+            <p className="text-slate-600 text-sm lg:text-base leading-relaxed">
+              Giải pháp công nghệ kết nối thông suốt giữa Nhà trường, Giáo viên và Quý Phụ huynh học sinh.
+            </p>
+          </div>
+
+          <div className="space-y-3.5 pt-1">
+            <div className="flex items-start gap-3.5 p-3.5 bg-white/90 border border-slate-200/80 rounded-2xl shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg font-bold shrink-0">
+                📱
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Dành cho Phụ huynh học sinh</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                  Cập nhật điểm danh, thực đơn dinh dưỡng, sức khỏe và nhận thông báo phát thanh tức thời từ lớp.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-3.5 bg-white/90 border border-slate-200/80 rounded-2xl shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-lg font-bold shrink-0">
+                👩‍🏫
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800">Dành cho Giáo viên & Cán bộ</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                  Điểm danh lớp, báo ăn nhà bếp, quản lý giáo án và xác thực đón trả trẻ an toàn.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: The Login Card (Mobile & Desktop) */}
+        <div className="w-full max-w-sm sm:max-w-md bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo & Title */}
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-red-50 via-white to-amber-50 border-2 border-red-200/90 rounded-3xl mb-4 text-primary-700 shadow-md p-2.5 relative mx-auto">
@@ -366,8 +416,13 @@ export function AuthClient() {
           </button>
 
           {/* Helper Note: Clear, readable >= 13px */}
-          <div className="mt-5 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
+          <div className="mt-5 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl text-center space-y-1.5">
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-700">
+              <span>👨‍👩‍👧 Phụ huynh</span>
+              <span>•</span>
+              <span>👩‍🏫 Giáo viên</span>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed font-medium">
               Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
             </p>
           </div>
@@ -375,7 +430,7 @@ export function AuthClient() {
       </main>
 
       {/* 3. Footer: Anchored at bottom with self-heal cache refresh button */}
-      <footer className="w-full text-center text-xs text-slate-400 pt-2 pb-2 z-10 shrink-0 flex flex-col items-center gap-2">
+      <footer className="w-full max-w-6xl mx-auto text-center text-xs text-slate-400 py-3 sm:py-4 z-10 shrink-0 flex flex-col sm:flex-row items-center justify-between px-4 gap-2 sm:gap-4">
         <div>© 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.</div>
         <button
           type="button"
