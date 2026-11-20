@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Smartphone, Share, X, Download, Info } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -9,6 +10,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function PwaInstallPrompt() {
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -87,8 +89,9 @@ export function PwaInstallPrompt() {
     setShowPrompt(false);
   };
 
-  // Hide if Desktop PC or launched in Standalone App mode or explicitly dismissed
-  if (!isMobile || isStandalone || !showPrompt) return null;
+  // Hide on auth/login pages to never obstruct login form, or on Desktop PC, or in Standalone mode
+  const isAuthRoute = !pathname || pathname === '/' || pathname === '/login' || pathname.startsWith('/auth');
+  if (isAuthRoute || !isMobile || isStandalone || !showPrompt) return null;
 
   return (
     <>
