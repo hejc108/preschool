@@ -14,6 +14,26 @@ function AuthContent() {
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Tự động dọn dẹp các cache PWA cũ và kích hoạt kiểm tra cập nhật Service Worker tức thì
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          keys.forEach((key) => {
+            if (key !== 'suongmai-pwa-v21' && key !== 'suongmai-data-v1') {
+              caches.delete(key);
+            }
+          });
+        });
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((r) => r.update().catch(() => {}));
+        });
+      }
+    }
+  }, []);
+
   // Listen for auth state changes & handle Hash (#access_token=...) / Code (?code=...) URL parameters
   useEffect(() => {
     const queryError = searchParams?.get('error') || searchParams?.get('error_description');
