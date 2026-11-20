@@ -20,7 +20,7 @@ function AuthContent() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v22' && key !== 'suongmai-data-v1') {
+            if (key !== 'suongmai-pwa-v23' && key !== 'suongmai-data-v1') {
               caches.delete(key);
             }
           });
@@ -303,7 +303,7 @@ function AuthContent() {
         <div className="w-full bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo & Title */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-red-50 via-white to-amber-50 border border-red-200/90 rounded-2xl mb-4 text-primary-700 shadow-sm p-2 relative mx-auto">
+            <div className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-red-50 via-white to-amber-50 border-2 border-red-200/90 rounded-3xl mb-4 text-primary-700 shadow-md p-2.5 relative mx-auto">
               <img
                 src="/images/logo.png"
                 alt="Logo Mầm Non Sương Mai"
@@ -314,7 +314,7 @@ function AuthContent() {
                   if (fallback) (fallback as HTMLElement).classList.remove('hidden');
                 }}
               />
-              <Sparkles className="auth-fallback-icon w-10 h-10 text-primary-700 hidden" />
+              <Sparkles className="auth-fallback-icon w-12 h-12 text-primary-700 hidden" />
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-snug">
@@ -336,13 +336,13 @@ function AuthContent() {
             </div>
           )}
 
-          {/* Standard Google OAuth Button: min-h-[52px] text-base font-bold */}
+          {/* Prominent Google OAuth Button: min-h-[56px] text-base sm:text-lg font-bold */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-300 hover:border-slate-400 text-slate-800 font-bold py-3.5 px-4 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-50 cursor-pointer text-base sm:text-lg min-h-[52px]"
+            className="w-full flex items-center justify-center gap-3.5 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-300 hover:border-slate-400 text-slate-800 font-bold py-4 px-5 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-50 cursor-pointer text-base sm:text-lg min-h-[56px]"
           >
-            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -360,12 +360,14 @@ function AuthContent() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
+            <span className="text-base sm:text-lg font-bold text-slate-800">
+              {loading ? 'Đang xác thực...' : t('auth.google_login')}
+            </span>
           </button>
 
           {/* Helper Note: Clear, readable >= 13px */}
-          <div className="mt-5 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
-            <p className="text-xs sm:text-[13px] text-slate-600 leading-relaxed font-medium">
+          <div className="mt-5 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
               Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
             </p>
           </div>
