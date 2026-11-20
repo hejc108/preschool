@@ -20,7 +20,7 @@ function AuthContent() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v21' && key !== 'suongmai-data-v1') {
+            if (key !== 'suongmai-pwa-v22' && key !== 'suongmai-data-v1') {
               caches.delete(key);
             }
           });
@@ -288,22 +288,22 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/40 via-slate-50 to-amber-50/30 text-slate-800 flex flex-col justify-center items-center py-6 px-4 sm:px-6 relative overflow-x-hidden font-sans">
-      <div className="w-full max-w-md mx-auto flex flex-col items-center relative z-10">
-        {/* Top Header Row: Cổng Trực Tuyến & VI | EN aligned cleanly on the same row */}
-        <div className="w-full flex items-center justify-between px-1 mb-3 z-20">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
-            <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Cổng Trực Tuyến</span>
-          </div>
-          <LanguageSwitcher />
+    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/50 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center py-4 px-4 sm:py-8 sm:px-6 relative overflow-x-hidden font-sans">
+      {/* 1. Header Row: Anchored at top of mobile screen with max-w-md */}
+      <header className="w-full max-w-md mx-auto flex items-center justify-between px-1 pt-1 pb-2 z-20 shrink-0">
+        <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
+          <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
+          <span className="text-xs font-bold text-slate-700 tracking-wider uppercase">Cổng Trực Tuyến</span>
         </div>
+        <LanguageSwitcher />
+      </header>
 
-        {/* Main Login Card: w-full max-w-md rounded-2xl p-6 sm:p-8 */}
-        <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-6 sm:p-8 shadow-xl text-slate-800 backdrop-blur-sm">
+      {/* 2. Main Login Card: Generous spacing, prominent typography, comfortable touch targets */}
+      <main className="w-full max-w-md mx-auto my-auto py-3 z-10 flex flex-col items-center">
+        <div className="w-full bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo & Title */}
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-50 via-white to-amber-50 border border-red-200/80 rounded-2xl mb-4 text-primary-700 shadow-sm p-2 relative mx-auto">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-red-50 via-white to-amber-50 border border-red-200/90 rounded-2xl mb-4 text-primary-700 shadow-sm p-2 relative mx-auto">
               <img
                 src="/images/logo.png"
                 alt="Logo Mầm Non Sương Mai"
@@ -314,13 +314,13 @@ function AuthContent() {
                   if (fallback) (fallback as HTMLElement).classList.remove('hidden');
                 }}
               />
-              <Sparkles className="auth-fallback-icon w-9 h-9 text-primary-700 hidden" />
+              <Sparkles className="auth-fallback-icon w-10 h-10 text-primary-700 hidden" />
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-snug">
               {t('auth.title')}
             </h1>
-            <p className="text-slate-500 text-sm mt-1 font-medium">
+            <p className="text-slate-600 text-sm sm:text-base mt-1.5 font-medium">
               {t('auth.subtitle')}
             </p>
           </div>
@@ -336,11 +336,11 @@ function AuthContent() {
             </div>
           )}
 
-          {/* Standard Google OAuth Button: min-h-[48px] text-sm sm:text-base */}
+          {/* Standard Google OAuth Button: min-h-[52px] text-base font-bold */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-200 hover:border-slate-300 text-slate-800 font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 cursor-pointer text-sm sm:text-base min-h-[48px]"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 active:bg-slate-100 border-2 border-slate-300 hover:border-slate-400 text-slate-800 font-bold py-3.5 px-4 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-50 cursor-pointer text-base sm:text-lg min-h-[52px]"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
@@ -363,17 +363,19 @@ function AuthContent() {
             <span>{loading ? 'Đang xác thực...' : t('auth.google_login')}</span>
           </button>
 
-          {/* Helper Note: text-xs */}
-          <p className="text-xs text-slate-500 text-center mt-5 px-1 leading-relaxed">
-            Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
-          </p>
+          {/* Helper Note: Clear, readable >= 13px */}
+          <div className="mt-5 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
+            <p className="text-xs sm:text-[13px] text-slate-600 leading-relaxed font-medium">
+              Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
+            </p>
+          </div>
         </div>
+      </main>
 
-        {/* Footer: text-xs */}
-        <footer className="mt-6 text-center text-xs text-slate-400">
-          © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
-        </footer>
-      </div>
+      {/* 3. Footer: Anchored at bottom */}
+      <footer className="w-full text-center text-xs text-slate-400 pt-2 pb-2 z-10 shrink-0">
+        © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
+      </footer>
     </div>
   );
 }
