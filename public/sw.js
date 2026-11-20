@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v23';
+const CACHE_NAME = 'suongmai-pwa-v24';
 const DATA_CACHE_NAME = 'suongmai-data-v1';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -61,6 +61,7 @@ function cacheFirst(request, cacheName) {
 
 // Install Event - Precache audio assets & core shell immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       // Đảm bảo cache các file âm thanh và asset cốt lõi, không để 1 asset lỗi làm hỏng toàn bộ SW install

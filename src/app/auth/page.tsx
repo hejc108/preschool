@@ -20,7 +20,7 @@ function AuthContent() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v23' && key !== 'suongmai-data-v1') {
+            if (key !== 'suongmai-pwa-v24' && key !== 'suongmai-data-v1') {
               caches.delete(key);
             }
           });
@@ -288,10 +288,10 @@ function AuthContent() {
   };
 
   return (
-    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/50 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center py-4 px-4 sm:py-8 sm:px-6 relative overflow-x-hidden font-sans">
+    <div className="min-h-dvh w-full max-w-full bg-slate-50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-rose-100/50 via-slate-50 to-amber-50/40 text-slate-800 flex flex-col justify-between items-center py-3 px-3 sm:py-8 sm:px-6 relative overflow-x-hidden font-sans">
       {/* 1. Header Row: Anchored at top of mobile screen with max-w-md */}
       <header className="w-full max-w-md mx-auto flex items-center justify-between px-1 pt-1 pb-2 z-20 shrink-0">
-        <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
+        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-slate-200/90 px-3.5 py-1.5 rounded-full shadow-xs">
           <span className="w-2.5 h-2.5 rounded-full bg-primary-600 animate-pulse" />
           <span className="text-xs font-bold text-slate-700 tracking-wider uppercase">Cổng Trực Tuyến</span>
         </div>
@@ -299,8 +299,8 @@ function AuthContent() {
       </header>
 
       {/* 2. Main Login Card: Generous spacing, prominent typography, comfortable touch targets */}
-      <main className="w-full max-w-md mx-auto my-auto py-3 z-10 flex flex-col items-center">
-        <div className="w-full bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
+      <main className="w-full max-w-md mx-auto my-auto py-2 z-10 flex flex-col items-center">
+        <div className="w-full bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-slate-900/5 text-slate-800 backdrop-blur-sm">
           {/* Header with School Logo & Title */}
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-red-50 via-white to-amber-50 border-2 border-red-200/90 rounded-3xl mb-4 text-primary-700 shadow-md p-2.5 relative mx-auto">
@@ -374,9 +374,30 @@ function AuthContent() {
         </div>
       </main>
 
-      {/* 3. Footer: Anchored at bottom */}
-      <footer className="w-full text-center text-xs text-slate-400 pt-2 pb-2 z-10 shrink-0">
-        © 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.
+      {/* 3. Footer: Anchored at bottom with self-heal cache refresh link */}
+      <footer className="w-full text-center text-xs text-slate-400 pt-2 pb-2 z-10 shrink-0 flex flex-col items-center gap-1.5">
+        <div>© 2026 Mầm Non Sương Mai. Tất cả quyền được bảo lưu.</div>
+        <button
+          type="button"
+          onClick={async () => {
+            if (typeof window !== 'undefined') {
+              try {
+                if ('caches' in window) {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                }
+                if ('serviceWorker' in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map((r) => r.unregister()));
+                }
+              } catch (_) {}
+              window.location.reload();
+            }
+          }}
+          className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer transition-colors"
+        >
+          Làm mới phiên bản mới nhất
+        </button>
       </footer>
     </div>
   );
