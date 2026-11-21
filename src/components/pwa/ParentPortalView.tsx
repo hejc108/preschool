@@ -70,7 +70,7 @@ function formatTimeVN(isoString?: string | null): string {
 }
 
 const jsonFetcher = async (url: string) => {
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(json.message || json.error || `Request failed (${res.status})`);
@@ -1024,8 +1024,7 @@ export function ParentPortalView() {
       </div>
 
       {/* --- SECTION 2: CARE TIMELINE FEED & WIDGETS --- */}
-      {activeNav === 'TIMELINE' && selectedChild && (
-        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
+      <div className={activeNav === 'TIMELINE' && selectedChild ? 'p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full' : 'hidden'}>
           <div className="bg-white border border-amber-100/90 rounded-2xl p-4 space-y-3.5 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
             <div className="flex items-center justify-between border-b border-amber-100/60 pb-3">
               <h3 className="font-bold text-teal-950 text-base sm:text-lg flex items-center gap-2">
@@ -1129,12 +1128,10 @@ export function ParentPortalView() {
               </p>
             )}
           </Link>
-        </div>
-      )}
+      </div>
 
       {/* --- SECTION 3: SMART ABSENCE REQUEST SYSTEM (Postgres-backed) --- */}
-      {activeNav === 'ABSENCE' && selectedChild && (
-        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
+      <div className={activeNav === 'ABSENCE' && selectedChild ? 'p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full' : 'hidden'}>
           <div className="flex items-center justify-between bg-white border border-amber-900/10 p-4 rounded-2xl shadow-xs text-slate-800 overflow-x-hidden min-w-0 gap-3">
             <div className="min-w-0 flex-1">
               <h3 className="font-bold text-slate-900 text-base sm:text-lg truncate">{t('parent.tab_absence')}</h3>
@@ -1200,12 +1197,10 @@ export function ParentPortalView() {
               ))
             )}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* --- SECTION 4: FEE / ABSENCE RECONCILIATION --- */}
-      {activeNav === 'RECONCILIATION' && selectedChild && (
-        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
+      <div className={activeNav === 'RECONCILIATION' && selectedChild ? 'p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full' : 'hidden'}>
           <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-3.5 shadow-xs text-xs overflow-x-hidden min-w-0">
             <h3 className="font-bold text-teal-950 text-base sm:text-lg flex items-center gap-2">
               <FileText className="w-4 h-4 text-teal-600 shrink-0" />
@@ -1229,12 +1224,10 @@ export function ParentPortalView() {
               Các ngày nghỉ báo trước 08:30 sáng được hoàn tiền ăn bán trú vào kỳ đối soát cuối tháng của nhà trường.
             </p>
           </div>
-        </div>
-      )}
+      </div>
 
       {/* --- SECTION 5: AUTHORIZED PICKUPS SYSTEM --- */}
-      {activeNav === 'PICKUPS' && selectedChild && (
-        <div className="p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full">
+      <div className={activeNav === 'PICKUPS' && selectedChild ? 'p-3.5 pb-28 space-y-3.5 flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full' : 'hidden'}>
           <div className="bg-white border border-amber-900/10 rounded-2xl p-4 space-y-4 shadow-xs text-slate-800 overflow-x-hidden min-w-0">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2 flex-wrap">
               <div className="min-w-0 flex-1">
@@ -1381,8 +1374,7 @@ export function ParentPortalView() {
               </div>
             )}
           </div>
-        </div>
-      )}
+      </div>
       {/* FOOTER HOTLINE — Sleek Floating Bar */}
       <footer className="fixed bottom-0 left-0 right-0 max-w-md mx-auto w-full bg-white/95 backdrop-blur-md border-t border-amber-900/10 p-2.5 z-30 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
         <a

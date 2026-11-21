@@ -107,10 +107,11 @@ export async function GET(request: Request) {
     let attendanceRecords: any[] = [];
     let medicationRecords: any[] = [];
     let mealExceptionRecords: any[] = [];
+    const pickupsMap = new Map<string, any[]>();
 
     if (studentIds.length > 0) {
       try {
-        const [attRes, medRes, mealRes] = await Promise.all([
+        const [attRes, medRes, mealRes, pickupsRes] = await Promise.all([
           executeWithContextFallback(ctx, async (sb) =>
             await sb.from('attendance_records').select('*').eq('date', date).in('student_id', studentIds)
           ),
@@ -130,6 +131,21 @@ export async function GET(request: Request) {
               .in('student_id', studentIds)
               .order('created_at', { ascending: false })
           ),
+          executeWithContextFallback(ctx, async (sb) => {
+            const { data: authData, error: authError } = await sb
+              .from('pickup_authorizations')
+              .select('*')
+              .in('student_id', studentIds)
+              .order('created_at', { ascending: false });
+            if (!authError && Array.isArray(authData)) {
+              return { data: authData, error: null };
+            }
+            return await sb
+              .from('authorized_pickups')
+              .select('*')
+              .in('student_id', studentIds)
+              .order('created_at', { ascending: false });
+          }),
         ]);
 
         attendanceRecords = attRes.data || [];
@@ -141,12 +157,32 @@ export async function GET(request: Request) {
           ...me,
           student_name: me.students?.full_name || me.student_name || 'Bé',
         }));
+
+        if (Array.isArray(pickupsRes?.data)) {
+          pickupsRes.data.forEach((p: any) => {
+            if (!p.student_id) return;
+            const list = pickupsMap.get(p.student_id) || [];
+            list.push({
+              id: p.id,
+              student_id: p.student_id,
+              name: p.name,
+              relationship: p.relationship,
+              phone: p.phone,
+              avatar_url: p.avatar_url || '',
+              is_active:
+                p.is_active !== undefined ? Boolean(p.is_active) : p.approval_status !== 'REJECTED',
+              approval_status: p.approval_status || (p.is_active !== false ? 'APPROVED' : 'PENDING'),
+              created_at: p.created_at,
+            });
+            pickupsMap.set(p.student_id, list);
+          });
+        }
       } catch (err) {
         console.warn('[api/teacher/attendance] Error querying activities in parallel:', err);
       }
     }
 
-    // 3. Merge attendance info into student objects
+    // 3. Merge attendance info and pickups into student objects
     const attendanceMap = new Map<string, any>();
     attendanceRecords.forEach((a) => attendanceMap.set(a.student_id, a));
 
@@ -180,6 +216,7 @@ export async function GET(request: Request) {
         checkedInAt: att?.checked_in_at || null,
         checkedOutAt: att?.checked_out_at || null,
         checkoutReason: att?.checkout_reason || '',
+        authorized_pickups: pickupsMap.get(s.id) || s.authorized_pickups || [],
         // PWA Teacher: Nguyên tắc hòa nhập bình đẳng, 100% học sinh trong lớp là học sinh chính thức
         is_official: isTeacherRole ? true : !isNonReg,
         is_non_regular: isTeacherRole ? false : isNonReg,

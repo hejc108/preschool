@@ -209,36 +209,41 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
       if (!cookieEmail || cookieSession !== 'active') return;
 
       const rawSaved = localStorage.getItem('suongmai_auth_user');
-      if (!rawSaved) return;
-      const saved = JSON.parse(rawSaved);
-      const savedEmail = String(saved?.email || '').toLowerCase().trim();
-      if (!savedEmail || savedEmail !== cookieEmail) return;
+      let saved: any = null;
+      try {
+        if (rawSaved) saved = JSON.parse(rawSaved);
+      } catch {
+        saved = null;
+      }
+      const isSavedEmailMatch = Boolean(saved && String(saved?.email || '').toLowerCase().trim() === cookieEmail);
 
-      const cachedRoles: UserRole[] = Array.isArray(saved.roles)
-        ? Array.from(new Set(saved.roles.map((r: string) => normalizeClientRole(r))))
-        : saved.role
+      const cachedRoles: UserRole[] = isSavedEmailMatch && Array.isArray(saved.roles)
+        ? Array.from(new Set<UserRole>(saved.roles.map((r: string) => normalizeClientRole(r))))
+        : isSavedEmailMatch && saved.role
         ? [normalizeClientRole(saved.role)]
+        : cookieActiveRole !== 'GUEST'
+        ? [cookieActiveRole]
         : [];
       if (cachedRoles.length === 0) return;
 
       const cachedActive =
         cookieActiveRole !== 'GUEST' && cachedRoles.includes(cookieActiveRole)
           ? cookieActiveRole
-          : cachedRoles.includes(normalizeClientRole(saved.activeRole))
+          : isSavedEmailMatch && cachedRoles.includes(normalizeClientRole(saved.activeRole))
           ? normalizeClientRole(saved.activeRole)
           : cachedRoles[0];
 
       setIsAuthenticated(true);
       setIsApproved(true);
       setApprovalStatus('ACTIVE');
-      setEmail(savedEmail);
-      emailRef.current = savedEmail;
-      if (saved.profileId) {
+      setEmail(cookieEmail);
+      emailRef.current = cookieEmail;
+      if (isSavedEmailMatch && saved.profileId) {
         setProfileId(saved.profileId);
         profileIdRef.current = saved.profileId;
       }
-      if (saved.full_name) setFullName(saved.full_name);
-      if (saved.avatar_url) setAvatarUrl(saved.avatar_url);
+      if (isSavedEmailMatch && saved.full_name) setFullName(saved.full_name);
+      if (isSavedEmailMatch && saved.avatar_url) setAvatarUrl(saved.avatar_url);
       setRoles(cachedRoles);
       setActiveRole(cachedActive);
       activeRoleRef.current = cachedActive;
@@ -246,12 +251,12 @@ function ActiveRoleInner({ children }: { children: React.ReactNode }) {
         setServerSyncedRole(cookieActiveRole);
         serverSyncedRoleRef.current = cookieActiveRole;
       }
-      if (Array.isArray(saved.assignedClassIds)) {
+      if (isSavedEmailMatch && Array.isArray(saved.assignedClassIds)) {
         setAssignedClassIds(saved.assignedClassIds);
       }
-      if (Array.isArray(saved.linkedStudents)) {
+      if (isSavedEmailMatch && Array.isArray(saved.linkedStudents)) {
         setLinkedStudents(
-          mapLinkedStudentsPayload(saved.linkedStudents, saved.profileId || '', savedEmail)
+          mapLinkedStudentsPayload(saved.linkedStudents, saved.profileId || '', cookieEmail)
         );
       }
       setIsLoading(false);

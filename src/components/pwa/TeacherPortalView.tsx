@@ -69,7 +69,7 @@ function translateReasonTag(tag: string, language: string): string {
 }
 
 const jsonFetcher = async (url: string) => {
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(json.message || json.error || `Request failed (${res.status})`);
@@ -481,6 +481,19 @@ export function TeacherPortalView() {
       refreshInterval: 120000,
     }
   );
+
+  // Prefetch adjacent assigned classes in background so switching classes is instant
+  useEffect(() => {
+    if (!serverClasses || serverClasses.length <= 1) return;
+    const nextClass = serverClasses.find((c) => c.id !== activeClass?.id);
+    if (nextClass) {
+      void fetchAsTeacher(
+        `/api/teacher/attendance?class_id=${encodeURIComponent(
+          nextClass.id
+        )}&class_name=${encodeURIComponent(nextClass.name)}`
+      ).catch(() => {});
+    }
+  }, [serverClasses, activeClass, fetchAsTeacher]);
 
   const activeClassIdRef = useRef<string | null>(activeClass?.id || null);
   useEffect(() => {
@@ -1214,8 +1227,7 @@ export function TeacherPortalView() {
       </div>
 
       {/* --- TAB 1: MORNING ATTENDANCE --- */}
-      {activeTab === 'ATTENDANCE' && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto pb-28">
+      <div className={activeTab === 'ATTENDANCE' ? 'p-4 space-y-4 flex-1 overflow-y-auto pb-28' : 'hidden'}>
           {kitchenReportData?.isWeekend && (
             <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-2xl text-xs text-slate-700 flex items-center gap-2.5 shadow-2xs">
               <span className="text-xl shrink-0">📅</span>
@@ -1538,12 +1550,10 @@ export function TeacherPortalView() {
               );
             })()}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* --- TAB 2: FAST MEDICATION LOGGER --- */}
-      {activeTab === 'MEDICATION' && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+      <div className={activeTab === 'MEDICATION' ? 'p-4 space-y-4 flex-1 overflow-y-auto pb-28' : 'hidden'}>
           <div className="flex items-center justify-between bg-white border border-slate-200 p-3.5 rounded-convent shadow-sm">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">{t('teacher.med_title')}</h3>
@@ -1713,12 +1723,10 @@ export function TeacherPortalView() {
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* --- TAB 3: MEAL EXCEPTIONS TAGGING --- */}
-      {activeTab === 'MEALS' && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+      <div className={activeTab === 'MEALS' ? 'p-4 space-y-4 flex-1 overflow-y-auto pb-28' : 'hidden'}>
           <MenuTodayCard
             menuPayload={menuPayload}
             fullViewHref="/teacher/menu"
@@ -1857,12 +1865,10 @@ export function TeacherPortalView() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* --- TAB 4: AFTERNOON HANDOVER & CHECKOUT --- */}
-      {activeTab === 'CHECKOUT' && (
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+      <div className={activeTab === 'CHECKOUT' ? 'p-4 space-y-4 flex-1 overflow-y-auto pb-28' : 'hidden'}>
           <div className="p-4 bg-white border border-slate-200 rounded-convent space-y-3 shadow-sm text-slate-800">
             <div className="flex items-center justify-between">
               <div>
@@ -2251,8 +2257,7 @@ export function TeacherPortalView() {
                 </div>
               );
             })()}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v28';
-const DATA_CACHE_NAME = 'suongmai-data-v1';
+const CACHE_NAME = 'suongmai-pwa-v29';
+const DATA_CACHE_NAME = 'suongmai-data-v2';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
 const ASSETS_TO_CACHE = [
@@ -157,7 +157,14 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/api/announcements' ||
     url.pathname === '/api/pwa/announcements' ||
     url.pathname === '/api/notifications' ||
-    url.pathname === '/api/teacher/classes'
+    url.pathname === '/api/teacher/classes' ||
+    url.pathname === '/api/teacher/attendance' ||
+    url.pathname === '/api/teacher/attendance/kitchen-report' ||
+    url.pathname === '/api/absences' ||
+    url.pathname === '/api/admin/menu' ||
+    url.pathname === '/api/daily-activities' ||
+    url.pathname === '/api/parent/pickups' ||
+    url.pathname === '/api/parent/health'
   ) {
     event.respondWith(staleWhileRevalidate(event.request, DATA_CACHE_NAME));
     return;
