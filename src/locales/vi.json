@@ -32,6 +32,7 @@
     "verifying": "Đang xác thực...",
     "change_email": "← Thay đổi địa chỉ Email",
     "quick_demo": "Khu vực kiểm thử nhanh (3 Roles chuẩn):",
+    "security_notice": "Khu vực truy cập nội bộ — Vui lòng đăng nhập bằng tài khoản đã được cấp quyền.",
     "role_admin": "1. Ban Giám Hiệu / Sơ",
     "role_kitchen": "2. Quản lý bếp",
     "role_teacher": "3. Giáo viên PWA",

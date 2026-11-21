@@ -20,7 +20,7 @@ export function AuthClient() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v27' && key !== 'suongmai-data-v1') {
+            if (key !== 'suongmai-pwa-v28' && key !== 'suongmai-data-v1') {
               caches.delete(key);
             }
           });
@@ -365,15 +365,10 @@ export function AuthClient() {
             </span>
           </button>
 
-          {/* Helper Note: Clear, readable >= 13px */}
-          <div className="mt-5 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl text-center space-y-1.5">
-            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-700">
-              <span>👨‍👩‍👧 Phụ huynh</span>
-              <span>•</span>
-              <span>👩‍🏫 Giáo viên</span>
-            </div>
+          {/* Security Notice: Concise & Neutral */}
+          <div className="mt-5 p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-center">
             <p className="text-xs sm:text-[13px] text-slate-600 leading-relaxed font-medium">
-              Phụ huynh và Giáo viên có thể đăng nhập bằng tài khoản Google cá nhân. Quyền truy cập sẽ do Nhà trường xét duyệt.
+              {t('auth.security_notice')}
             </p>
           </div>
         </div>

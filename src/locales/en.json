@@ -32,6 +32,7 @@
     "verifying": "Verifying...",
     "change_email": "← Change Email Address",
     "quick_demo": "Quick Testing Portal (3 Canonical Roles):",
+    "security_notice": "Internal Access Only — Please sign in with an authorized account.",
     "role_admin": "1. School Board / Sister",
     "role_kitchen": "2. Kitchen Manager",
     "role_teacher": "3. Teacher PWA",
