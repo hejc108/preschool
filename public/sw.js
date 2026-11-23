@@ -1,6 +1,6 @@
 // Service Worker - Mầm Non Sương Mai PWA (Root Scope: /)
 // Tối ưu hóa toàn diện hiệu năng tải trang với chiến lược Stale-While-Revalidate
-const CACHE_NAME = 'suongmai-pwa-v30';
+const CACHE_NAME = 'suongmai-pwa-v31';
 const DATA_CACHE_NAME = 'suongmai-data-v3';
 const CURRENT_CACHES = [CACHE_NAME, DATA_CACHE_NAME];
 
@@ -372,5 +372,42 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+// Push Subscription Change Handler: Tự động đàm phán lại subscription trong nền hoàn toàn yên lặng
+// khi FCM / Apple APNs xoay token ngầm (Không phát thông báo làm phiền người dùng)
+self.addEventListener('pushsubscriptionchange', (event) => {
+  console.log('[PUSH_TRACE][SW] pushsubscriptionchange detected. Renegotiating subscription silently in background...');
+  const resubscribePromise = self.registration.pushManager
+    .getSubscription()
+    .then((oldSub) => {
+      const options = event.oldSubscription ? event.oldSubscription.options : oldSub ? oldSub.options : null;
+      if (!options || !options.applicationServerKey) {
+        return null;
+      }
+      return self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: options.applicationServerKey,
+      });
+    })
+    .then((newSub) => {
+      if (!newSub) return;
+      const jsonSub = newSub.toJSON();
+      if (!jsonSub.endpoint || !jsonSub.keys) return;
+      return fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: jsonSub.endpoint,
+          keys: jsonSub.keys,
+          platform: 'mobile',
+        }),
+      });
+    })
+    .catch((err) => {
+      console.warn('[PUSH_TRACE][SW] pushsubscriptionchange renegotiation notice:', err);
+    });
+
+  event.waitUntil(resubscribePromise);
 });
 

@@ -114,6 +114,7 @@ const formatTimeAgo = (dateStr?: string) => {
 export function NotificationBell({ portalRole, className = '' }: NotificationBellProps) {
   const router = useRouter();
   const { activeRole, serverSyncedRole, profileId, email, waitForRoleSync, pushStatus, enableNotifications } = useActiveRole();
+  const isAdmin = activeRole === 'SUPER_ADMIN' || activeRole === 'SCHOOL_ADMIN';
   const userIdentifier = profileId || email || 'default';
   const hasHydratedInitialListRef = useRef(false);
   const chimedIdsRef = useRef<Set<string>>(new Set());
@@ -664,13 +665,13 @@ export function NotificationBell({ portalRole, className = '' }: NotificationBel
 
           {/* FOOTER KHUNG */}
           <div className="p-2.5 bg-slate-50 border-t border-slate-200 flex flex-col gap-1.5 shrink-0">
-            {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
+            {isAdmin && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && (
               <button
                 type="button"
                 onClick={() => handleTestPush(3)}
                 disabled={isTestingPush}
                 className="w-full py-2 px-3 bg-red-50 hover:bg-red-100 active:scale-[0.99] text-[#D32F2F] border border-red-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
-                title="Bấm nút này rồi khóa màn hình điện thoại trong 3 giây để kiểm tra chuông ting"
+                title="Bấm nút này rồi khóa màn hình điện thoại trong 3 giây để kiểm tra chuông ting (Chỉ Quản trị viên)"
               >
                 <BellRing className="w-3.5 h-3.5 text-red-600 shrink-0" />
                 <span className="truncate">

@@ -162,9 +162,30 @@ export async function POST(request: Request) {
       // Cho phép thiết bị PWA đăng ký nhận chuông trước khi đăng nhập
     }
 
-    // Hỗ trợ kiểm thử chuông báo Web Push trực tiếp tới thiết bị của người dùng
+    // Hỗ trợ kiểm thử chuông báo Web Push (Chỉ dành riêng cho Quản trị viên và chỉ gửi tới máy đang kiểm thử)
     if (body.action === 'test' || body.send_test === true) {
-      const delayMs = typeof body.delay_ms === 'number' && body.delay_ms >= 0 && body.delay_ms <= 10000 ? body.delay_ms : 0;
+      if (activeRole !== 'SUPER_ADMIN' && activeRole !== 'SCHOOL_ADMIN') {
+        return NextResponse.json(
+          { success: false, error: 'Tính năng kiểm thử chuông chỉ dành riêng cho Quản trị viên.' },
+          { status: 403, headers: NO_CACHE_HEADERS }
+        );
+      }
+
+      const directSub = body.subscription;
+      if (!directSub?.endpoint || !directSub?.keys?.p256dh || !directSub?.keys?.auth) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Yêu cầu PushSubscription trực tiếp của thiết bị kiểm thử. Hệ thống không cho phép phát sóng thử nghiệm tới toàn bộ thiết bị.',
+          },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
+      }
+
+      const delayMs =
+        typeof body.delay_ms === 'number' && body.delay_ms >= 0 && body.delay_ms <= 10000
+          ? body.delay_ms
+          : 0;
       if (delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
@@ -172,59 +193,40 @@ export async function POST(request: Request) {
       const soundChoice = body.sound || '/sounds/SM1.wav';
       const testPayload = buildPushPayload({
         title: body.title || '🔔 Chuông báo Mầm Non Sương Mai',
-        body: body.body || 'Âm thanh thông báo chuẩn Sương Mai đã sẵn sàng trên màn hình khóa!',
-        notification_channel: activeRole === 'TEACHER' ? 'TEACHER' : 'PARENT',
-        url: activeRole === 'TEACHER' ? '/teacher' : '/parent',
+        body: body.body || 'Kiểm tra tín hiệu chuông báo thành công.',
+        notification_channel: 'TEACHER',
+        url: '/admin',
         sound: soundChoice,
       });
 
-      // Nếu client gửi kèm PushSubscription cụ thể của máy hiện tại, lưu ngay và gửi trực tiếp tới máy đó!
-      const directSub = body.subscription;
-      if (directSub?.endpoint && directSub?.keys?.p256dh && directSub?.keys?.auth) {
-        console.log(`[PUSH_TRACE][2-STORE] Nhận yêu cầu Test Push trực tiếp từ thiết bị [${body.platform || 'device'}]: ${directSub.endpoint.substring(0, 48)}...`);
-        await savePushSubscription({
-          userId: profileId,
-          endpoint: directSub.endpoint,
-          p256dh: directSub.keys.p256dh,
-          auth: directSub.keys.auth,
-          activeRolePreference: activeRole,
-          userAgent: request.headers.get('user-agent'),
-          platform: body.platform,
-          ctx: authCtx,
-        });
+      console.log(
+        `[PUSH_TRACE][2-STORE] Nhận yêu cầu Test Push trực tiếp từ thiết bị [${body.platform || 'device'}]: ${directSub.endpoint.substring(0, 48)}...`
+      );
+      await savePushSubscription({
+        userId: profileId,
+        endpoint: directSub.endpoint,
+        p256dh: directSub.keys.p256dh,
+        auth: directSub.keys.auth,
+        activeRolePreference: activeRole,
+        userAgent: request.headers.get('user-agent'),
+        platform: body.platform,
+        ctx: authCtx,
+      });
 
-        const directRes = await dispatchDirectWebPush({
-          subscription: directSub,
-          payload: testPayload,
-        });
-
-        return NextResponse.json(
-          {
-            success: directRes.success,
-            mode: 'direct_web_push',
-            total_registered: readLocalPushSubscriptionsStore().length,
-            test_result: directRes,
-            message: directRes.success
-              ? 'Đã phát tín hiệu chuông trực tiếp tới thiết bị qua Web Push!'
-              : `Lỗi phát tín hiệu: ${directRes.error}`,
-          },
-          { headers: NO_CACHE_HEADERS }
-        );
-      }
-
-      console.log(`[PUSH_TRACE][2-STORE] Phát sóng Test Push tới tất cả thiết bị đã đăng ký...`);
-      const pushRes = await dispatchContextPushNotification({
-        targetProfileIds: profileId !== 'device-pwa' ? [profileId] : undefined,
+      const directRes = await dispatchDirectWebPush({
+        subscription: directSub,
         payload: testPayload,
       });
+
       return NextResponse.json(
         {
-          success: pushRes.subscriptionCount > 0,
+          success: directRes.success,
+          mode: 'direct_web_push',
           total_registered: readLocalPushSubscriptionsStore().length,
-          test_result: pushRes,
-          message: pushRes.subscriptionCount > 0
-            ? 'Đã phát tín hiệu chuông thử nghiệm tới thiết bị.'
-            : 'Chưa có thiết bị nào đăng ký nhận chuông. Vui lòng bấm "Bật ngay" trên chuông thông báo của điện thoại để đăng ký thiết bị.',
+          test_result: directRes,
+          message: directRes.success
+            ? 'Đã phát tín hiệu chuông trực tiếp tới thiết bị qua Web Push!'
+            : `Lỗi phát tín hiệu: ${directRes.error}`,
         },
         { headers: NO_CACHE_HEADERS }
       );
