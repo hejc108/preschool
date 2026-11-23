@@ -273,18 +273,23 @@ export async function POST(request: Request) {
     let dbStatus = 500;
 
     try {
-      const rows = sanitizedMenu.map((m) => ({
-        id: m.id,
-        week_number: m.week_number,
-        day_of_week: m.day_of_week,
-        meal_type: m.meal_type,
-        dish_name: m.dish_name,
-        allergens: m.allergens || [],
-        image_url: m.image_url || m.custom_image_url || null,
-        updated_at: new Date().toISOString(),
-      }));
+      const rows = sanitizedMenu.map((m) => {
+        const item: any = {
+          id: m.id,
+          week_number: m.week_number,
+          day_of_week: m.day_of_week,
+          meal_type: m.meal_type,
+          dish_name: m.dish_name,
+          allergens: m.allergens || [],
+          updated_at: new Date().toISOString(),
+        };
+        if (m.image_url || m.custom_image_url) {
+          item.image_url = m.image_url || m.custom_image_url;
+        }
+        return item;
+      });
 
-      const { error: upsertErr } = await withTimeout<any>(
+      let { error: upsertErr } = await withTimeout<any>(
         executeWithContextFallback(ctx, async (sb) =>
           await sb
             .from('weekly_menus')
@@ -292,6 +297,38 @@ export async function POST(request: Request) {
         ),
         4000
       );
+
+      // Graceful column fallback: If Supabase DB table lacks image_url column in PostgREST schema cache
+      if (
+        upsertErr &&
+        (upsertErr.message?.includes('image_url') ||
+          upsertErr.message?.includes('schema cache') ||
+          upsertErr.code === 'PGRST204')
+      ) {
+        console.warn(
+          '[api/admin/menu] weekly_menus table lacks image_url column in DB schema cache. Retrying upsert with core schema fields...'
+        );
+        const coreRows = sanitizedMenu.map((m) => ({
+          id: m.id,
+          week_number: m.week_number,
+          day_of_week: m.day_of_week,
+          meal_type: m.meal_type,
+          dish_name: m.dish_name,
+          allergens: m.allergens || [],
+          updated_at: new Date().toISOString(),
+        }));
+
+        const retryResult = await withTimeout<any>(
+          executeWithContextFallback(ctx, async (sb) =>
+            await sb
+              .from('weekly_menus')
+              .upsert(coreRows, { onConflict: 'week_number,day_of_week,meal_type' })
+          ),
+          4000
+        );
+
+        upsertErr = retryResult.error;
+      }
 
       if (!upsertErr) {
         dbSynced = true;

@@ -10,3 +10,6 @@ ALTER TABLE public.weekly_menus
 ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 COMMENT ON COLUMN public.weekly_menus.image_url IS 'Đường dẫn ảnh thực tế món ăn (Supabase Storage hoặc URL)';
+
+-- Tự động làm mới bộ nhớ đệm lược đồ (Schema Cache) của PostgREST
+NOTIFY pgrst, 'reload schema';

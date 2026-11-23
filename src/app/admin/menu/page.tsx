@@ -50,6 +50,7 @@ function AdminMenuContent() {
   const [saving, setSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   // State quản lý upload & sửa ảnh thực tế món ăn
   const [editingImageMeal, setEditingImageMeal] = useState<{
@@ -77,7 +78,7 @@ function AdminMenuContent() {
     }
   };
 
-  const fetchMenuFromServer = useCallback(async (hasLocal: boolean) => {
+  const fetchMenuFromServer = useCallback(async (localDraft: WeeklyMenu[] | null) => {
     try {
       const res = await fetch('/api/admin/menu', { cache: 'no-store' });
       if (res.ok) {
@@ -86,7 +87,43 @@ function AdminMenuContent() {
           setCycleResolution(json.cycle);
         }
         if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
-          if (json.has_db || !hasLocal) {
+          const isPendingSync =
+            typeof window !== 'undefined' &&
+            localStorage.getItem('suongmai_menu_pending_sync') === 'true';
+
+          // Kiểm tra xem bản nháp trong localStorage có món ăn khác biệt so với CSDL server không
+          const hasLocalEdits =
+            localDraft &&
+            localDraft.length > 0 &&
+            (isPendingSync || JSON.stringify(localDraft) !== JSON.stringify(json.menu));
+
+          if (hasLocalEdits && localDraft) {
+            // Giữ nguyên bản nháp đã lưu trên trình duyệt của người dùng để không mất dữ liệu chỉnh sửa
+            setMenuList(localDraft);
+            setSyncNotice('Đang tự động đồng bộ bản nháp thực đơn đã lưu trên trình duyệt này lên máy chủ...');
+
+            // Tự động đồng bộ bản nháp lên CSDL Supabase
+            try {
+              const syncRes = await fetch('/api/admin/menu', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ menu: localDraft }),
+              });
+              const syncJson = await syncRes.json().catch(() => ({}));
+              if (syncRes.ok && syncJson.success) {
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('suongmai_menu_pending_sync');
+                }
+                setSyncNotice('Đã đồng bộ thành công toàn bộ bản nháp thực đơn từ trình duyệt lên CSDL Supabase!');
+                setTimeout(() => setSyncNotice(null), 4000);
+              } else {
+                setSyncNotice(null);
+                setErrorMessage(syncJson.error || 'Lỗi khi đồng bộ dữ liệu bản nháp lên CSDL');
+              }
+            } catch {
+              setSyncNotice(null);
+            }
+          } else {
             setMenuList(json.menu);
             if (typeof window !== 'undefined') {
               localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.menu));
@@ -103,7 +140,7 @@ function AdminMenuContent() {
 
   // Load menu on mount from LocalStorage & Server API
   useEffect(() => {
-    let hasLocal = false;
+    let localDraft: WeeklyMenu[] | null = null;
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -111,13 +148,13 @@ function AdminMenuContent() {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setMenuList(parsed);
-            hasLocal = true;
+            localDraft = parsed;
           }
         }
       } catch (e) {}
     }
 
-    void fetchMenuFromServer(hasLocal);
+    void fetchMenuFromServer(localDraft);
   }, [fetchMenuFromServer]);
 
   // Filter items for selected week
@@ -289,12 +326,21 @@ function AdminMenuContent() {
       const json = await res.json();
       if (res.ok && json.success) {
         setSavedSuccess(true);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('suongmai_menu_pending_sync');
+        }
         setTimeout(() => setSavedSuccess(false), 3500);
       } else {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('suongmai_menu_pending_sync', 'true');
+        }
         setErrorMessage(json.error || 'Lỗi khi lưu dữ liệu lên máy chủ');
       }
     } catch (err: any) {
       console.error('Lỗi khi gọi API lưu thực đơn:', err);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('suongmai_menu_pending_sync', 'true');
+      }
       setErrorMessage(
         err?.message || 'Không thể kết nối đến máy chủ để lưu thực đơn.'
       );
@@ -371,6 +417,14 @@ function AdminMenuContent() {
             <span>
               Đã lưu thành công! Thực đơn tuần đã được cập nhật và đồng bộ sang ứng dụng Phụ huynh.
             </span>
+          </div>
+        )}
+
+        {/* Sync Notice Alert */}
+        {syncNotice && (
+          <div className="p-4 bg-sky-50 border border-sky-300 rounded-xl text-sky-950 font-bold text-sm flex items-center gap-2 shadow-xs animate-in fade-in">
+            <CheckCircle2 className="w-5 h-5 text-sky-600 shrink-0" />
+            <span>{syncNotice}</span>
           </div>
         )}
 
