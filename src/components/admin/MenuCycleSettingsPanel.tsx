@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Save,
   SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import {
   MenuCalendarAssignment,
@@ -33,6 +34,8 @@ import {
 export interface MenuCycleSettingsPanelProps {
   /** Compact visual mode when embedded inside /admin/menu */
   compact?: boolean;
+  /** Optional callback to close the modal */
+  onClose?: () => void;
   /** Callback fired after settings are saved successfully */
   onSaved?: (payload: {
     config: MenuCycleConfig;
@@ -49,6 +52,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, idx) => idx + 1);
  */
 export function MenuCycleSettingsPanel({
   compact = false,
+  onClose,
   onSaved,
 }: MenuCycleSettingsPanelProps) {
   const initialParts = useMemo(() => getVietnamDateParts(), []);
@@ -243,50 +247,70 @@ export function MenuCycleSettingsPanel({
     }
   };
 
+  // Dynamic today label for 1-line status bar: e.g. "Hôm nay: Thứ 2, 23/11/2026 • Áp dụng: Tuần 4"
+  const todayStatusLine = useMemo(() => {
+    const todayParts = getVietnamDateParts();
+    const weekdayName =
+      todayParts.weekday === 0
+        ? 'Chủ Nhật'
+        : todayParts.weekday === 6
+        ? 'Thứ 7'
+        : `Thứ ${todayParts.weekday + 1}`;
+    const dateFormatted = `${String(todayParts.day).padStart(2, '0')}/${String(todayParts.month).padStart(2, '0')}/${todayParts.year}`;
+
+    let line = `Hôm nay: ${weekdayName}, ${dateFormatted} • Áp dụng: Tuần ${liveTodayResolution.menu_week_number}`;
+    if (liveTodayResolution.is_weekend) {
+      line += ' (Xem trước Thứ 2)';
+    }
+    return line;
+  }, [liveTodayResolution]);
+
   return (
-    <div
-      className={`bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden ${
-        compact ? '' : ''
-      }`}
-    >
-      {/* Header */}
-      <div className="p-4 sm:p-5 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+    <div className={`flex flex-col h-full bg-white overflow-hidden ${compact ? '' : ''}`}>
+      {/* 1. Modal Header: Single concise title, no subtitle, Save button + Close button */}
+      <div className="px-5 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/90 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 shadow-2xs">
             <SlidersHorizontal className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="font-bold text-slate-900 text-sm sm:text-base">
-              Cấu hình chu kỳ thực đơn theo tháng (Thứ 2 – Thứ 6)
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Chỉ tính tuần có ngày đi học từ Thứ 2 đến Thứ 6. Nếu mùng 1 là Thứ 7/CN, Thứ 2 đầu
-              tiên bắt đầu Tuần 1.
-            </p>
-          </div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+            Chu kỳ thực đơn tháng
+          </h2>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSaveSettings}
-          disabled={saving || loading}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-bold bg-primary-700 hover:bg-primary-800 disabled:bg-slate-300 text-white shadow-sm transition-all cursor-pointer shrink-0"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Đang lưu cấu hình...</span>
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              <span>Lưu cấu hình chu kỳ</span>
-            </>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleSaveSettings}
+            disabled={saving || loading}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-primary-700 hover:bg-primary-800 disabled:bg-slate-300 text-white shadow-2xs transition-all cursor-pointer shrink-0"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>Lưu cấu hình</span>
+              </>
+            )}
+          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="Đóng hộp thoại"
+            >
+              <X className="w-4 h-4" />
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
-      <div className="p-4 sm:p-5 space-y-5">
+      <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 bg-white">
         {/* Alerts */}
         {savedNotice && (
           <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs sm:text-sm font-semibold flex items-center gap-2">
@@ -302,42 +326,28 @@ export function MenuCycleSettingsPanel({
           </div>
         )}
 
-        {/* Live Status Preview Banner */}
-        <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-sky-900">
-              <CalendarDays className="w-4 h-4 text-sky-600 shrink-0" />
-              <span>Trạng thái áp dụng hôm nay:</span>
-              <span className="text-sky-700">{liveTodayResolution.full_date_label}</span>
-            </div>
-            <div className="text-slate-600 flex flex-wrap items-center gap-2">
-              {liveTodayResolution.is_weekend ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-semibold">
-                  {liveTodayResolution.weekend_notice} • {liveTodayResolution.preview_label}
-                </span>
-              ) : null}
-              <span>
-                Đang hiển thị dữ liệu của{' '}
-                <strong className="text-primary-800">
-                  Bộ thực đơn Tuần {liveTodayResolution.menu_week_number}
-                </strong>{' '}
-                (Ngày trong ma trận: <strong>{liveTodayResolution.weekday_vi}</strong>)
-              </span>
-            </div>
+        {/* 2. Status Bar (1 clean line) */}
+        <div className="px-3.5 py-2.5 bg-sky-50/80 border border-sky-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0 text-sky-950 font-medium truncate">
+            <CalendarDays className="w-4 h-4 text-sky-600 shrink-0" />
+            <span className="truncate">
+              {todayStatusLine}
+            </span>
           </div>
 
           <button
             type="button"
             onClick={() => fetchSettings(selectedYear, selectedMonth)}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-sky-200 text-sky-800 hover:bg-sky-100 font-semibold self-start sm:self-center cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-sky-200 text-sky-800 hover:bg-sky-100 font-semibold shrink-0 cursor-pointer transition-colors"
+            title="Làm mới trạng thái"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Làm mới</span>
           </button>
         </div>
 
-        {/* Mode Selector (2 Modes) */}
+        {/* 3. Mode Selection Cards (Concise, 1-line helper each) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <button
             type="button"
@@ -350,21 +360,16 @@ export function MenuCycleSettingsPanel({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-slate-900 text-sm">
-                Chế độ 1: Tự động xoay vòng 4 tuần
+                Tự động xoay vòng 4 tuần
               </span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                  cycleMode === 'AUTO_ROTATE_4'
-                    ? 'bg-primary-700 text-white'
-                    : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {cycleMode === 'AUTO_ROTATE_4' ? 'Đang chọn' : 'Tự động'}
-              </span>
+              {cycleMode === 'AUTO_ROTATE_4' && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-700 text-white shrink-0">
+                  Đang chọn
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Mỗi đầu tháng tự động bắt đầu lại từ Tuần 1 → Tuần 4 theo lịch đi học Thứ 2 – Thứ 6.
-              Nếu tháng có 5 tuần học sẽ áp dụng quy tắc tuần dự phòng bên dưới.
+            <p className="text-xs text-slate-600 mt-1 leading-normal">
+              Tự lặp lại từ Tuần 1 đến Tuần 4 theo lịch học Thứ 2 – Thứ 6.
             </p>
           </button>
 
@@ -379,38 +384,33 @@ export function MenuCycleSettingsPanel({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-slate-900 text-sm">
-                Chế độ 2: Chỉ định thủ công theo từng tuần
+                Chỉ định thủ công theo tuần
               </span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                  cycleMode === 'MANUAL_CALENDAR'
-                    ? 'bg-primary-700 text-white'
-                    : 'bg-slate-100 text-slate-500'
-                }`}
-              >
-                {cycleMode === 'MANUAL_CALENDAR' ? 'Đang chọn' : 'Thủ công'}
-              </span>
+              {cycleMode === 'MANUAL_CALENDAR' && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-700 text-white shrink-0">
+                  Đang chọn
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Hiển thị từng tuần học thực tế trong tháng (Tuần 1 → Tuần 4/5 kèm khoảng ngày T2–T6)
-              và cho phép gán chính xác bộ thực đơn (Tuần 1..4) cho từng tuần.
+            <p className="text-xs text-slate-600 mt-1 leading-normal">
+              Tự chọn bộ thực đơn cho từng tuần học trong tháng.
             </p>
           </button>
         </div>
 
         {/* Mode 1 Option: Week 5 Fallback Dropdown (Tuần 1..4) */}
         {cycleMode === 'AUTO_ROTATE_4' && (
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
               <label
                 htmlFor="week-5-fallback-select"
                 className="flex items-center gap-2 text-xs font-bold text-slate-800"
               >
                 <Info className="w-4 h-4 text-primary-700 shrink-0" />
-                <span>Thực đơn dự phòng khi tháng có Tuần học thứ 5 (Tuần 5):</span>
+                <span>Thực đơn dự phòng cho Tuần học thứ 5:</span>
               </label>
               <p className="text-[11px] text-slate-500 pl-6">
-                Tự động lấy bộ thực đơn của tuần được chọn để phục vụ từ Thứ 2 đến Thứ 6 của Tuần 5.
+                Tự động áp dụng bộ thực đơn này khi tháng có 5 tuần học.
               </p>
             </div>
 

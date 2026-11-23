@@ -625,41 +625,13 @@ function AdminMenuContent() {
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/90 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-                  <SlidersHorizontal className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                    Cấu hình chu kỳ thực đơn theo tháng
-                  </h2>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    Điều chỉnh chế độ xoay vòng tự động 4 tuần hoặc chỉ định thủ công theo tuần học trong tháng
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseCycleModal}
-                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                title="Đóng hộp thoại"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
-              <MenuCycleSettingsPanel
-                compact={false}
-                onSaved={({ resolution }) => {
-                  setCycleResolution(resolution);
-                  handleCloseCycleModal();
-                }}
-              />
-            </div>
+            <MenuCycleSettingsPanel
+              onClose={handleCloseCycleModal}
+              onSaved={({ resolution }) => {
+                setCycleResolution(resolution);
+                handleCloseCycleModal();
+              }}
+            />
           </div>
         </div>
       )}
