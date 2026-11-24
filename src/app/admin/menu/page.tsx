@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import {
   Utensils,
   Save,
@@ -42,10 +42,29 @@ function AdminMenuContent() {
   const [menuList, setMenuList] = useState<WeeklyMenu[]>(
     (defaultWeeklyMenu as WeeklyMenu[]) || INITIAL_4WEEK_MENU
   );
-  const [selectedWeek, setSelectedWeek] = useState<number>(2); // Default to Week 2 for TC-MENU-04 testing
   const [cycleResolution, setCycleResolution] = useState<MenuCycleResolution>(() =>
     resolveMenuCycleContext()
   );
+
+  // Track if user explicitly clicked another week tab during this session
+  const userHasManuallySelectedWeekRef = useRef<boolean>(false);
+
+  // Default to currently active/applied cycle week on initial load (matching "Hôm nay" badge)
+  const [selectedWeek, setSelectedWeek] = useState<number>(() => {
+    const weekParam = Number(searchParams.get('week'));
+    if (weekParam >= 1 && weekParam <= 4) {
+      userHasManuallySelectedWeekRef.current = true;
+      return weekParam;
+    }
+    const initialCycle = resolveMenuCycleContext();
+    return (
+      initialCycle?.menu_week_number &&
+      initialCycle.menu_week_number >= 1 &&
+      initialCycle.menu_week_number <= 4
+    )
+      ? initialCycle.menu_week_number
+      : 1;
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -85,6 +104,9 @@ function AdminMenuContent() {
         const json = await res.json();
         if (json.cycle) {
           setCycleResolution(json.cycle);
+          if (!userHasManuallySelectedWeekRef.current && json.cycle.menu_week_number) {
+            setSelectedWeek(json.cycle.menu_week_number);
+          }
         }
         if (json.menu && Array.isArray(json.menu) && json.menu.length > 0) {
           const isPendingSync =
@@ -463,7 +485,10 @@ function AdminMenuContent() {
               return (
                 <button
                   key={w}
-                  onClick={() => setSelectedWeek(w)}
+                  onClick={() => {
+                    userHasManuallySelectedWeekRef.current = true;
+                    setSelectedWeek(w);
+                  }}
                   className={`min-w-[96px] h-[36px] px-3.5 rounded-full text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
                     selectedWeek === w
                       ? 'bg-primary-700 text-white shadow-xs font-bold'
@@ -629,6 +654,10 @@ function AdminMenuContent() {
               onClose={handleCloseCycleModal}
               onSaved={({ resolution }) => {
                 setCycleResolution(resolution);
+                if (resolution?.menu_week_number) {
+                  userHasManuallySelectedWeekRef.current = false;
+                  setSelectedWeek(resolution.menu_week_number);
+                }
                 handleCloseCycleModal();
               }}
             />

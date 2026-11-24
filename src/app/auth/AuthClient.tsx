@@ -20,7 +20,7 @@ export function AuthClient() {
       if ('caches' in window) {
         caches.keys().then((keys) => {
           keys.forEach((key) => {
-            if (key !== 'suongmai-pwa-v31' && key !== 'suongmai-data-v3') {
+            if (key !== 'suongmai-pwa-v32' && key !== 'suongmai-data-v3') {
               caches.delete(key);
             }
           });
